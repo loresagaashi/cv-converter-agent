@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'apps.cv',
     'apps.users',
     'apps.llm',
+    'apps.api',
 ]
 
 MIDDLEWARE = [
