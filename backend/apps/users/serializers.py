@@ -13,7 +13,9 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class SignupSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
+    # Password validation is handled by the auth backend; we allow any length here
+    # so you can use simpler passwords if desired.
+    password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User

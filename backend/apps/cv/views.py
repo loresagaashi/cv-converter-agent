@@ -2,6 +2,7 @@ from rest_framework import generics, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import CV
 from .serializers import CVSerializer
@@ -51,3 +52,42 @@ class CVUploadView(generics.ListCreateAPIView):
             "skills": skills,
         }
         return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+class CVTextView(APIView):
+    """
+    Read-only endpoint returning the extracted plain text for a single CV.
+
+    This leverages the existing `read_cv_file` helper to ensure consistent
+    parsing behavior between the API and internal usages.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            cv_instance = CV.objects.get(pk=pk, user=request.user)
+        except CV.DoesNotExist:
+            return Response(
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        file_obj = cv_instance.file
+        # Try to infer content type if available; it's safe to pass None.
+        content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
+        cv_text = read_cv_file(
+            file_obj,
+            name=cv_instance.original_filename,
+            content_type=content_type,
+        )
+
+        return Response(
+            {
+                "id": cv_instance.id,
+                "original_filename": cv_instance.original_filename,
+                "uploaded_at": cv_instance.uploaded_at,
+                "text": cv_text,
+            },
+            status=status.HTTP_200_OK,
+        )

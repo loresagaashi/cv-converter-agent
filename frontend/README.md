@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is the **CV Converter** frontend, built with [Next.js](https://nextjs.org) App Router, TypeScript, and Tailwind CSS.
+
+It talks to the existing Django REST backend under `/api/**`.
 
 ## Getting Started
 
-First, run the development server:
+### 1. Install dependencies
+
+From the `frontend` directory:
+
+```bash
+npm install
+```
+
+### 2. Configure backend API URL
+
+Create a `.env.local` file in `frontend` with:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
+
+Adjust the URL if your Django server runs elsewhere.
+
+### 3. Run the development server
+
+Make sure your Django backend is running, then start Next.js:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000` in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Main Routes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/` – marketing/landing entry for the CV Converter.
+- `/login` – email/password login against `/api/users/login/`.
+- `/signup` – user registration against `/api/users/signup/`.
+- `/dashboard` – authenticated CV dashboard (upload + list).
+- `/cv/[id]` – authenticated CV detail with extracted text and competence summary.
 
-## Learn More
+## Auth & API Integration
 
-To learn more about Next.js, take a look at the following resources:
+- Auth tokens are issued by the Django backend (`rest_framework.authtoken`) and stored in memory, with optional “remember me” in `localStorage`.
+- The frontend uses a central API client (`lib/api.ts`) and an `AuthProvider` context to attach `Authorization: Token <token>` headers for protected endpoints.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Linting
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+From the `frontend` directory you can run:
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run lint
+```
