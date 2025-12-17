@@ -116,4 +116,31 @@ export async function convertCV(
   return handleResponse<ConvertCVResponse>(res);
 }
 
+export async function downloadFormattedCV(
+  id: number,
+  token: string
+): Promise<Blob> {
+  const res = await fetch(`${API_BASE_URL}/api/cv/${id}/formatted/`, {
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    let detail = "Request failed";
+    try {
+      const data = await res.json();
+      // DRF usually returns {"detail": "..."}
+      detail = (data?.detail as string) || JSON.stringify(data);
+    } catch {
+      // ignore JSON parsing errors for non-JSON responses
+    }
+    const error = new Error(detail);
+    (error as any).status = res.status;
+    throw error;
+  }
+
+  return res.blob();
+}
+
 

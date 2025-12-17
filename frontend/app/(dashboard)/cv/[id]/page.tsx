@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthContext";
-import { convertCV, getCVText } from "@/lib/api";
+import { convertCV, downloadFormattedCV, getCVText } from "@/lib/api";
 import type { CVTextResponse, ConvertCVResponse } from "@/lib/types";
 
 export default function CVDetailPage() {
@@ -16,6 +16,8 @@ export default function CVDetailPage() {
   const [loadingText, setLoadingText] = useState(true);
   const [loadingConvert, setLoadingConvert] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || !id) return;
@@ -42,6 +44,27 @@ export default function CVDetailPage() {
     return null;
   }
 
+  const handleDownloadFormatted = async () => {
+    if (!token || !id) return;
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      const blob = await downloadFormattedCV(id, token);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = (cvText?.original_filename || `cv_${id}`) + "_formatted.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setDownloadError(err?.message || "Failed to generate formatted CV.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-baseline justify-between gap-3">
@@ -54,17 +77,33 @@ export default function CVDetailPage() {
             this CV.
           </p>
         </div>
-        <a
-          href="/dashboard"
-          className="text-[11px] font-medium text-emerald-300 hover:text-emerald-200"
-        >
-          ← Back to dashboard
-        </a>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadFormatted}
+            disabled={downloading}
+            className="rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {downloading ? "Generating..." : "Generate formatted CV"}
+          </button>
+          <a
+            href="/dashboard"
+            className="text-[11px] font-medium text-emerald-300 hover:text-emerald-200"
+          >
+            ← Back to dashboard
+          </a>
+        </div>
       </div>
 
       {error && (
         <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-100">
           {error}
+        </div>
+      )}
+
+      {downloadError && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-100">
+          {downloadError}
         </div>
       )}
 
