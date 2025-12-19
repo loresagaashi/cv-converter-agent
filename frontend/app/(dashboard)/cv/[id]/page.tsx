@@ -90,7 +90,7 @@ export default function CVDetailPage() {
             href="/dashboard"
             className="text-[11px] font-medium text-emerald-300 hover:text-emerald-200"
           >
-            ← Back to dashboard
+            ← Back to main page
           </a>
         </div>
       </div>

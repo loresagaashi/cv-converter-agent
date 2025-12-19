@@ -48,6 +48,12 @@ export default function DashboardLayout({
             onClick={() => router.push("/dashboard")}
             className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-900/70 font-medium text-slate-100"
           >
+            Upload
+          </button>
+          <button
+            onClick={() => router.push("/dashboard/cvs")}
+            className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-900/70 font-medium text-slate-100"
+          >
             Dashboard
           </button>
         </nav>

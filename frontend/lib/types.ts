@@ -15,6 +15,7 @@ export interface CV {
   original_filename: string;
   uploaded_at: string;
   file?: string;
+  uploaded_by?: string;
   competence_summary?: string;
   skills?: string[];
 }

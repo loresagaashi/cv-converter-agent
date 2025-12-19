@@ -1,18 +1,25 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthContext";
 
 export default function SignupPage() {
   const router = useRouter();
-  const { signup } = useAuth();
+  const { signup, user, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // If the user is already authenticated, keep them away from the signup screen.
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/dashboard");
+    }
+  }, [loading, user, router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -32,6 +39,11 @@ export default function SignupPage() {
       setSubmitting(false);
     }
   };
+
+  // While auth state is hydrating or user is being redirected, avoid flashing the form.
+  if (loading || user) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">

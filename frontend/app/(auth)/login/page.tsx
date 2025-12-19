@@ -3,15 +3,23 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthContext";
+import { useEffect } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, user, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // If the user is already authenticated, keep them away from the login screen.
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/dashboard");
+    }
+  }, [loading, user, router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -26,6 +34,11 @@ export default function LoginPage() {
       setSubmitting(false);
     }
   };
+
+  // While auth state is hydrating or user is being redirected, avoid flashing the form.
+  if (loading || user) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">

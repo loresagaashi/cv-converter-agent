@@ -1,13 +1,11 @@
 "use client";
 
 import { CVUpload } from "@/components/cv/CVUpload";
-import { CVList } from "@/components/cv/CVList";
 import { useAuth } from "@/components/auth/AuthContext";
-import { useState } from "react";
+import { CVRecentList } from "@/components/cv/CVRecentList";
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [refreshCounter, setRefreshCounter] = useState(0);
 
   return (
     <div className="space-y-5">
@@ -21,8 +19,8 @@ export default function DashboardPage() {
           competence insights.
         </p>
       </div>
-      <CVUpload onUploaded={() => setRefreshCounter((c) => c + 1)} />
-      <CVList refreshTrigger={refreshCounter} />
+      <CVUpload />
+      <CVRecentList />
     </div>
   );
 }
