@@ -56,6 +56,14 @@ export default function DashboardLayout({
           >
             Dashboard
           </button>
+          {user.role === "admin" && (
+            <button
+              onClick={() => router.push("/dashboard/users")}
+              className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-900/70 font-medium text-emerald-300"
+            >
+              Users
+            </button>
+          )}
         </nav>
         <div className="mt-auto pt-4 border-t border-slate-800 text-xs text-slate-400 space-y-2">
           <div>

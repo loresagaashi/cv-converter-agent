@@ -45,6 +45,7 @@ function persistAuth(auth: AuthResponse, remember: boolean) {
       first_name: auth.first_name,
       last_name: auth.last_name,
       date_joined: auth.date_joined,
+      role: auth.role,
     })
   );
 }
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         first_name: auth.first_name,
         last_name: auth.last_name,
         date_joined: auth.date_joined,
+        role: auth.role,
       });
       persistAuth(auth, remember);
     },

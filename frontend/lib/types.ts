@@ -4,6 +4,12 @@ export interface User {
   first_name: string;
   last_name: string;
   date_joined: string;
+  /**
+   * Simple role string derived from the backend:
+   * - "admin"  -> full dashboard access and user management
+   * - "user"   -> regular access
+   */
+  role: "admin" | "user";
 }
 
 export interface AuthResponse extends User {

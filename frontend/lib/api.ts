@@ -59,6 +59,83 @@ export async function getCurrentUser(token: string): Promise<User> {
   return handleResponse<User>(res);
 }
 
+// ---------------------------------------------------------------------------
+// Admin user management (RBAC-protected)
+// ---------------------------------------------------------------------------
+
+export type UserRole = "admin" | "user";
+
+export interface AdminUserPayload {
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  password?: string;
+  role: UserRole;
+}
+
+export interface AdminUserUpdatePayload {
+  first_name?: string;
+  last_name?: string;
+  password?: string;
+  role?: UserRole;
+}
+
+export async function listUsers(token: string): Promise<User[]> {
+  const res = await fetch(`${API_BASE_URL}/api/users/`, {
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  return handleResponse<User[]>(res);
+}
+
+export async function createUser(
+  token: string,
+  payload: AdminUserPayload
+): Promise<User> {
+  const res = await fetch(`${API_BASE_URL}/api/users/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return handleResponse<User>(res);
+}
+
+export async function updateUser(
+  token: string,
+  id: number,
+  payload: AdminUserUpdatePayload
+): Promise<User> {
+  const res = await fetch(`${API_BASE_URL}/api/users/${id}/`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return handleResponse<User>(res);
+}
+
+export async function deleteUser(token: string, id: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/users/${id}/`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    await handleResponse(res as Response);
+  }
+}
+
 export async function listCVs(token: string): Promise<CV[]> {
   const res = await fetch(`${API_BASE_URL}/api/cv/upload/`, {
     headers: {
