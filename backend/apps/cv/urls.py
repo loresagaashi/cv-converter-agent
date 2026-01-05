@@ -1,12 +1,13 @@
 from django.urls import path
 
-from .views import CVTextView, CVUploadView, FormattedCVView
+from .views import CVDetailView, CVTextView, CVUploadView, FormattedCVView
 
-app_name = 'cv'
+app_name = "cv"
 
 urlpatterns = [
-    path('upload/', CVUploadView.as_view(), name='upload'),
-    path('<int:pk>/text/', CVTextView.as_view(), name='text'),
-    path('<int:pk>/formatted/', FormattedCVView.as_view(), name='formatted'),
+    path("upload/", CVUploadView.as_view(), name="upload"),
+    path("<int:pk>/", CVDetailView.as_view(), name="detail"),
+    path("<int:pk>/text/", CVTextView.as_view(), name="text"),
+    path("<int:pk>/formatted/", FormattedCVView.as_view(), name="formatted"),
 ]
 

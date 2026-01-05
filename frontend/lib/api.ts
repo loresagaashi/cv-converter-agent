@@ -146,6 +146,19 @@ export async function listCVs(token: string): Promise<CV[]> {
   return handleResponse<CV[]>(res);
 }
 
+export async function deleteCV(id: number, token: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/cv/${id}/`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    await handleResponse(res as Response);
+  }
+}
+
 export async function uploadCV(
   file: File,
   token: string

@@ -60,6 +60,18 @@ class CVUploadView(generics.ListCreateAPIView):
         return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
 
+class CVDetailView(generics.DestroyAPIView):
+    """
+    Allow a user to delete one of their own uploaded CVs.
+    """
+
+    serializer_class = CVSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return CV.objects.filter(user=self.request.user)
+
+
 class CVTextView(APIView):
     """
     Read-only endpoint returning the extracted plain text for a single CV.

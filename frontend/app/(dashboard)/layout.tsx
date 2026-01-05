@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/components/auth/AuthContext";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function DashboardLayout({
@@ -11,6 +11,7 @@ export default function DashboardLayout({
 }) {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -46,20 +47,32 @@ export default function DashboardLayout({
         <nav className="space-y-1 text-sm">
           <button
             onClick={() => router.push("/dashboard")}
-            className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-900/70 font-medium text-slate-100"
+            className={`w-full text-left rounded-lg px-3 py-2 font-medium transition-colors ${
+              pathname === "/dashboard"
+                ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/60"
+                : "text-slate-100 hover:bg-slate-900/70"
+            }`}
           >
             Upload
           </button>
           <button
             onClick={() => router.push("/dashboard/cvs")}
-            className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-900/70 font-medium text-slate-100"
+            className={`w-full text-left rounded-lg px-3 py-2 font-medium transition-colors ${
+              pathname === "/dashboard/cvs"
+                ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/60"
+                : "text-slate-100 hover:bg-slate-900/70"
+            }`}
           >
             Dashboard
           </button>
           {user.role === "admin" && (
             <button
               onClick={() => router.push("/dashboard/users")}
-              className="w-full text-left rounded-lg px-3 py-2 hover:bg-slate-900/70 font-medium text-emerald-300"
+              className={`w-full text-left rounded-lg px-3 py-2 font-medium transition-colors ${
+                pathname === "/dashboard/users"
+                  ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/60"
+                  : "text-slate-100 hover:bg-slate-900/70"
+              }`}
             >
               Users
             </button>

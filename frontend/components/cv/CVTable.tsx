@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listCVs } from "@/lib/api";
+import { deleteCV, listCVs } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { CV } from "@/lib/types";
 
@@ -15,6 +15,7 @@ export function CVTable({ refreshTrigger }: Props) {
   const [items, setItems] = useState<CV[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -34,6 +35,25 @@ export function CVTable({ refreshTrigger }: Props) {
   if (!token) {
     return null;
   }
+
+  const handleDelete = async (cv: CV) => {
+    if (!token) return;
+    const confirmed = window.confirm(
+      `Delete CV "${cv.original_filename}"? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(cv.id);
+    setError(null);
+    try {
+      await deleteCV(cv.id, token);
+      setItems((prev) => prev.filter((item) => item.id !== cv.id));
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete CV.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 sm:p-5">
@@ -100,13 +120,21 @@ export function CVTable({ refreshTrigger }: Props) {
                       timeStyle: "short",
                     })}
                   </td>
-                  <td className="px-3 py-2 align-middle text-right">
+                  <td className="px-3 py-2 align-middle text-right space-x-2">
                     <Link
                       href={`/cv/${cv.id}`}
                       className="inline-flex items-center rounded-lg border border-slate-700 px-3 py-1.5 text-[11px] font-medium text-slate-100 hover:bg-slate-900"
                     >
                       Open
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(cv)}
+                      disabled={deletingId === cv.id}
+                      className="inline-flex items-center rounded-lg border border-red-500/70 px-3 py-1.5 text-[11px] font-medium text-red-200 hover:bg-red-500/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {deletingId === cv.id ? "Deleting..." : "Delete"}
+                    </button>
                   </td>
                 </tr>
               ))}

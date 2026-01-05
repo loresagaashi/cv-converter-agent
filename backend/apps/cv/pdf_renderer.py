@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from fpdf import FPDF
-from fpdf.errors import FPDFException
 
 
 def _sanitize_for_pdf(text: str) -> str:
@@ -43,7 +42,7 @@ def _safe_multi_cell(pdf: FPDF, w: float, h: float, text: str) -> None:
     return
   try:
     pdf.multi_cell(w, h, clean)
-  except FPDFException:
+  except Exception:
     # Truncate aggressively to avoid layout errors on pathological long tokens.
     truncated = clean[:200]
     if truncated:
