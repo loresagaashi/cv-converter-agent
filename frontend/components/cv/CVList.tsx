@@ -22,8 +22,9 @@ export function CVList({ refreshTrigger }: Props) {
     setError(null);
     listCVs(token)
       .then((data) => {
-        // API returns newest last; reverse for dashboard UX if desired.
-        setItems([...data].reverse());
+        // Sort by ID descending - newest (highest ID) first
+        const sorted = [...data].sort((a, b) => b.id - a.id);
+        setItems(sorted);
       })
       .catch((err: any) => {
         setError(err?.message || "Failed to load CVs.");

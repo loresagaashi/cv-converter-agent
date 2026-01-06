@@ -18,8 +18,9 @@ export function CVRecentList() {
     setError(null);
     listCVs(token)
       .then((data) => {
-        const ordered = [...data].reverse();
-        setItems(ordered.slice(0, 5));
+        // Sort by ID descending - newest first
+        const sorted = [...data].sort((a, b) => b.id - a.id);
+        setItems(sorted.slice(0, 5));
       })
       .catch((err: any) => {
         setError(err?.message || "Failed to load recent CVs.");

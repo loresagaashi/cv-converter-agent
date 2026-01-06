@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { deleteCV, listCVs } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -12,10 +13,29 @@ interface Props {
 
 export function CVTable({ refreshTrigger }: Props) {
   const { token } = useAuth();
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<CV[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [highlightId, setHighlightId] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Add glow animation styles
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes cv-glow {
+        0%, 100% {
+          box-shadow: 0 0 15px rgba(239, 68, 68, 0.4), -15px 0 15px rgba(239, 68, 68, 0.4), 15px 0 15px rgba(239, 68, 68, 0.4);
+        }
+        50% {
+          box-shadow: 0 0 25px rgba(239, 68, 68, 0.6), -25px 0 25px rgba(239, 68, 68, 0.6), 25px 0 25px rgba(239, 68, 68, 0.6);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -23,14 +43,22 @@ export function CVTable({ refreshTrigger }: Props) {
     setError(null);
     listCVs(token)
       .then((data) => {
-        // Show newest first for easier scanning.
-        setItems([...data].reverse());
+        // Sort by ID descending - newest (highest ID) first
+        const sorted = [...data].sort((a, b) => b.id - a.id);
+        setItems(sorted);
+        
+        // Check for highlight parameter
+        const highlight = searchParams.get('highlight');
+        if (highlight) {
+          setHighlightId(Number(highlight));
+          setTimeout(() => setHighlightId(null), 3000);
+        }
       })
       .catch((err: any) => {
         setError(err?.message || "Failed to load CVs.");
       })
       .finally(() => setLoading(false));
-  }, [token, refreshTrigger]);
+  }, [token, refreshTrigger, searchParams]);
 
   if (!token) {
     return null;
@@ -104,7 +132,14 @@ export function CVTable({ refreshTrigger }: Props) {
               {items.map((cv) => (
                 <tr
                   key={cv.id}
-                  className="rounded-xl bg-slate-900/70 text-slate-100 shadow-sm hover:bg-slate-900/90"
+                  className={`rounded-xl text-slate-100 shadow-sm hover:bg-slate-900/90 ${
+                    highlightId === cv.id
+                      ? "border border-red-400/60 bg-slate-900/90"
+                      : "border border-slate-800/50 bg-slate-900/70"
+                  }`}
+                  style={highlightId === cv.id ? {
+                    animation: 'cv-glow 2s ease-in-out infinite'
+                  } : undefined}
                 >
                   <td className="max-w-xs truncate px-3 py-2 align-middle">
                     <span className="block font-medium">

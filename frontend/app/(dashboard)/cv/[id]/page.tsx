@@ -86,7 +86,7 @@ export default function CVDetailPage() {
           <button
             type="button"
             onClick={handleDownloadFormatted}
-            disabled={downloading}
+            disabled={downloading || !convertData?.competence_summary}
             className="rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {downloading ? "Generating..." : "Generate formatted CV"}
