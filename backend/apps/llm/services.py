@@ -1,12 +1,21 @@
 import json
+import logging
 import os
+import time
 from typing import Any, Dict, List
 
 import requests
 
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3:8b")
+# Basic logger for runtime visibility during backend calls.
+logger = logging.getLogger(__name__)
+
+# Use Ollama Cloud host by default; can be overridden with OLLAMA_URL.
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "https://ollama.com/api/generate")
+# Default cloud model as requested.
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gpt-oss:120b-cloud")
+# API key must come from env; no hardcoded fallback.
+OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
 
 
 def _ollama(prompt: str, *, model: str = OLLAMA_MODEL) -> str:
@@ -16,9 +25,18 @@ def _ollama(prompt: str, *, model: str = OLLAMA_MODEL) -> str:
     Streams tokens from the Ollama HTTP API and concatenates them into a single
     string response.
     """
+    headers = {}
+    if OLLAMA_API_KEY:
+        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+
+    start = time.monotonic()
+    logger.info("Calling Ollama", extra={"model": model, "url": OLLAMA_URL})
+    print(f"[LLM] start model={model} url={OLLAMA_URL}")
+
     response = requests.post(
         OLLAMA_URL,
         json={"model": model, "prompt": prompt},
+        headers=headers,
         stream=True,
         timeout=300,
     )
@@ -33,6 +51,15 @@ def _ollama(prompt: str, *, model: str = OLLAMA_MODEL) -> str:
         except json.JSONDecodeError:
             continue
         full_out += data.get("response", "")
+
+    elapsed = time.monotonic() - start
+    logger.info(
+        "Ollama call completed",
+        extra={"model": model, "url": OLLAMA_URL, "chars": len(full_out), "seconds": round(elapsed, 3)},
+    )
+    print(
+        f"[LLM] done model={model} url={OLLAMA_URL} seconds={elapsed:.3f} chars={len(full_out)}"
+    )
     return full_out
 
 
@@ -53,24 +80,22 @@ def _extract_first_json_object(raw: str) -> Dict[str, Any]:
 
 def _build_competence_prompt(cv_text: str) -> str:
     """
-    Build a compact prompt that asks the LLM for:
-    - a competence summary (third-person, professional)
-    - a flat list of extracted skills
-
-    The model is instructed to return a single JSON object so it can be parsed
-    robustly by the caller.
+        Very concise competence summary prompt.
     """
     return f"""
 You are an AI CV Converter specialized in generating competence summaries.
 
 TASK:
-- Analyze the following CV text.
-- Write a detailed third-person competence summary of the candidate.
+- Analyze the CV text and write a VERY CONCISE third-person competence summary.
+- Start with the candidate's full name (from the CV) and use gender-neutral phrasing (repeat the name or "They").
+- Summary must be at most 3 sentences total (1-2 lines each) covering: experience/projects together; education/certifications together; key competencies/skills.
 - Extract a comprehensive list of skills, tools, technologies, and soft skills.
+
+IMPORTANT: Keep it brief; do NOT miss major info, but compress into max 3 sentences.
 
 OUTPUT FORMAT (JSON ONLY, NO MARKDOWN, NO EXTRA TEXT):
 {{
-  "competence_summary": "Long, detailed, third-person summary of the candidate's competencies, scope of experience, and typical responsibilities.",
+    "competence_summary": "Max 3 sentences, third-person, very concise.",
   "skills": [
     "Skill or technology 1",
     "Skill or technology 2"
@@ -78,8 +103,9 @@ OUTPUT FORMAT (JSON ONLY, NO MARKDOWN, NO EXTRA TEXT):
 }}
 
 RULES:
-- Always write in third person (\"She\", \"He\", or \"They\").
+- Always write in third person; start with the candidate's name and use gender-neutral references (repeat the name or "They").
 - Do not invent facts that are not supported by the CV text.
+- Be EXTREMELY concise (max 3 sentences total) while mentioning experience/projects, education/certifications, and key competencies.
 - The "skills" list must be flat (no nested objects) and deduplicated.
 - Return exactly ONE JSON object and nothing else.
 
@@ -138,11 +164,6 @@ def generate_competence_cv(cv_text: str) -> Dict[str, object]:
 
 _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
     "profile": "Short professional summary...",
-    "languages": [
-        {"name": "English", "level": "C1"},
-        {"name": "Albanian", "level": "C2"},
-    ],
-    "skills": ["Python", "TypeScript", "React", "SCRUM", "Kanban"],
     "work_experience": [
         {
             "from": "2025-02",
@@ -156,6 +177,7 @@ _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
             ],
         }
     ],
+    "certifications": ["Certification or credential"],
     "education": [
         {
             "from": "2021-09",
@@ -164,7 +186,25 @@ _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
             "institution": "University Name",
         }
     ],
-    "courses": ["Course or certification description"],
+    "projects": [
+        {
+            "from": "2025-02",
+            "to": "Present",
+            "title": "Project Name",
+            "company": "Personal Project",
+            "location": "Remote",
+            "bullets": [
+                "Outcome or responsibility",
+                "Tech stack or impact",
+            ],
+        }
+    ],
+    "skills": ["Python", "TypeScript", "React", "SCRUM", "Kanban"],
+    "courses": ["Course description"],
+    "languages": [
+        {"name": "English", "level": "C1"},
+        {"name": "Albanian", "level": "C2"},
+    ],
 }
 
 
@@ -178,31 +218,32 @@ def _build_structured_cv_prompt(cv_text: str) -> str:
 You are an AI CV formatter.
 
 TASK:
-- Read the following raw CV text.
-- Extract the candidate's professional competence summary and skills.
-- Map them into the JSON schema shown below so the result can be rendered
-  directly into a formatted CV PDF.
+- Read the raw CV text carefully and extract ALL information.
+- Build a profile that merges the "About me"/header statement with key personal info (name, location/country if present) in **2-3 sentences max**.
+- Extract ALL work experience entries (jobs, internships, contracts) with **2-3 sentences total** and bullets that are **1 line each**.
+- Extract ALL certifications as their own list (1 line each entry) and place them after work_experience.
+- Extract ALL education items (degrees, diplomas) with **1-2 sentences**.
+- Extract ALL projects as their own list (do NOT merge into work_experience); include project name, context (e.g., Personal Project, client), dates, and **1-line bullets**, max **2-3 sentences total** per project.
+- Extract a flat skills list (no nesting).
+- Extract ALL courses as their own list (1 line each entry).
+- Keep languages if present and place them last in the JSON order.
+- Map everything into the JSON schema below so it can render directly into a formatted CV PDF.
 
 JSON SCHEMA EXAMPLE (THIS IS A FORMAT EXAMPLE, NOT REAL DATA):
 {example_json}
 
 REQUIREMENTS:
-- You MUST NOT return an empty profile if the CV contains any competence-
-  related information (experience, responsibilities, achievements, etc.).
-- You MUST NOT return an empty skills list if the CV clearly lists skills,
-  tools, technologies, or methodologies.
-- Only use information that is clearly present in the CV text.
-- Do NOT invent additional jobs, education entries, dates, or skills.
-- Do NOT copy text verbatim; rewrite it so it sounds polished, concise, and
-  professional, in a neutral or third-person tone (no "I", "my").
-- Dates must be human-readable in the form "YYYY-MM" or "Present".
-- If a section is missing in the CV, use an empty string or empty list for it.
-  - Example: "profile": "" if no clear profile/summary is available.
-  - Example: "courses": [] if no courses are mentioned.
-- The "languages" field must be a list of objects with keys "name" and "level".
+- Order keys exactly as: profile, work_experience, certifications, education, projects, skills, courses, languages (languages last).
+- NEVER leave profile empty if any info exists; include the header/about in 2-3 sentences max with name and (if present) location/country.
+- Skills list must not be empty if skills are present in text.
+- Do NOT miss any sections: all work experience, all projects, all education, all certifications/courses, all languages.
+- Projects stay in "projects" (not work_experience). Use company/context "Personal Project" if missing.
+- Keep every major section short: profile 2-3 sentences; each work_experience and project entry max 2-3 sentences (bullets 1 line each); education/certifications/courses entries 1-2 sentences.
+- Only use information present in CV; do not invent entries or dates.
+- Rewrite concisely and professionally (neutral/third-person, no "I").
+- Dates must be "YYYY-MM" or "Present".
 - The "skills" list must be flat (no nested structures).
-- The "work_experience" and "education" lists must contain objects following
-  the example schema.
+- The "work_experience", "education", and "projects" lists must follow the example schema.
 
 OUTPUT FORMAT:
 - Return exactly ONE JSON object.
@@ -273,7 +314,9 @@ def _simple_structured_cv_from_text(cv_text: str) -> Dict[str, Any]:
         "skills": skills,
         "work_experience": [],
         "education": [],
+        "projects": [],
         "courses": [],
+        "certifications": [],
     }
 
 
@@ -292,7 +335,9 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "skills": [],
             "work_experience": [],
             "education": [],
+            "projects": [],
             "courses": [],
+            "certifications": [],
         }
 
     prompt = _build_structured_cv_prompt(cv_text)
@@ -313,7 +358,9 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "skills": [],
             "work_experience": [],
             "education": [],
+            "projects": [],
             "courses": [],
+            "certifications": [],
         }
 
     # Normalize keys and types defensively.
@@ -322,7 +369,9 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
     skills = data.get("skills") or []
     work_experience = data.get("work_experience") or []
     education = data.get("education") or []
+    projects = data.get("projects") or []
     courses = data.get("courses") or []
+    certifications = data.get("certifications") or []
 
     if not isinstance(languages, list):
         languages = []
@@ -332,8 +381,12 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
         work_experience = []
     if not isinstance(education, list):
         education = []
+    if not isinstance(projects, list):
+        projects = []
     if not isinstance(courses, list):
         courses = []
+    if not isinstance(certifications, list):
+        certifications = []
 
     # Ensure skills are a flat list of strings.
     normalized_skills: List[str] = []
@@ -353,7 +406,9 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
         "skills": normalized_skills,
         "work_experience": work_experience,
         "education": education,
+        "projects": projects,
         "courses": courses,
+        "certifications": certifications,
     }
 
 

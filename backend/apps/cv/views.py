@@ -1,3 +1,5 @@
+import logging
+import time
 from pathlib import Path
 
 from django.conf import settings
@@ -13,7 +15,10 @@ from .models import CV
 from .pdf_renderer import render_structured_cv_to_pdf
 from .serializers import CVSerializer
 from .services import read_cv_file
-from apps.llm.services import generate_competence_cv, generate_structured_cv
+from apps.llm.services import generate_structured_cv
+
+
+logger = logging.getLogger(__name__)
 
 
 class CVUploadView(generics.ListCreateAPIView):
@@ -25,31 +30,14 @@ class CVUploadView(generics.ListCreateAPIView):
         return CV.objects.filter(user=self.request.user)
 
     def create(self, request, *args, **kwargs):
+        req_start = time.monotonic()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         cv_instance = serializer.save()
 
+        # Do not call LLM on upload; just persist the file and return metadata.
         competence_summary = ""
         skills = []
-
-        uploaded_file = request.FILES.get("file")
-        try:
-            # Use existing parsing helpers to extract text from the uploaded CV
-            file_obj = cv_instance.file
-            content_type = getattr(uploaded_file, "content_type", None)
-            cv_text = read_cv_file(
-                file_obj,
-                name=cv_instance.original_filename,
-                content_type=content_type,
-            )
-
-            llm_result = generate_competence_cv(cv_text)
-            competence_summary = llm_result.get("competence_summary", "")
-            skills = llm_result.get("skills", [])
-        except Exception:
-            # In case of any failure, still return the created CV without LLM data.
-            competence_summary = ""
-            skills = []
 
         headers = self.get_success_headers(serializer.data)
         response_data = {
@@ -57,6 +45,12 @@ class CVUploadView(generics.ListCreateAPIView):
             "competence_summary": competence_summary,
             "skills": skills,
         }
+        total_elapsed = time.monotonic() - req_start
+        logger.info(
+            "cv_upload_completed",
+            extra={"cv_id": cv_instance.id, "seconds": round(total_elapsed, 3)},
+        )
+        print(f"[REQ] upload done cv_id={cv_instance.id} seconds={total_elapsed:.3f}")
         return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
 
 
@@ -125,6 +119,7 @@ class FormattedCVView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
+        req_start = time.monotonic()
         cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
 
         # Extract text from the stored CV file.
@@ -137,7 +132,15 @@ class FormattedCVView(APIView):
         )
 
         # Generate structured JSON via LLM.
+        llm_start = time.monotonic()
+        print(f"[LLM] structured start cv_id={cv_instance.id}")
         structured_cv = generate_structured_cv(cv_text)
+        llm_elapsed = time.monotonic() - llm_start
+        logger.info(
+            "structured_cv_llm_completed",
+            extra={"cv_id": cv_instance.id, "seconds": round(llm_elapsed, 3)},
+        )
+        print(f"[LLM] structured done cv_id={cv_instance.id} seconds={llm_elapsed:.3f}")
 
         # Render PDF using a deterministic template.
         output_dir = Path(settings.MEDIA_ROOT) / "formatted_cvs"
@@ -146,7 +149,13 @@ class FormattedCVView(APIView):
         if not output_path.suffix.lower().endswith(".pdf"):
             output_path = output_path.with_suffix(".pdf")
 
-        pdf_path = render_structured_cv_to_pdf(structured_cv, output_path=output_path)
+        # Prefer the Ajlla HTML template when available; fallback stays FPDF.
+        template_path = Path(settings.BASE_DIR).parent / "Ajlla_Product Owner.html"
+        pdf_path = render_structured_cv_to_pdf(
+            structured_cv,
+            output_path=output_path,
+            html_template_path=template_path,
+        )
 
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()
@@ -159,4 +168,10 @@ class FormattedCVView(APIView):
         response["Content-Disposition"] = (
             f'attachment; filename="{cv_instance.original_filename.rsplit(".", 1)[0]}_formatted.pdf"'
         )
+        total_elapsed = time.monotonic() - req_start
+        logger.info(
+            "formatted_cv_completed",
+            extra={"cv_id": cv_instance.id, "seconds": round(total_elapsed, 3)},
+        )
+        print(f"[REQ] formatted done cv_id={cv_instance.id} seconds={total_elapsed:.3f}")
         return response

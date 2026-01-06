@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CV Template</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    .page {
+      display: grid;
+      grid-template-columns: 30% 70%;
+      min-height: 100vh;
+      width: 100%;
+      align-items: stretch;
+    }
+
+    /* Shared blue color */
+    :root {
+      --cv-blue: #0d1240;
+    }
+
+    /* Left column */
+    .left-column {
+      background-color: var(--cv-blue);
+      color: white;
+      padding: 14px 14px 20px 14px;
+      box-sizing: border-box;
+      min-height: 100vh;
+    }
+
+    /* Right column */
+    .right-column {
+      background-color: white;
+      padding: 20px;
+      box-sizing: border-box;
+      min-height: 100vh;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #ccc;
+      margin: 8px 0 12px 0;
+      width: 100%;
+    }
+
+    .left-column hr {
+      border-top: 1px solid white;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    ul {
+      padding-left: 18px;
+      margin: 0;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    /* Right column specifics */
+    .logo-placeholder {
+      width: 120px;
+      height: 60px;
+      border: 1px dashed #999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 24px;
+    }
+
+    .job-role {
+      color: var(--cv-blue);
+      font-weight: bold;
+    }
+
+    .company {
+      color: #0a2749;
+      font-style: italic;
+    }
+
+    .field-of-study {
+      color: var(--cv-blue);
+      font-weight: bold;
+    }
+
+    .faculty {
+      font-style: italic;
+    }
+
+    .job,
+    .education-item {
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- LEFT COLUMN -->
+  <div class="left-column">
+
+    <div class="section">
+      <h2>Profile</h2>
+      <hr>
+      <p>{{ profile.summary }}</p>
+    </div>
+
+    {% if languages %}
+    <div class="section">
+      <h2>Languages</h2>
+      <hr>
+      <ul>
+        {% for lang in languages %}
+          <li>{{ lang.name }}: {{ lang.level }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if skills %}
+    <div class="section">
+      <h2>Skills</h2>
+      <hr>
+      <ul>
+        {% for skill in skills %}
+          <li>{{ skill }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="right-column">
+
+    <div class="logo-placeholder">
+      Logo
+    </div>
+
+    {% if experience %}
+    <div class="section">
+      <h2>Work Experience</h2>
+      <hr>
+      {% for job in experience %}
+        <div class="job">
+          <div class="job-role">{{ job.title }}</div>
+          <div class="company">{{ job.company }} | {{ job.period }}</div>
+          <ul>
+            {% for bullet in job.competence_bullets %}
+              <li>{{ bullet }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if certifications %}
+    <div class="section">
+      <h2>Certifications</h2>
+      <hr>
+      <ul>
+        {% for cert in certifications %}
+          <li>{{ cert }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if education %}
+    <div class="section">
+      <h2>Education</h2>
+      <hr>
+      {% for edu in education %}
+        <div class="education-item">
+          <div>{{ edu.period }}</div>
+          <div class="field-of-study">{{ edu.degree }}</div>
+          <div class="faculty">{{ edu.institution }}</div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if projects %}
+    <div class="section">
+      <h2>Projects</h2>
+      <hr>
+      {% for project in projects %}
+        <div class="job">
+          <div class="job-role">{{ project.title }}</div>
+          <div class="company">{{ project.company }} | {{ project.period }}</div>
+          <ul>
+            {% for bullet in project.competence_bullets %}
+              <li>{{ bullet }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if courses %}
+    <div class="section">
+      <h2>Courses</h2>
+      <hr>
+      <ul>
+        {% for course in courses %}
+          <li>{{ course }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </div>
+
+</div>
+
+</body>
+</html>

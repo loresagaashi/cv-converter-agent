@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthContext";
 import { convertCV, downloadFormattedCV, getCVText } from "@/lib/api";
@@ -19,8 +19,13 @@ export default function CVDetailPage() {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  // Prevent duplicate fetches in React StrictMode / double-render.
+  const ranFetch = useRef(false);
+
   useEffect(() => {
     if (!token || !id) return;
+    if (ranFetch.current) return;
+    ranFetch.current = true;
     setLoadingText(true);
     setError(null);
     getCVText(id, token)
