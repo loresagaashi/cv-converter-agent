@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, DragEvent } from "react";
+import { useRouter } from "next/navigation";
 import { uploadCV } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { CV } from "@/lib/types";
@@ -11,10 +12,12 @@ interface Props {
 
 export function CVUpload({ onUploaded }: Props) {
   const { token } = useAuth();
+  const router = useRouter();
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   const handleFile = (file: File | null) => {
     if (!file) return;
@@ -48,9 +51,19 @@ export function CVUpload({ onUploaded }: Props) {
       const cv = await uploadCV(selectedFile, token);
       setSelectedFile(null);
       onUploaded?.(cv);
+      
+      // Keep uploading state for 2 seconds
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      setUploading(false);
+      
+      // Show toast for 1 second
+      setShowToast(true);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Then redirect
+      router.push(`/dashboard/cvs?highlight=${cv.id}`);
     } catch (err: any) {
       setError(err?.message || "Upload failed. Please try again.");
-    } finally {
       setUploading(false);
     }
   };
@@ -110,6 +123,18 @@ export function CVUpload({ onUploaded }: Props) {
           {uploading ? "Uploading..." : "Upload CV"}
         </button>
       </div>
+      
+      {/* Toast notification */}
+      {showToast && (
+        <div className="fixed top-4 right-4 z-50 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="rounded-lg bg-emerald-500 px-4 py-3 text-sm font-medium text-white shadow-lg flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            File uploaded successfully!
+          </div>
+        </div>
+      )}
     </div>
   );
 }
