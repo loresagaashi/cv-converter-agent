@@ -184,6 +184,11 @@ def render_structured_cv_to_pdf(
       if isinstance(c, str) and str(c).strip()
     ]
 
+    # Compute an absolute file URI for the Borek logo so WeasyPrint can always
+    # resolve it, regardless of the working directory.
+    logo_path = html_template_path.parent / "borek-logo" / "borek.png"
+    logo_src = logo_path.as_uri() if logo_path.exists() else None
+
     context = {
       "profile": {"summary": profile_summary},
       "languages": languages,
@@ -193,6 +198,7 @@ def render_structured_cv_to_pdf(
       "projects": projects,
       "courses": courses,
       "certifications": certifications,
+      "logo_src": logo_src,
     }
 
     html_out = template.render(**context)
