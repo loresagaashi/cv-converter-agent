@@ -19,6 +19,8 @@ export function CVTable({ refreshTrigger }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+  const [deleteModal, setDeleteModal] = useState<CV | null>(null);
 
   useEffect(() => {
     // Add glow animation styles
@@ -64,18 +66,18 @@ export function CVTable({ refreshTrigger }: Props) {
     return null;
   }
 
-  const handleDelete = async (cv: CV) => {
-    if (!token) return;
-    const confirmed = window.confirm(
-      `Delete CV "${cv.original_filename}"? This cannot be undone.`
-    );
-    if (!confirmed) return;
+  const filtered = items.filter((cv) =>
+    cv.original_filename.toLowerCase().includes(query.toLowerCase())
+  );
 
-    setDeletingId(cv.id);
+  const handleDelete = async () => {
+    if (!token || !deleteModal) return;
+    setDeletingId(deleteModal.id);
     setError(null);
     try {
-      await deleteCV(cv.id, token);
-      setItems((prev) => prev.filter((item) => item.id !== cv.id));
+      await deleteCV(deleteModal.id, token);
+      setItems((prev) => prev.filter((item) => item.id !== deleteModal.id));
+      setDeleteModal(null);
     } catch (err: any) {
       setError(err?.message || "Failed to delete CV.");
     } finally {
@@ -85,7 +87,7 @@ export function CVTable({ refreshTrigger }: Props) {
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 sm:p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-base md:text-lg font-semibold text-slate-50">
             Uploaded CVs
@@ -94,9 +96,17 @@ export function CVTable({ refreshTrigger }: Props) {
             Browse and open your processed CVs.
           </p>
         </div>
-        <span className="text-[11px] text-slate-500">
-          {items.length} file{items.length === 1 ? "" : "s"}
-        </span>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">
+            {filtered.length} file{filtered.length === 1 ? "" : "s"}
+          </span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by CV name"
+            className="w-full sm:w-64 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-[11px] text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -113,68 +123,89 @@ export function CVTable({ refreshTrigger }: Props) {
           {error}
         </div>
       ) : items.length === 0 ? (
-        <p className="text-xs text-slate-500">
-          You haven't uploaded any CVs yet. Upload a CV from the dashboard to
-          see it listed here.
-        </p>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-6 py-8 text-center">
+          <div className="mb-3 text-4xl text-slate-600">📄</div>
+          <p className="text-sm font-medium text-slate-300 mb-1">No CVs found</p>
+          <p className="text-xs text-slate-500">
+            You haven't uploaded any CVs yet. Upload a CV from the dashboard to
+            see it listed here.
+          </p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-6 py-8 text-center">
+          <div className="mb-3 text-4xl text-slate-600">🔍</div>
+          <p className="text-sm font-medium text-slate-300 mb-1">No results found</p>
+          <p className="text-xs text-slate-500">
+            No CVs match your search. Try different keywords.
+          </p>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-separate border-spacing-y-1 text-xs md:text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
-                <th className="px-3 py-2 font-medium">CV name</th>
-                <th className="px-3 py-2 font-medium">Uploaded by</th>
-                <th className="px-3 py-2 font-medium">Uploaded at</th>
-                <th className="px-3 py-2 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((cv) => (
-                <tr
-                  key={cv.id}
-                  className={`rounded-xl text-slate-100 shadow-sm hover:bg-slate-900/90 ${
-                    highlightId === cv.id
-                      ? "border border-red-400/60 bg-slate-900/90"
-                      : "border border-slate-800/50 bg-slate-900/70"
-                  }`}
-                  style={highlightId === cv.id ? {
-                    animation: 'cv-glow 2s ease-in-out infinite'
-                  } : undefined}
+        <div
+          className={`space-y-2 ${
+            filtered.length > 10 ? "max-h-96 overflow-y-auto pr-1" : ""
+          }`}
+        >
+          {filtered.map((cv) => (
+            <div
+              key={cv.id}
+              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="truncate font-medium text-slate-100">
+                  {cv.original_filename}
+                </p>
+                <div className="text-slate-500 text-[11px] mt-0.5">
+                  <span>{cv.uploaded_by || "—"} • </span>
+                  {new Date(cv.uploaded_at).toLocaleString(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </div>
+              </div>
+              <div className="ml-3 flex items-center gap-2">
+                <Link
+                  href={`/cv/${cv.id}`}
+                  className="inline-flex items-center rounded-lg border border-slate-700 px-3 py-1.5 text-[11px] font-medium text-slate-100 hover:bg-slate-900"
                 >
-                  <td className="max-w-xs truncate px-3 py-2 align-middle">
-                    <span className="block font-medium">
-                      {cv.original_filename}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 align-middle text-slate-300">
-                    {cv.uploaded_by || "—"}
-                  </td>
-                  <td className="px-3 py-2 align-middle text-slate-300">
-                    {new Date(cv.uploaded_at).toLocaleString(undefined, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </td>
-                  <td className="px-3 py-2 align-middle text-right space-x-2">
-                    <Link
-                      href={`/cv/${cv.id}`}
-                      className="inline-flex items-center rounded-lg border border-slate-700 px-3 py-1.5 text-[11px] font-medium text-slate-100 hover:bg-slate-900"
-                    >
-                      Open
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(cv)}
-                      disabled={deletingId === cv.id}
-                      className="inline-flex items-center rounded-lg border border-red-500/70 px-3 py-1.5 text-[11px] font-medium text-red-200 hover:bg-red-500/10 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {deletingId === cv.id ? "Deleting..." : "Delete"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  Open
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setDeleteModal(cv)}
+                  disabled={deletingId === cv.id}
+                  className="inline-flex items-center rounded-lg border border-red-500/70 px-3 py-1.5 text-[11px] font-medium text-red-200 hover:bg-red-500/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {deletingId === cv.id ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {deleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-950/90 p-5 shadow-2xl">
+            <div className="text-sm font-semibold text-slate-100">Delete CV</div>
+            <p className="mt-2 text-sm text-slate-400">
+              Are you sure you want to delete "{deleteModal.original_filename}"? This action cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-3 text-sm">
+              <button
+                onClick={() => setDeleteModal(null)}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 font-medium text-slate-200 hover:bg-slate-900/70"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deletingId === deleteModal.id}
+                className="rounded-lg bg-red-500 px-3 py-1.5 font-semibold text-white hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {deletingId === deleteModal.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/components/auth/AuthContext";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function DashboardLayout({
   children,
@@ -12,6 +12,7 @@ export default function DashboardLayout({
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -87,15 +88,12 @@ export default function DashboardLayout({
             </div>
             <div className="text-slate-500 truncate">{user.email}</div>
           </div>
-          <button
-            onClick={() => {
-              logout();
-              router.push("/login");
-            }}
+          {/* <button
+            onClick={() => setShowLogoutModal(true)}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-900/70"
           >
             Log out
-          </button>
+          </button> */}
         </div>
       </aside>
       <div className="flex flex-1 flex-col">
@@ -116,10 +114,7 @@ export default function DashboardLayout({
               {user.email}
             </span>
             <button
-              onClick={() => {
-                logout();
-                router.push("/login");
-              }}
+              onClick={() => setShowLogoutModal(true)}
               className="rounded-lg border border-slate-700 px-3 py-1.5 font-medium text-slate-200 hover:bg-slate-900/70"
             >
               Log out
@@ -130,6 +125,35 @@ export default function DashboardLayout({
           <div className="mx-auto max-w-5xl">{children}</div>
         </main>
       </div>
+
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-950/90 p-5 shadow-2xl">
+            <div className="text-sm font-semibold text-slate-100">Log out</div>
+            <p className="mt-2 text-sm text-slate-400">
+              Are you sure you want to log out? Any unsaved work will be lost.
+            </p>
+            <div className="mt-5 flex justify-end gap-3 text-sm">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 font-medium text-slate-200 hover:bg-slate-900/70"
+              >
+                Stay
+              </button>
+              <button
+                onClick={() => {
+                  logout();
+                  router.push("/login");
+                  setShowLogoutModal(false);
+                }}
+                className="rounded-lg bg-emerald-500 px-3 py-1.5 font-semibold text-slate-950 hover:bg-emerald-400"
+              >
+                Log out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

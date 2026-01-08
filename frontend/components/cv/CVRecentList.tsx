@@ -20,7 +20,7 @@ export function CVRecentList() {
       .then((data) => {
         // Sort by ID descending - newest first
         const sorted = [...data].sort((a, b) => b.id - a.id);
-        setItems(sorted.slice(0, 5));
+        setItems(sorted);
       })
       .catch((err: any) => {
         setError(err?.message || "Failed to load recent CVs.");
@@ -33,8 +33,8 @@ export function CVRecentList() {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 sm:p-5">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6 sm:p-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-slate-100">Recent CVs</h2>
         <Link
           href="/dashboard/cvs"
@@ -61,11 +61,11 @@ export function CVRecentList() {
           No CVs yet. Upload your first CV above to see it here.
         </p>
       ) : (
-        <div className="space-y-2 text-xs">
+        <div className="space-y-1.5 text-xs max-h-62 overflow-y-auto pr-1">
           {items.map((cv) => (
             <div
               key={cv.id}
-              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-1.5"
             >
               <div className="min-w-0">
                 <p className="truncate font-medium text-slate-100">
