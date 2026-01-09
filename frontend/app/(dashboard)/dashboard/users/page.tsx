@@ -42,10 +42,15 @@ export default function UsersAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [search, setSearch] = useState("");
+
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [formState, setFormState] = useState<UserFormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const isAdmin = useMemo(() => user?.role === "admin", [user]);
 
@@ -167,25 +172,42 @@ export default function UsersAdminPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!token) return;
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this user? This action cannot be undone."
-    );
-    if (!confirmed) return;
+  const openDeleteModal = (u: User) => {
+    setDeleteTarget(u);
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!token || !deleteTarget) return;
+    setDeleting(true);
+    setError(null);
     try {
-      await deleteUser(token, id);
-      setUsers((prev) => prev.filter((u) => u.id !== id));
+      await deleteUser(token, deleteTarget.id);
+      setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch (err: any) {
       setError(err?.message || "Unable to delete user.");
+    } finally {
+      setDeleting(false);
     }
   };
 
+  const filteredUsers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return users;
+    return users.filter((u) => {
+      const name = `${u.first_name || ""} ${u.last_name || ""}`.toLowerCase();
+      return (
+        u.email.toLowerCase().includes(term) ||
+        name.includes(term) ||
+        u.role.toLowerCase().includes(term)
+      );
+    });
+  }, [search, users]);
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-2">
-        <div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
           <h1 className="text-xl md:text-2xl font-semibold text-slate-50">
             User Management
           </h1>
@@ -193,12 +215,26 @@ export default function UsersAdminPage() {
             Manage application users and their roles.
           </p>
         </div>
-        <button
-          onClick={openCreateForm}
-          className="inline-flex items-center rounded-lg bg-emerald-500 px-3 py-1.5 text-xs md:text-sm font-medium text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400"
-        >
-          Add User
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <div className="relative w-full sm:w-64">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email, or role"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            />
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 text-xs">
+              ⌕
+            </span>
+          </div>
+          <button
+            onClick={openCreateForm}
+            className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-3 py-2 text-xs md:text-sm font-medium text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400"
+          >
+            Add User
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -209,12 +245,14 @@ export default function UsersAdminPage() {
 
       {loading ? (
         <div className="text-sm text-slate-400">Loading users...</div>
-      ) : users.length === 0 ? (
+      ) : filteredUsers.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-6 text-sm text-slate-400">
-          No users found. Use &quot;Add User&quot; to create one.
+          {users.length === 0
+            ? 'No users found. Use "Add User" to create one.'
+            : "No users match your search."}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
+        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-lg shadow-black/20">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-900/80 text-slate-400 text-xs uppercase tracking-wide">
               <tr>
@@ -225,7 +263,7 @@ export default function UsersAdminPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {filteredUsers.map((u) => (
                 <tr
                   key={u.id}
                   className="border-t border-slate-800/80 hover:bg-slate-900/60"
@@ -255,7 +293,7 @@ export default function UsersAdminPage() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(u.id)}
+                      onClick={() => openDeleteModal(u)}
                       className="inline-flex items-center rounded-md border border-red-500/60 px-2 py-1 text-xs font-medium text-red-100 hover:bg-red-500/10"
                     >
                       Delete
@@ -398,6 +436,60 @@ export default function UsersAdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl shadow-black/60">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-50">
+                  Delete user
+                </h2>
+                <p className="text-xs text-slate-400">
+                  This action cannot be undone.
+                </p>
+              </div>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="text-xs text-slate-400 hover:text-slate-200"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs text-slate-200">
+              <div className="font-semibold text-slate-100">
+                {deleteTarget.first_name || deleteTarget.last_name
+                  ? `${deleteTarget.first_name || ""} ${deleteTarget.last_name || ""}`.trim()
+                  : "(No name)"}
+              </div>
+              <div className="text-slate-400">{deleteTarget.email}</div>
+              <div className="mt-1 inline-flex items-center rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-100">
+                {deleteTarget.role === "admin" ? "Admin" : "User"}
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-900/70"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="inline-flex items-center rounded-lg bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-red-500/30 hover:bg-red-500 disabled:opacity-60"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}

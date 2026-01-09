@@ -91,12 +91,12 @@ export default function CVDetailPage() {
           >
             {downloading ? "Generating..." : "Generate formatted CV"}
           </button>
-          <a
+          {/* <a
             href="/dashboard"
             className="text-[11px] font-medium text-emerald-300 hover:text-emerald-200"
           >
             ← Back to main page
-          </a>
+          </a> */}
         </div>
       </div>
 
@@ -185,7 +185,7 @@ export default function CVDetailPage() {
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-semibold text-slate-100">Extracted text</h2>
           </div>
-          <div className="h-[420px] overflow-auto rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-[11px] leading-relaxed">
+          <div className="min-h-[380px] md:min-h-[460px] max-h-[82vh] md:max-h-[88vh] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-[11px] leading-relaxed">
             {loadingText ? (
               <div className="space-y-1 animate-pulse">
                 {Array.from({ length: 12 }).map((_, idx) => (
@@ -198,7 +198,7 @@ export default function CVDetailPage() {
               </div>
             ) : cvText ? (
               cvText.text ? (
-                <pre className="whitespace-pre-wrap font-mono text-[11px] text-slate-200">
+                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-slate-200">
                   {cvText.text}
                 </pre>
               ) : (

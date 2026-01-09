@@ -36,12 +36,12 @@ export function CVRecentList() {
     <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6 sm:p-4">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-slate-100">Recent CVs</h2>
-        <Link
+        {/* <Link
           href="/dashboard/cvs"
           className="text-[11px] font-medium text-emerald-300 hover:text-emerald-200"
         >
           Go to dashboard →
-        </Link>
+        </Link> */}
       </div>
       {loading ? (
         <div className="space-y-2">

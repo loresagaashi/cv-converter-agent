@@ -35,7 +35,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-50">
+    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-50">
       <aside className="hidden md:flex w-60 flex-col border-r border-slate-800 bg-slate-950/60 px-4 py-5">
         <div className="mb-6">
           <span className="block text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400 mb-1">
@@ -96,8 +96,8 @@ export default function DashboardLayout({
           </button> */}
         </div>
       </aside>
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 py-3 md:px-6">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 py-3 md:px-6 flex-shrink-0">
           <div className="flex items-center gap-2 md:hidden">
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-bold">
               CV
@@ -121,7 +121,7 @@ export default function DashboardLayout({
             </button>
           </div>
         </header>
-        <main className="flex-1 px-4 py-4 md:px-8 md:py-6 bg-gradient-to-b from-slate-950 to-slate-900">
+        <main className="flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6 bg-gradient-to-b from-slate-950 to-slate-900">
           <div className="mx-auto max-w-5xl">{children}</div>
         </main>
       </div>
