@@ -19,6 +19,8 @@
       margin: 0;
       padding: 0;
       font-family: Arial, sans-serif;
+      color: #666666;
+      font-size: 12px;
     }
 
     .page {
@@ -39,40 +41,86 @@
     .left-column {
       background-color: transparent;
       color: white;
-      padding: 14px 14px 20px 14px;
+      padding: 60px 3px 20px 20px;
       box-sizing: border-box;
+      text-align: left;
+    }
+
+    .left-column h2 {
+      color: white;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .left-column p {
+      margin-top: 8px;
+      line-height: 1.6;
+      margin-bottom: 0;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .left-column ul {
+      line-height: 1.8;
+      margin-top: 8px;
+      width: 100%;
+      max-width: 100%;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .left-column li {
+      margin-bottom: 4px;
     }
 
     /* Right column */
     .right-column {
       background-color: transparent;
-      padding: 20px;
+      padding: 10px 10px 20px 20px;
       box-sizing: border-box;
+      color: #666666;
+    }
+
+    .right-column h2 {
+      color: #000000;
+      font-weight: 600;
     }
 
     h2 {
       margin: 0;
-      font-size: 18px;
+      font-size: 16px;
+    }
+
+    .right-column h2 {
+      font-size: 16px;
     }
 
     hr {
       border: none;
       border-top: 1px solid #ccc;
       margin: 8px 0 12px 0;
-      width: 100%;
+      width: calc(100% + 10px);
+      margin-right: -10px;
     }
 
     .left-column hr {
       border-top: 1px solid white;
+      width: calc(100% + 3px);
+      margin-right: -3px;
     }
 
     .section {
-      margin-bottom: 24px;
+      margin-bottom: 28px;
+    }
+
+    .left-column .section {
+      margin-bottom: 32px;
     }
 
     ul {
       padding-left: 18px;
       margin: 0;
+      font-size: 11px;
     }
 
     li {
@@ -81,12 +129,13 @@
 
     /* Right column specifics */
     .logo-container {
-      width: 120px;
-      height: 60px;
-      margin-bottom: 24px;
+      width: 200px;
+      height: 100px;
+      margin-bottom: 0px;
+      margin-left: -33px;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      align-items: flex-start;
+      justify-content: flex-start;
     }
 
     .logo-image {
@@ -96,15 +145,16 @@
     }
 
     .logo-placeholder {
-      width: 120px;
-      height: 60px;
+      width: 200px;
+      height: 100px;
       border: 1px dashed #999;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 12px;
       color: #999;
-      margin-bottom: 24px;
+      margin-bottom: 4px;
+      margin-left: -20px;
     }
 
     .job-role {
