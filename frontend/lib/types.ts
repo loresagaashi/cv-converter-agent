@@ -42,4 +42,46 @@ export interface ConvertCVResponse {
   skills: string[];
 }
 
+// Structured CV types for modal editing
+export interface WorkExperienceItem {
+  from: string;
+  to: string;
+  title: string;
+  company: string;
+  location: string;
+  bullets: string[];
+}
+
+export interface EducationItem {
+  from: string;
+  to: string;
+  degree: string;
+  institution: string;
+}
+
+export interface ProjectItem {
+  from: string;
+  to: string;
+  title: string;
+  company: string;
+  location: string;
+  bullets: string[];
+}
+
+export interface LanguageItem {
+  name: string;
+  level: string;
+}
+
+export interface StructuredCV {
+  profile: string;
+  work_experience: WorkExperienceItem[];
+  certifications: string[];
+  education: EducationItem[];
+  projects: ProjectItem[];
+  skills: string[];
+  courses: string[];
+  languages: LanguageItem[];
+}
+
 

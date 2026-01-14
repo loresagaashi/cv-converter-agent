@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthContext";
 import { convertCV, downloadFormattedCV, getCVText } from "@/lib/api";
+import { CVPreviewModal } from "@/components/cv/CVPreviewModal";
 import type { CVTextResponse, ConvertCVResponse } from "@/lib/types";
 
 export default function CVDetailPage() {
@@ -18,6 +19,7 @@ export default function CVDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
 
   // Prevent duplicate fetches in React StrictMode / double-render.
   const ranFetch = useRef(false);
@@ -85,18 +87,13 @@ export default function CVDetailPage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleDownloadFormatted}
-            disabled={downloading || !convertData?.competence_summary}
+            onClick={() => setPreviewModalOpen(true)}
+            disabled={!convertData?.competence_summary}
             className="rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {downloading ? "Generating..." : "Generate formatted CV"}
+            Preview CV
           </button>
-          {/* <a
-            href="/dashboard"
-            className="text-[11px] font-medium text-emerald-300 hover:text-emerald-200"
-          >
-            ← Back to main page
-          </a> */}
+         
         </div>
       </div>
 
@@ -214,8 +211,18 @@ export default function CVDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Preview Modal */}
+      <CVPreviewModal
+        cvId={id}
+        token={token}
+        isOpen={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        originalFilename={cvText?.original_filename}
+      />
     </div>
   );
 }
+
 
 

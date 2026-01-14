@@ -14,6 +14,42 @@ except Exception as exc:  # pragma: no cover - optional dependency
   HTML = None  # type: ignore
 
 
+DEFAULT_SECTION_ORDER: List[str] = [
+  "profile",
+  "languages",
+  "skills",
+  "work_experience",
+  "certifications",
+  "education",
+  "projects",
+  "courses",
+]
+
+# Keep left/right column defaults for the HTML template while allowing custom order.
+LEFT_COLUMN_KEYS = {"profile", "languages", "skills"}
+RIGHT_COLUMN_KEYS = {"work_experience", "certifications", "education", "projects", "courses"}
+
+def _normalize_section_order(raw_order: Optional[List[Any]]) -> List[str]:
+  """
+  Return a stable, de-duplicated section order containing only known keys.
+  Missing defaults are appended at the end to preserve PDF completeness.
+  """
+  seen = set()
+  order: List[str] = []
+  for key in raw_order or []:
+    if not isinstance(key, str):
+      continue
+    cleaned = key.strip().lower()
+    if cleaned in DEFAULT_SECTION_ORDER and cleaned not in seen:
+      order.append(cleaned)
+      seen.add(cleaned)
+  for key in DEFAULT_SECTION_ORDER:
+    if key not in seen:
+      order.append(key)
+      seen.add(key)
+  return order
+
+
 def _sanitize_for_pdf(text: str) -> str:
   """
   Ensure the text only contains characters supported by the core Helvetica
@@ -77,7 +113,7 @@ def _safe_multi_cell(pdf: FPDF, w: float, h: float, text: str) -> None:
 
 
 def render_structured_cv_to_pdf(
-  structured_cv: Dict[str, Any], *, output_path: Path, html_template_path: Optional[Path] = None
+  structured_cv: Dict[str, Any], *, output_path: Path, html_template_path: Optional[Path] = None, section_order: Optional[List[str]] = None
 ) -> Path:
   """
   Render a normalized structured CV into a PDF.
@@ -85,6 +121,9 @@ def render_structured_cv_to_pdf(
   If a Jinja2/WeasyPrint HTML template is provided and dependencies are installed,
   render with that template to preserve the exact visual layout. Otherwise, fall
   back to the deterministic FPDF layout below.
+  
+  `section_order` allows customizing the order and visibility of sections.
+  Missing sections use defaults; custom keys are ignored.
   """
 
   if not html_template_path:
@@ -93,6 +132,8 @@ def render_structured_cv_to_pdf(
     print(f"[PDF] Template not found at: {html_template_path}; using FPDF fallback")
   elif not _HTML_RENDER_AVAILABLE:
     print("[PDF] HTML render deps unavailable; using FPDF fallback")
+
+  normalized_order = _normalize_section_order(section_order)
 
   if html_template_path and html_template_path.exists() and _HTML_RENDER_AVAILABLE:
     print(f"[PDF] Using HTML template: {html_template_path}")

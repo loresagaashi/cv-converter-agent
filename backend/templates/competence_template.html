@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Competence Paper - {{ name }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11pt;
+            line-height: 1.4;
+            color: #000;
+            overflow-x: hidden;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            align-items: flex-start;
+        }
+
+        /* Left Sidebar */
+        .sidebar {
+            flex: 0 0 26%;
+            background: #fff;
+            padding: 0 20px 30px 50px;
+            position: relative;
+        }
+
+        .sidebar::before {
+            content: '';
+            display: block;
+            width: 200px;
+            height: 14px;
+            background: #1a2b5c;
+            border-radius: 0;
+            margin: 0 0 48px 0;
+        }
+
+        .sidebar h1 {
+            font-size: 24pt;
+            font-weight: 600;
+            color: #1a2b5c;
+            margin-bottom: 15px;
+            margin-top: 0;
+            padding-bottom: 8px;
+            border-bottom: 4px solid #000;
+            width: 100%;
+            margin-left: 0;
+        }
+
+        .sidebar h2 {
+            font-size: 12pt;
+            font-weight: 700;
+            color: #1a2b5c;
+            margin-top: 14px;
+            margin-bottom: 4px;
+        }
+
+        .sidebar p {
+            font-size: 10pt;
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding-left: 0;
+            margin-bottom: 8px;
+        }
+
+        .sidebar ul li {
+            padding-left: 15px;
+            margin-bottom: 5px;
+            position: relative;
+            font-size: 10pt;
+        }
+
+        .sidebar ul li::before {
+            content: '■';
+            position: absolute;
+            left: 0;
+            font-size: 8pt;
+        }
+
+        /* Main Content - Middle Column */
+        .main-content {
+            flex: 0 0 37%;
+            padding: 70px 30px 0px 30px;
+            position: relative;
+        }
+
+        /* Right Column - Project Experience */
+        .right-content {
+            flex: 0 0 37%;
+            padding: 70px 50px 60px 30px;
+            position: relative;
+        }
+
+        /* Top Right Borek Logo */
+        .logo-circle {
+            position: absolute;
+            top: 8px;
+            right: 30px;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .logo-circle img {
+            width: 38px;
+            height: 38px;
+            object-fit: contain;
+        }
+
+        .main-content h1,
+        .right-content h1 {
+            font-size: 20pt;
+            font-weight: 700;
+            color: #1a2b5c;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 4px solid #000;
+        }
+
+        .main-content h1 span,
+        .right-content h1 span {
+            font-weight: 400;
+        }
+
+        .main-content p,
+        .right-content p {
+            font-size: 10pt;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .main-content h2 {
+            font-size: 16pt;
+            font-weight: 700;
+            color: #1a2b5c;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 4px solid #000;
+        }
+
+        .main-content h2 span {
+            font-weight: 400;
+        }
+
+        .main-content h3 {
+            font-size: 11pt;
+            font-weight: 700;
+            color: #1a2b5c;
+            margin-top: 10px;
+            margin-bottom: 2px;
+        }
+
+        .main-content ul,
+        .right-content ul {
+            list-style: none;
+            padding-left: 0;
+            margin-bottom: 15px;
+        }
+
+        .main-content ul li,
+        .right-content ul li {
+            padding-left: 18px;
+            margin-bottom: 8px;
+            position: relative;
+            font-size: 10pt;
+            line-height: 1.5;
+        }
+
+        .main-content ul li::before,
+        .right-content ul li::before {
+            content: '■';
+            position: absolute;
+            left: 0;
+            font-size: 8pt;
+            font-weight: bold;
+        }
+
+        .main-content ul.sub-bullets,
+        .right-content ul.sub-bullets {
+            margin-left: 15px;
+            margin-top: 5px;
+        }
+
+        .main-content ul.sub-bullets li::before,
+        .right-content ul.sub-bullets li::before {
+            content: '–';
+            font-size: 10pt;
+        }
+
+        .project-item {
+            margin-bottom: 25px;
+        }
+
+        .project-title {
+            font-weight: 700;
+            font-size: 10pt;
+        }
+
+        .project-duration {
+            font-size: 9pt;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        /* Footer */
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            height: 40px;
+        }
+
+        .footer-logo {
+            width: 200px;
+            margin-left: 20px;
+        }
+
+        .footer-badge {
+            background: #1a2b5c;
+            color: white;
+            margin-right: 50px;
+            padding: 6px 50px;
+            font-size: 10pt;
+            font-weight: 600;
+        }
+
+        .superscript {
+            font-size: 7pt;
+            vertical-align: super;
+        }
+
+        .main-content p[style*="margin-left: 15px;"] {
+            margin-bottom: 4px !important;
+            margin-top: 0 !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <h1>JOB TITLE</h1>
+
+            <h2>{{ name }}</h2>
+
+            <h2>Seniority:</h2>
+            <p>{{ seniority }}</p>
+
+            <h2>CORE SKILLS:</h2>
+            <ul>
+                {% for skill in core_skills %}
+                <li>{{ skill }}</li>
+                {% endfor %}
+            </ul>
+
+            <h2>SOFT SKILLS:</h2>
+            <ul>
+                {% for skill in soft_skills %}
+                <li>{{ skill }}</li>
+                {% endfor %}
+            </ul>
+
+            <h2>LANGUAGE:</h2>
+            <ul>
+                {% for language in languages %}
+                <li>{{ language }}</li>
+                {% endfor %}
+            </ul>
+
+            <h2>EDUCATION:</h2>
+            <p>{{ education }}</p>
+
+            <h2>TRAININGS:</h2>
+            <p>{{ trainings }}</p>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <h1>OUR <span>RECOMMENDATION</span></h1>
+            <p>
+                <strong>{{ name }}</strong> is a great IT Support Specialist with a loyal mindset and structured
+                approach, skilled in diagnosing and resolving 1<span class="superscript">st</span> and 2<span
+                    class="superscript">nd</span> level support issues. He leverages his expertise in systems like
+                Active Directory and Office 365 to provide effective, methodical support and maintain strong IT
+                performance. Additionally, his level of German is fluent.
+            </p>
+
+            <h2>TECH <span>COMPETENCIES</span></h2>
+
+            <h3>■ System & Server Administration</h3>
+            <p style="margin-left: 15px;">
+                Active Directory, Office 365 Administration, User Account Management, Basic Server Operations
+            </p>
+
+            <h3>■ Hardware & Software Support</h3>
+            <p style="margin-left: 15px;">
+                Windows, macOS, iOS, Peripheral Devices
+            </p>
+
+            <h3>■ Networking & Remote Support</h3>
+            <p style="margin-left: 15px;">
+                VPN Configuration, Wi-Fi Troubleshooting, Remote Desktop Support, Basic Network Patch Management
+            </p>
+
+            <h3>■ Web & Email Hosting</h3>
+            <p style="margin-left: 15px;">
+                Domain Setup, DNS Configuration, Email Account Management, SSL Installation
+            </p>
+
+            <h3>■ IT Support Tools</h3>
+            <p style="margin-left: 15px;">
+                Ticketing Systems, IT Inventory Management, Device Deployment and Maintenance
+            </p>
+        </div>
+
+        <!-- Right Content - Project Experience -->
+        <div class="right-content">
+            <img src="../../borek-logo/Borek Logo (top-right).png" alt="Borek Logo"
+                style="position:absolute;top:8px;right:50px;width:60px;height:60px;border-radius:50%;object-fit:cover;object-position:center 30%;z-index:2;">
+            <h1>PROJECT <span>EXPERIENCE</span></h1>
+
+            <div class="project-item">
+                <div class="project-title">■ IT Support Specialist (more than 5 years)</div>
+                <ul class="sub-bullets">
+                    <li>Provided es like Active Directory and Office 365 to provide effective, methodical support and
+                        maintain strong IT performance. Additionally, his level of German is fluent.d-to-end technical
+                        support for Windows, macOS, and iOS devices, including hardware
+                        troubleshooting, software installation, and network connectivity issues.</li>
+                    <li>Active Directory and Office 365 accounts, optimizing user access and permissions. Delivered
+                        remote support, VPN configuration, and device integration, improving overall system efficiency
+                        and user satisfaction.</li>
+                </ul>
+            </div>
+
+            <div class="project-item">
+                <div class="project-title">■ Web & Email Hosting Specialist (more than 3 years)</div>
+                <ul class="sub-bullets">
+                    <li>Configured and maintained web domains, DNS settings, email accounts, and SSL certificates for
+                        multiple clients.</li>
+                    <li>Troubleshot website downtime, performance issues, and email delivery problems. Supported IT
+                        infrastructure deployment and ensured reliable hosting operations, improving uptime and client
+                        experience across multiple projects.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <img src="../../borek-logo/borek.jpeg" alt="Borek Solutions Group" class="footer-logo">
+        <div class="footer-badge">Borek employee</div>
+    </div>
+</body>
+
+</html>
