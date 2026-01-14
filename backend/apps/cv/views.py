@@ -221,12 +221,7 @@ class StructuredCVView(APIView):
     def post(self, request, pk):
         """
         Accept edited structured CV data and render a PDF with the edits applied.
-        
-        Expected payload:
-        {
-          "structured_cv": { ... edited CV structure ... },
-          "section_order": ["profile", "work_experience", ...] (optional)
-        }
+        Now supports a 'type' parameter: 'cv' (default) or 'competence'.
         """
         req_start = time.monotonic()
         cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
@@ -234,6 +229,7 @@ class StructuredCVView(APIView):
         try:
             structured_cv = request.data.get("structured_cv", {})
             section_order = request.data.get("section_order")
+            export_type = request.data.get("type", "cv")
         except Exception as e:
             return Response(
                 {"detail": f"Invalid payload: {str(e)}"},
@@ -247,8 +243,14 @@ class StructuredCVView(APIView):
         if not output_path.suffix.lower().endswith(".pdf"):
             output_path = output_path.with_suffix(".pdf")
 
-        # Prefer the Ajlla HTML template when available; fallback stays FPDF.
-        template_path = Path(settings.BASE_DIR).parent / "Ajlla_Product Owner.html"
+        # Choose template based on export_type
+        if export_type == "competence":
+            template_path = Path(settings.BASE_DIR) / "templates" / "competence_template.html"
+            download_name = f'{cv_instance.original_filename.rsplit(".", 1)[0]}_competence_letter.pdf'
+        else:
+            template_path = Path(settings.BASE_DIR).parent / "Ajlla_Product Owner.html"
+            download_name = f'{cv_instance.original_filename.rsplit(".", 1)[0]}_edited.pdf'
+
         pdf_path = render_structured_cv_to_pdf(
             structured_cv,
             output_path=output_path,
@@ -265,7 +267,7 @@ class StructuredCVView(APIView):
         )
         # Suggest a friendly download filename.
         response["Content-Disposition"] = (
-            f'attachment; filename="{cv_instance.original_filename.rsplit(".", 1)[0]}_edited.pdf"'
+            f'attachment; filename="{download_name}"'
         )
         total_elapsed = time.monotonic() - req_start
         logger.info(

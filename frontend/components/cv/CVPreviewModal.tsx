@@ -211,7 +211,8 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
     }
   }, [isOpen, cvId, token, loadStructuredCV]);
 
-  const handleExport = async () => {
+
+  const handleExport = async (type: "cv" | "competence" = "cv") => {
     if (!structuredCV || !token) return;
 
     // Validate before exporting
@@ -225,12 +226,12 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
     setError(null);
     try {
       // Cast to StructuredCV since we've validated all required fields exist
-      const blob = await exportEditedCV(cvId, token, structuredCV as StructuredCV);
+      const blob = await exportEditedCV(cvId, token, structuredCV as StructuredCV, undefined, type);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       const baseName = originalFilename?.replace(/\.[^/.]+$/, "") || `cv_${cvId}`;
-      a.download = `${baseName}_formatted_CV.pdf`;
+      a.download = type === "competence" ? `${baseName}_competence_letter.pdf` : `${baseName}_formatted_CV.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1178,15 +1179,26 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
             Close
           </button>
           <button
-            onClick={handleExport}
+            onClick={() => handleExport("cv")}
             disabled={
               exporting ||
               !structuredCV ||
               !!(structuredCV && validateStructuredCV(structuredCV))
             }
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
           >
             {exporting ? "Exporting..." : "Export to PDF"}
+          </button>
+          <button
+            onClick={() => handleExport("competence")}
+            disabled={
+              exporting ||
+              !structuredCV ||
+              !!(structuredCV && validateStructuredCV(structuredCV))
+            }
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? "Exporting..." : "Export as Competence Letter"}
           </button>
         </div>
       </div>

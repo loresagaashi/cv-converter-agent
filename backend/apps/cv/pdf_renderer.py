@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fpdf import FPDF
+from apps.llm.services import group_skills_into_categories
 
 try:
   from jinja2 import Environment, FileSystemLoader  # type: ignore
@@ -140,116 +141,253 @@ def render_structured_cv_to_pdf(
     env = Environment(loader=FileSystemLoader(html_template_path.parent))
     template = env.get_template(html_template_path.name)
 
-    # Normalize structured_cv into the locked template schema.
-    profile_summary_raw = str(structured_cv.get("profile") or "").strip()
-    profile_summary = profile_summary_raw[:225]
+    # Detect if this is the competence template by filename
+    is_competence = "competence" in html_template_path.name.lower()
 
-    languages: List[Dict[str, str]] = []
-    for lang in structured_cv.get("languages") or []:
-      if isinstance(lang, dict):
-        name = str(lang.get("name") or "").strip()
-        level = str(lang.get("level") or "").strip()
-        if name:
-          languages.append({"name": name, "level": level})
+    # Map structured_cv to competence template placeholders
+    if is_competence:
+      # Name
+      name = structured_cv.get("name") or structured_cv.get("full_name") or ""
+      # Seniority: try to extract from profile or work_experience
+      seniority = structured_cv.get("seniority") or ""
+      if not seniority:
+        # Try to infer from work_experience
+        work_exp = structured_cv.get("work_experience") or []
+        if isinstance(work_exp, list) and work_exp:
+          years = 0
+          for job in work_exp:
+            if isinstance(job, dict):
+              from_date = str(job.get("from") or "").strip()
+              to_date = str(job.get("to") or "").strip()
+              try:
+                y1 = int(from_date[:4]) if from_date else None
+                y2 = int(to_date[:4]) if to_date else None
+                if y1 and y2:
+                  years += max(0, y2 - y1)
+              except Exception:
+                pass
+          if years:
+            seniority = f"{years}+ years"
+      # Soft skills: from structured_cv["soft_skills"] or empty
+      soft_skills = [str(s).strip() for s in (structured_cv.get("soft_skills") or []) if s][:6]
+      # Core skills and tech competencies:
+      # Use AI-based grouping for tech competencies (max 6 groups), with a simple
+      # heuristic fallback if the LLM is unavailable.
+      core_skills: List[str] = []
+      tech_competencies: Dict[str, List[str]] = {}
+      tech_competencies_flat: List[str] = []
 
-    skills = [str(s).strip() for s in structured_cv.get("skills") or [] if isinstance(s, str) and str(s).strip()]
-    skills = skills[:12]
+      # 1) Prefer pre-grouped skills if the caller already provided them.
+      if isinstance(structured_cv.get("skills_grouped"), dict):
+        for k, v in structured_cv["skills_grouped"].items():
+          group_name = str(k).strip()
+          if not group_name:
+            continue
+          values = [str(s).strip() for s in (v or []) if str(s).strip()]
+          if values:
+            tech_competencies[group_name] = values
 
-    experience: List[Dict[str, Any]] = []
-    for job in structured_cv.get("work_experience") or []:
-      if not isinstance(job, dict):
-        continue
-      title = str(job.get("title") or "").strip()
-      company = str(job.get("company") or "").strip()
-      location = str(job.get("location") or "").strip()
-      from_date = str(job.get("from") or "").strip()
-      to_date = str(job.get("to") or "").strip()
-      period_parts = [p for p in [from_date, to_date] if p]
-      period = " - ".join(period_parts)
-      if location:
-        period = f"{period} · {location}" if period else location
-      bullets = job.get("bullets") or []
-      competence_bullets = [str(b).strip()[:220] for b in bullets if isinstance(b, str) and str(b).strip()]
-      competence_bullets = competence_bullets[:4]
-      experience.append(
-        {
-          "title": title,
-          "company": company,
-          "period": period,
-          "competence_bullets": competence_bullets,
-        }
-      )
+      # 2) Otherwise, use the LLM to group skills dynamically.
+      if not tech_competencies:
+        skills = [str(s).strip() for s in (structured_cv.get("skills") or []) if s]
+        if skills:
+          try:
+            grouped = group_skills_into_categories(skills)
+          except Exception:
+            grouped = {}
+          if isinstance(grouped, dict) and grouped:
+            # Enforce max 6 groups defensively even if the LLM misbehaves.
+            for group_name, values in list(grouped.items())[:6]:
+              values_clean = [str(s).strip() for s in (values or []) if str(s).strip()]
+              if values_clean:
+                tech_competencies[str(group_name).strip()] = values_clean
 
-    education: List[Dict[str, str]] = []
-    for edu in structured_cv.get("education") or []:
-      if not isinstance(edu, dict):
-        continue
-      degree = str(edu.get("degree") or "").strip()
-      institution = str(edu.get("institution") or "").strip()
-      from_date = str(edu.get("from") or "").strip()
-      to_date = str(edu.get("to") or "").strip()
-      period_parts = [p for p in [from_date, to_date] if p]
-      period = " - ".join(period_parts)
-      education.append({"period": period, "degree": degree, "institution": institution})
+      # 3) Last-resort static fallback if everything above failed.
+      if not tech_competencies:
+        skills = [str(s).strip() for s in (structured_cv.get("skills") or []) if s]
+        for skill in skills:
+          key = "Other"
+          lower = skill.lower()
+          if any(x in lower for x in ["python", "node", "php", "java", ".net", "c#", "backend"]):
+            key = "Backend"
+          elif any(x in lower for x in ["react", "vue", "angular", "frontend", "css", "html", "js", "typescript"]):
+            key = "Frontend"
+          elif any(x in lower for x in ["devops", "docker", "kubernetes", "ci", "cd", "cloud"]):
+            key = "DevOps"
+          elif any(x in lower for x in ["sql", "database", "db", "mongo", "postgres", "mysql"]):
+            key = "Database"
+          tech_competencies.setdefault(key, []).append(skill)
 
-    projects: List[Dict[str, Any]] = []
-    for proj in structured_cv.get("projects") or []:
-      if not isinstance(proj, dict):
-        continue
-      title = str(proj.get("title") or proj.get("name") or "").strip()
-      company = str(proj.get("company") or proj.get("context") or "").strip()
-      location = str(proj.get("location") or "").strip()
-      from_date = str(proj.get("from") or "").strip()
-      to_date = str(proj.get("to") or "").strip()
-      period_parts = [p for p in [from_date, to_date] if p]
-      period = " - ".join(period_parts)
-      if location:
-        period = f"{period} · {location}" if period else location
-      bullets = proj.get("bullets") or []
-      competence_bullets = [str(b).strip()[:220] for b in bullets if isinstance(b, str) and str(b).strip()]
-      competence_bullets = competence_bullets[:4]
-      projects.append(
-        {
-          "title": title,
-          "company": company,
-          "period": period,
-          "competence_bullets": competence_bullets,
-        }
-      )
+      # Flatten for template: list of "Group: skill1, skill2"
+      for group, skills in tech_competencies.items():
+        if skills:
+          tech_competencies_flat.append(f"{group}: {', '.join(skills)}")
 
-    courses = [str(c).strip() for c in structured_cv.get("courses") or [] if isinstance(c, str) and str(c).strip()]
-
-    certifications = [
-      str(c).strip()
-      for c in structured_cv.get("certifications") or []
-      if isinstance(c, str) and str(c).strip()
-    ]
-
-    # Compute an absolute file URI for the Borek logo so WeasyPrint can always
-    # resolve it, regardless of the working directory.
-    logo_path = html_template_path.parent / "borek-logo" / "borek.png"
-    logo_src = logo_path.as_uri() if logo_path.exists() else None
-
-    context = {
-      "profile": {"summary": profile_summary},
-      "languages": languages,
-      "skills": skills,
-      "experience": experience,
-      "education": education,
-      "projects": projects,
-      "courses": courses,
-      "certifications": certifications,
-      "logo_src": logo_src,
-    }
-
-    html_out = template.render(**context)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-      HTML(string=html_out).write_pdf(str(output_path))
-      print("[PDF] HTML render completed")
-      return output_path
-    except Exception as exc:  # pragma: no cover
-      print(f"[PDF] HTML render failed, falling back to FPDF: {exc}")
+      # Core skills: top 6 unique across all tech competencies.
+      seen_core = set()
+      for group in tech_competencies.values():
+        for s in group:
+          if s not in seen_core:
+            core_skills.append(s)
+            seen_core.add(s)
+          if len(core_skills) >= 6:
+            break
+        if len(core_skills) >= 6:
+          break
+      # Languages: join name+level
+      languages = []
+      for lang in structured_cv.get("languages") or []:
+        if isinstance(lang, dict):
+          name_ = str(lang.get("name") or "").strip()
+          level_ = str(lang.get("level") or "").strip()
+          if name_:
+            languages.append(f"{name_} ({level_})" if level_ else name_)
+      # Education: join all degrees
+      education = ", ".join([
+        f"{e.get('degree', '')} {e.get('institution', '')}".strip()
+        for e in (structured_cv.get("education") or []) if isinstance(e, dict)
+      ])
+      # Trainings: from certifications/courses
+      trainings = ", ".join([
+        str(c).strip() for c in (structured_cv.get("certifications") or []) if c
+      ] + [str(c).strip() for c in (structured_cv.get("courses") or []) if c])
+      # Recommendation: use full profile/summary
+      recommendation = structured_cv.get("profile") or structured_cv.get("summary") or ""
+      # Project experience: group by title/position, flatten for template
+      project_experience_flat = []
+      for job in structured_cv.get("work_experience") or []:
+        if isinstance(job, dict):
+          title = job.get("title") or "Other"
+          period = job.get("from") or ""
+          bullets = [str(b) for b in job.get("bullets") or [] if b]
+          if bullets:
+            project_experience_flat.append(f"{title} ({period}): {'; '.join(bullets)}")
+          else:
+            project_experience_flat.append(f"{title} ({period})")
+      # Compose context for template
+      context = {
+        "name": name,
+        "seniority": seniority,
+        "core_skills": core_skills,
+        "soft_skills": soft_skills,
+        "languages": languages,
+        "education": education,
+        "trainings": trainings,
+        "recommendation": recommendation,
+        "tech_competencies_line": " | ".join(tech_competencies_flat),
+        "project_experience_line": " | ".join(project_experience_flat),
+      }
+      # Render with landscape orientation (force via CSS if needed)
+      html_out = template.render(**context)
+      output_path.parent.mkdir(parents=True, exist_ok=True)
+      try:
+        # WeasyPrint landscape workaround: use CSS @page { size: landscape; }
+        from weasyprint import CSS
+        css_landscape = CSS(string='@page { size: A4 landscape; }')
+        HTML(string=html_out).write_pdf(str(output_path), stylesheets=[css_landscape])
+        print("[PDF] HTML render completed (competence, landscape)")
+        return output_path
+      except Exception as exc:
+        print(f"[PDF] HTML render failed, falling back to FPDF: {exc}")
+    else:
+      # ...existing code for normal CV template...
+      profile_summary_raw = str(structured_cv.get("profile") or "").strip()
+      profile_summary = profile_summary_raw[:225]
+      languages: List[Dict[str, str]] = []
+      for lang in structured_cv.get("languages") or []:
+        if isinstance(lang, dict):
+          name = str(lang.get("name") or "").strip()
+          level = str(lang.get("level") or "").strip()
+          if name:
+            languages.append({"name": name, "level": level})
+      skills = [str(s).strip() for s in structured_cv.get("skills") or [] if isinstance(s, str) and str(s).strip()]
+      skills = skills[:12]
+      experience: List[Dict[str, Any]] = []
+      for job in structured_cv.get("work_experience") or []:
+        if not isinstance(job, dict):
+          continue
+        title = str(job.get("title") or "").strip()
+        company = str(job.get("company") or "").strip()
+        location = str(job.get("location") or "").strip()
+        from_date = str(job.get("from") or "").strip()
+        to_date = str(job.get("to") or "").strip()
+        period_parts = [p for p in [from_date, to_date] if p]
+        period = " - ".join(period_parts)
+        if location:
+          period = f"{period} · {location}" if period else location
+        bullets = job.get("bullets") or []
+        competence_bullets = [str(b).strip()[:220] for b in bullets if isinstance(b, str) and str(b).strip()]
+        competence_bullets = competence_bullets[:4]
+        experience.append(
+          {
+            "title": title,
+            "company": company,
+            "period": period,
+            "competence_bullets": competence_bullets,
+          }
+        )
+      education: List[Dict[str, str]] = []
+      for edu in structured_cv.get("education") or []:
+        if not isinstance(edu, dict):
+          continue
+        degree = str(edu.get("degree") or "").strip()
+        institution = str(edu.get("institution") or "").strip()
+        from_date = str(edu.get("from") or "").strip()
+        to_date = str(edu.get("to") or "").strip()
+        period_parts = [p for p in [from_date, to_date] if p]
+        period = " - ".join(period_parts)
+        education.append({"period": period, "degree": degree, "institution": institution})
+      projects: List[Dict[str, Any]] = []
+      for proj in structured_cv.get("projects") or []:
+        if not isinstance(proj, dict):
+          continue
+        title = str(proj.get("title") or proj.get("name") or "").strip()
+        company = str(proj.get("company") or proj.get("context") or "").strip()
+        location = str(proj.get("location") or "").strip()
+        from_date = str(proj.get("from") or "").strip()
+        to_date = str(proj.get("to") or "").strip()
+        period_parts = [p for p in [from_date, to_date] if p]
+        period = " - ".join(period_parts)
+        if location:
+          period = f"{period} · {location}" if period else location
+        bullets = proj.get("bullets") or []
+        competence_bullets = [str(b).strip()[:220] for b in bullets if isinstance(b, str) and str(b).strip()]
+        competence_bullets = competence_bullets[:4]
+        projects.append(
+          {
+            "title": title,
+            "company": company,
+            "period": period,
+            "competence_bullets": competence_bullets,
+          }
+        )
+      courses = [str(c).strip() for c in structured_cv.get("courses") or [] if isinstance(c, str) and str(c).strip()]
+      certifications = [
+        str(c).strip()
+        for c in structured_cv.get("certifications") or []
+        if isinstance(c, str) and str(c).strip()
+      ]
+      logo_path = html_template_path.parent / "borek-logo" / "borek.png"
+      logo_src = logo_path.as_uri() if logo_path.exists() else None
+      context = {
+        "profile": {"summary": profile_summary},
+        "languages": languages,
+        "skills": skills,
+        "experience": experience,
+        "education": education,
+        "projects": projects,
+        "courses": courses,
+        "certifications": certifications,
+        "logo_src": logo_src,
+      }
+      html_out = template.render(**context)
+      output_path.parent.mkdir(parents=True, exist_ok=True)
+      try:
+        HTML(string=html_out).write_pdf(str(output_path))
+        print("[PDF] HTML render completed")
+        return output_path
+      except Exception as exc:
+        print(f"[PDF] HTML render failed, falling back to FPDF: {exc}")
 
   print("[PDF] Using FPDF fallback layout")
   # FPDF fallback layout (Ajlla-inspired) if HTML pipeline is unavailable.

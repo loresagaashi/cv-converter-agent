@@ -246,11 +246,13 @@ export async function getStructuredCV(
   return handleResponse<StructuredCV>(res);
 }
 
+
 export async function exportEditedCV(
   id: number,
   token: string,
   structuredCV: StructuredCV,
-  sectionOrder?: string[]
+  sectionOrder?: string[],
+  type: "cv" | "competence" = "cv"
 ): Promise<Blob> {
   const res = await fetch(`${API_BASE_URL}/api/cv/${id}/structured/`, {
     method: "POST",
@@ -261,6 +263,7 @@ export async function exportEditedCV(
     body: JSON.stringify({
       structured_cv: structuredCV,
       section_order: sectionOrder,
+      type,
     }),
   });
 

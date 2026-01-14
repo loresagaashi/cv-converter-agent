@@ -21,16 +21,18 @@
         }
 
         .container {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1.2fr 1.5fr 1.3fr;
             width: 100%;
-            align-items: flex-start;
+            gap: 30px;
+            align-items: start;
+            margin-top: -70px;
         }
 
         /* Left Sidebar */
         .sidebar {
-            flex: 0 0 26%;
             background: #fff;
-            padding: 0 20px 30px 50px;
+            padding: 0 10px 10px 10px;
             position: relative;
         }
 
@@ -92,15 +94,13 @@
 
         /* Main Content - Middle Column */
         .main-content {
-            flex: 0 0 37%;
-            padding: 70px 30px 0px 30px;
+            padding: 69px 10px 5px 5px;
             position: relative;
         }
 
         /* Right Column - Project Experience */
         .right-content {
-            flex: 0 0 37%;
-            padding: 70px 50px 60px 30px;
+            padding: 69px 10px 5px 5px;
             position: relative;
         }
 
@@ -297,71 +297,40 @@
         <!-- Main Content -->
         <div class="main-content">
             <h1>OUR <span>RECOMMENDATION</span></h1>
-            <p>
-                <strong>{{ name }}</strong> is a great IT Support Specialist with a loyal mindset and structured
-                approach, skilled in diagnosing and resolving 1<span class="superscript">st</span> and 2<span
-                    class="superscript">nd</span> level support issues. He leverages his expertise in systems like
-                Active Directory and Office 365 to provide effective, methodical support and maintain strong IT
-                performance. Additionally, his level of German is fluent.
-            </p>
+            <p>{{ recommendation }}</p>
 
             <h2>TECH <span>COMPETENCIES</span></h2>
-
-            <h3>■ System & Server Administration</h3>
-            <p style="margin-left: 15px;">
-                Active Directory, Office 365 Administration, User Account Management, Basic Server Operations
-            </p>
-
-            <h3>■ Hardware & Software Support</h3>
-            <p style="margin-left: 15px;">
-                Windows, macOS, iOS, Peripheral Devices
-            </p>
-
-            <h3>■ Networking & Remote Support</h3>
-            <p style="margin-left: 15px;">
-                VPN Configuration, Wi-Fi Troubleshooting, Remote Desktop Support, Basic Network Patch Management
-            </p>
-
-            <h3>■ Web & Email Hosting</h3>
-            <p style="margin-left: 15px;">
-                Domain Setup, DNS Configuration, Email Account Management, SSL Installation
-            </p>
-
-            <h3>■ IT Support Tools</h3>
-            <p style="margin-left: 15px;">
-                Ticketing Systems, IT Inventory Management, Device Deployment and Maintenance
-            </p>
+            <ul>
+                {% for item in tech_competencies_line.split('|') %}
+                    <li style="padding-left: 22px;">
+                        {% if ':' in item %}
+                            <span style="font-weight:bold;">{{ item.split(':')[0] }}:</span><br>
+                            {{ item.split(':', 1)[1]|trim }}
+                        {% else %}
+                            {{ item|trim }}
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
         </div>
 
         <!-- Right Content - Project Experience -->
         <div class="right-content">
-            <img src="../../borek-logo/Borek Logo (top-right).png" alt="Borek Logo"
-                style="position:absolute;top:8px;right:50px;width:60px;height:60px;border-radius:50%;object-fit:cover;object-position:center 30%;z-index:2;">
+            <!-- <img src="../../borek-logo/Borek Logo (top-right).png" alt="Borek Logo"
+                style="position:absolute;top:8px;right:50px;width:60px;height:60px;border-radius:50%;object-fit:cover;object-position:center 30%;z-index:2;"> -->
             <h1>PROJECT <span>EXPERIENCE</span></h1>
-
-            <div class="project-item">
-                <div class="project-title">■ IT Support Specialist (more than 5 years)</div>
-                <ul class="sub-bullets">
-                    <li>Provided es like Active Directory and Office 365 to provide effective, methodical support and
-                        maintain strong IT performance. Additionally, his level of German is fluent.d-to-end technical
-                        support for Windows, macOS, and iOS devices, including hardware
-                        troubleshooting, software installation, and network connectivity issues.</li>
-                    <li>Active Directory and Office 365 accounts, optimizing user access and permissions. Delivered
-                        remote support, VPN configuration, and device integration, improving overall system efficiency
-                        and user satisfaction.</li>
-                </ul>
-            </div>
-
-            <div class="project-item">
-                <div class="project-title">■ Web & Email Hosting Specialist (more than 3 years)</div>
-                <ul class="sub-bullets">
-                    <li>Configured and maintained web domains, DNS settings, email accounts, and SSL certificates for
-                        multiple clients.</li>
-                    <li>Troubleshot website downtime, performance issues, and email delivery problems. Supported IT
-                        infrastructure deployment and ensured reliable hosting operations, improving uptime and client
-                        experience across multiple projects.</li>
-                </ul>
-            </div>
+            <ul>
+                {% for item in project_experience_line.split('|') %}
+                    <li style="padding-left: 22px; margin-bottom: 12px;">
+                        {% if ':' in item %}
+                            <span style="font-weight:bold;">{{ item.split(':')[0] }}:</span><br>
+                            {{ item.split(':', 1)[1]|trim }}
+                        {% else %}
+                            {{ item|trim }}
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
         </div>
     </div>
 

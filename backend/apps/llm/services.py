@@ -208,6 +208,112 @@ _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
 }
 
 
+def _build_skill_grouping_prompt(skills: List[str]) -> str:
+    """
+    Prompt to group a flat skills list into up to 6 human-readable categories.
+
+    The model should not invent new skills; it should only reorganize and label
+    the input list.
+    """
+    skills_str = ", ".join(sorted(set(s.strip() for s in skills if s.strip())))
+    return f"""
+You are an AI assistant that groups technical skills into high-level competence areas.
+
+TASK:
+- Take the provided flat list of skills and group them into at most 6 meaningful categories.
+- Each category name should be short and human-readable (e.g. "Backend Development", "Frontend & UI", "Cloud & DevOps").
+- Assign each input skill to exactly one category that best fits it.
+- Do not invent or add skills that are not in the input list.
+- Merge near-duplicates (e.g. "React" and "React.js") under the same category.
+
+OUTPUT FORMAT (JSON ONLY, NO MARKDOWN, NO EXTRA TEXT):
+{{
+  "groups": [
+    {{
+      "name": "Category name 1",
+      "skills": ["skill from input 1", "skill from input 2"]
+    }},
+    {{
+      "name": "Category name 2",
+      "skills": ["skill from input 3"]
+    }}
+  ]
+}}
+
+RULES:
+- The top-level JSON object MUST contain exactly one key: "groups".
+- "groups" MUST be a list with at most 6 items.
+- Each "skills" list MUST contain only skills from the input list (no made up skills).
+- Return exactly ONE JSON object and nothing else.
+
+INPUT SKILLS:
+{skills_str}
+""".strip()
+
+
+def group_skills_into_categories(skills: List[str]) -> Dict[str, List[str]]:
+    """
+    Use the LLM to group a flat list of skills into at most 6 named categories.
+
+    Returns a mapping: {category_name: [skill, ...], ...}
+    On any error, returns an empty dict.
+    """
+    # Normalize and deduplicate early.
+    clean_skills = [s.strip() for s in skills if isinstance(s, str) and s.strip()]
+    seen = set()
+    unique_skills: List[str] = []
+    for s in clean_skills:
+        key = s.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_skills.append(s)
+
+    if not unique_skills:
+        return {}
+
+    prompt = _build_skill_grouping_prompt(unique_skills)
+    try:
+        raw = _ollama(prompt)
+    except Exception:
+        return {}
+
+    data = _extract_first_json_object(raw)
+    if not isinstance(data, dict):
+        return {}
+
+    groups_raw = data.get("groups") or []
+    if not isinstance(groups_raw, list):
+        return {}
+
+    grouped: Dict[str, List[str]] = {}
+    # Enforce max 6 groups defensively.
+    for group in groups_raw[:6]:
+        if not isinstance(group, dict):
+            continue
+        name = str(group.get("name") or "").strip()
+        if not name:
+            continue
+        skills_list = group.get("skills") or []
+        if not isinstance(skills_list, list):
+            continue
+        final_skills: List[str] = []
+        for s in skills_list:
+            if not isinstance(s, str):
+                continue
+            s_clean = s.strip()
+            if not s_clean:
+                continue
+            # Only keep skills that were in the original list (case-insensitive).
+            if s_clean.lower() not in seen:
+                continue
+            final_skills.append(s_clean)
+        if final_skills:
+            grouped[name] = final_skills
+
+    return grouped
+
+
 def _build_structured_cv_prompt(cv_text: str) -> str:
     """
     Prompt for generating a normalized CV JSON that will be used to render a
@@ -308,10 +414,19 @@ def _simple_structured_cv_from_text(cv_text: str) -> Dict[str, Any]:
         seen.add(key)
         skills.append(t)
 
+    # Try to group skills even in fallback mode (if LLM is available).
+    skills_grouped: Dict[str, List[str]] = {}
+    if skills:
+        try:
+            skills_grouped = group_skills_into_categories(skills)
+        except Exception:
+            skills_grouped = {}
+
     return {
         "profile": profile,
         "languages": [],  # heuristics omitted for fallback
         "skills": skills,
+        "skills_grouped": skills_grouped,
         "work_experience": [],
         "education": [],
         "projects": [],
@@ -333,6 +448,7 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "profile": "",
             "languages": [],
             "skills": [],
+            "skills_grouped": {},
             "work_experience": [],
             "education": [],
             "projects": [],
@@ -356,6 +472,7 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "profile": "",
             "languages": [],
             "skills": [],
+            "skills_grouped": {},
             "work_experience": [],
             "education": [],
             "projects": [],
@@ -400,10 +517,22 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
     if not profile and not normalized_skills:
         return _simple_structured_cv_from_text(cv_text)
 
+    # Group skills into categories using AI (for competence PDF rendering).
+    # This is done here so the groups are available when rendering competence PDF,
+    # avoiding a second LLM call.
+    skills_grouped: Dict[str, List[str]] = {}
+    if normalized_skills:
+        try:
+            skills_grouped = group_skills_into_categories(normalized_skills)
+        except Exception:
+            # If grouping fails, leave it empty; pdf_renderer will handle fallback.
+            skills_grouped = {}
+
     return {
         "profile": profile,
         "languages": languages,
         "skills": normalized_skills,
+        "skills_grouped": skills_grouped,  # Pre-grouped for competence PDF
         "work_experience": work_experience,
         "education": education,
         "projects": projects,
