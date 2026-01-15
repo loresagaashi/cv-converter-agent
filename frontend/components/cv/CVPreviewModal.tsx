@@ -314,12 +314,27 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
                   }}
                 >
                   {editingSection === "profile" ? (
-                    <textarea
-                      value={structuredCV.profile as string}
-                      onChange={(e) => updateSection("profile", e.target.value)}
-                      className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      rows={3}
-                    />
+                    <div className="space-y-1">
+                      <textarea
+                        value={structuredCV.profile as string}
+                        onChange={(e) => updateSection("profile", e.target.value)}
+                        maxLength={550}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        rows={5}
+                      />
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400">
+                          Max 550 characters for competence summary export
+                        </span>
+                        <span className={`font-medium ${
+                          (structuredCV.profile as string || "").length > 500 
+                            ? "text-amber-400" 
+                            : "text-slate-400"
+                        }`}>
+                          {(structuredCV.profile as string || "").length}/550
+                        </span>
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-sm text-slate-200">{structuredCV.profile}</p>
                   )}
@@ -1187,7 +1202,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
             }
             className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
           >
-            {exporting ? "Exporting..." : "Export to PDF"}
+            {exporting ? "Exporting..." : "Generate PDF"}
           </button>
           <button
             onClick={() => handleExport("competence")}
@@ -1198,7 +1213,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
             }
             className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {exporting ? "Exporting..." : "Export as Competence Letter"}
+            {exporting ? "Exporting..." : "Generate Competence Letter"}
           </button>
         </div>
       </div>

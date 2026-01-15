@@ -1,5 +1,9 @@
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import textwrap
+from django.conf import settings
 
 from fpdf import FPDF
 from apps.llm.services import group_skills_into_categories
@@ -29,6 +33,64 @@ DEFAULT_SECTION_ORDER: List[str] = [
 # Keep left/right column defaults for the HTML template while allowing custom order.
 LEFT_COLUMN_KEYS = {"profile", "languages", "skills"}
 RIGHT_COLUMN_KEYS = {"work_experience", "certifications", "education", "projects", "courses"}
+
+
+def _parse_date(date_str: str) -> Optional[date]:
+  if not isinstance(date_str, str) or not date_str.strip():
+    return None
+  raw = date_str.strip()
+  # Try full ISO first
+  for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m", "%Y/%m"):
+    try:
+      return datetime.strptime(raw, fmt).date()
+    except Exception:
+      pass
+  # Fallback: year only
+  try:
+    year = int(raw[:4])
+    month = int(raw[5:7]) if len(raw) >= 7 and raw[4] in {"-", "/"} else 1
+    return date(year, max(1, min(month, 12)), 1)
+  except Exception:
+    return None
+
+
+def _calculate_seniority_label(work_experience: Any) -> str:
+  if not isinstance(work_experience, list) or not work_experience:
+    return ""
+  total_months = 0
+  today = date.today()
+  for job in work_experience:
+    if not isinstance(job, dict):
+      continue
+    start = _parse_date(job.get("from") or "")
+    end = _parse_date(job.get("to") or "") or today
+    if start and end and end >= start:
+      months = (end.year - start.year) * 12 + (end.month - start.month)
+      if months < 0:
+        months = 0
+      total_months += months
+  if total_months <= 0:
+    return ""
+  if total_months < 3:
+    return "Intern"
+  if total_months < 24:
+    return "Junior"
+  if total_months < 60:
+    return "Mid-level"
+  return "Senior"
+
+
+def _wrap_recommendation(text: str) -> str:
+  clean = (text or "").strip()
+  if not clean:
+    return ""
+  # Initial wrap to a reasonable width.
+  lines = textwrap.wrap(clean, width=65)
+  # If too few lines, wrap tighter to get 5-6 lines when possible.
+  if len(lines) < 5 and len(clean) > 0:
+    target_width = max(30, min(75, int(len(clean) / max(1, 5))))
+    lines = textwrap.wrap(clean, width=target_width)
+  return "<br>".join(lines[:6])
 
 def _normalize_section_order(raw_order: Optional[List[Any]]) -> List[str]:
   """
@@ -151,25 +213,11 @@ def render_structured_cv_to_pdf(
       # Seniority: try to extract from profile or work_experience
       seniority = structured_cv.get("seniority") or ""
       if not seniority:
-        # Try to infer from work_experience
+        # Try to infer from work_experience with month-accurate buckets
         work_exp = structured_cv.get("work_experience") or []
-        if isinstance(work_exp, list) and work_exp:
-          years = 0
-          for job in work_exp:
-            if isinstance(job, dict):
-              from_date = str(job.get("from") or "").strip()
-              to_date = str(job.get("to") or "").strip()
-              try:
-                y1 = int(from_date[:4]) if from_date else None
-                y2 = int(to_date[:4]) if to_date else None
-                if y1 and y2:
-                  years += max(0, y2 - y1)
-              except Exception:
-                pass
-          if years:
-            seniority = f"{years}+ years"
-      # Soft skills: from structured_cv["soft_skills"] or empty
-      soft_skills = [str(s).strip() for s in (structured_cv.get("soft_skills") or []) if s][:6]
+        seniority = _calculate_seniority_label(work_exp)
+      # Soft skills: from structured_cv["soft_skills"] or empty, limited to max 5
+      soft_skills = [str(s).strip() for s in (structured_cv.get("soft_skills") or []) if s][:5]
       # Core skills and tech competencies:
       # Use AI-based grouping for tech competencies (max 6 groups), with a simple
       # heuristic fallback if the LLM is unavailable.
@@ -187,54 +235,50 @@ def render_structured_cv_to_pdf(
           if values:
             tech_competencies[group_name] = values
 
-      # 2) Otherwise, use the LLM to group skills dynamically.
-      if not tech_competencies:
-        skills = [str(s).strip() for s in (structured_cv.get("skills") or []) if s]
-        if skills:
-          try:
-            grouped = group_skills_into_categories(skills)
-          except Exception:
-            grouped = {}
-          if isinstance(grouped, dict) and grouped:
-            # Enforce max 6 groups defensively even if the LLM misbehaves.
-            for group_name, values in list(grouped.items())[:6]:
-              values_clean = [str(s).strip() for s in (values or []) if str(s).strip()]
-              if values_clean:
-                tech_competencies[str(group_name).strip()] = values_clean
-
-      # 3) Last-resort static fallback if everything above failed.
+      # 2) Use static keyword-based grouping (fast, no AI calls)
       if not tech_competencies:
         skills = [str(s).strip() for s in (structured_cv.get("skills") or []) if s]
         for skill in skills:
           key = "Other"
           lower = skill.lower()
-          if any(x in lower for x in ["python", "node", "php", "java", ".net", "c#", "backend"]):
-            key = "Backend"
-          elif any(x in lower for x in ["react", "vue", "angular", "frontend", "css", "html", "js", "typescript"]):
-            key = "Frontend"
-          elif any(x in lower for x in ["devops", "docker", "kubernetes", "ci", "cd", "cloud"]):
-            key = "DevOps"
-          elif any(x in lower for x in ["sql", "database", "db", "mongo", "postgres", "mysql"]):
-            key = "Database"
+          # Backend Development
+          if any(x in lower for x in ["python", "node.js", "nodejs", "php", "java", ".net", "c#", "ruby", "go", "golang", "rust", "spring", "django", "flask", "express", "laravel", "asp.net", "backend", "api", "rest", "graphql"]):
+            key = "Backend Development"
+          # Frontend & UI
+          elif any(x in lower for x in ["react", "vue", "angular", "svelte", "frontend", "css", "html", "javascript", "typescript", "js", "ts", "jquery", "bootstrap", "tailwind", "sass", "scss", "webpack", "vite", "ui", "ux"]):
+            key = "Frontend & UI"
+          # Database & Data
+          elif any(x in lower for x in ["sql", "database", "db", "mongo", "mongodb", "postgres", "postgresql", "mysql", "oracle", "redis", "cassandra", "dynamodb", "sqlite", "nosql", "firebase", "supabase"]):
+            key = "Database & Data"
+          # DevOps & Cloud
+          elif any(x in lower for x in ["devops", "docker", "kubernetes", "k8s", "ci/cd", "ci", "cd", "cloud", "aws", "azure", "gcp", "jenkins", "gitlab", "github actions", "terraform", "ansible", "cloudinary", "heroku", "vercel", "netlify"]):
+            key = "DevOps & Cloud"
+          # Architecture & Practices
+          elif any(x in lower for x in ["architecture", "design pattern", "clean code", "solid", "mvc", "mvvm", "microservices", "serverless", "event-driven", "tdd", "bdd", "agile", "scrum", "hexagonal", "onion", "adapter"]):
+            key = "Architecture & Practices"
           tech_competencies.setdefault(key, []).append(skill)
 
-      # Flatten for template: list of "Group: skill1, skill2"
-      for group, skills in tech_competencies.items():
+      # Flatten for template: list of "Group: skill1, skill2" (max 8 items per group)
+      # Sort to put "Other" last, then limit to max 6 categories
+      sorted_groups = sorted(tech_competencies.items(), key=lambda x: (x[0] == "Other", x[0]))
+      for group, skills in sorted_groups[:6]:  # Max 6 categories
         if skills:
-          tech_competencies_flat.append(f"{group}: {', '.join(skills)}")
+          # Limit to max 8 skills per category
+          limited_skills = skills[:8]
+          tech_competencies_flat.append(f"{group}: {', '.join(limited_skills)}")
 
-      # Core skills: top 6 unique across all tech competencies.
+      # Core skills: top 5 unique across all tech competencies.
       seen_core = set()
       for group in tech_competencies.values():
         for s in group:
           if s not in seen_core:
             core_skills.append(s)
             seen_core.add(s)
-          if len(core_skills) >= 6:
+          if len(core_skills) >= 5:
             break
-        if len(core_skills) >= 6:
+        if len(core_skills) >= 5:
           break
-      # Languages: join name+level
+      # Languages: join name+level, limit to max 4
       languages = []
       for lang in structured_cv.get("languages") or []:
         if isinstance(lang, dict):
@@ -242,28 +286,56 @@ def render_structured_cv_to_pdf(
           level_ = str(lang.get("level") or "").strip()
           if name_:
             languages.append(f"{name_} ({level_})" if level_ else name_)
-      # Education: join all degrees
-      education = ", ".join([
-        f"{e.get('degree', '')} {e.get('institution', '')}".strip()
-        for e in (structured_cv.get("education") or []) if isinstance(e, dict)
-      ])
-      # Trainings: from certifications/courses
-      trainings = ", ".join([
-        str(c).strip() for c in (structured_cv.get("certifications") or []) if c
-      ] + [str(c).strip() for c in (structured_cv.get("courses") or []) if c])
-      # Recommendation: use full profile/summary
+          if len(languages) >= 4:
+            break
+      # Education: show latest 3 entries fully (no truncation)
+      education_items = []
+      education_list = structured_cv.get("education") or []
+      # Take latest 3 entries
+      for e in education_list[:3]:
+        if isinstance(e, dict):
+          degree = str(e.get('degree', '')).strip()
+          institution = str(e.get('institution', '')).strip()
+          edu_str = f"{degree} {institution}".strip()
+          if edu_str:
+            education_items.append(edu_str)
+      education = ", ".join(education_items)
+      # Trainings: show latest 3 items fully (no truncation)
+      training_items = []
+      # Combine certifications and courses
+      all_trainings = []
+      for c in (structured_cv.get("certifications") or []):
+        if c:
+          all_trainings.append(str(c).strip())
+      for c in (structured_cv.get("courses") or []):
+        if c:
+          all_trainings.append(str(c).strip())
+      # Take latest 3 entries fully
+      trainings = ", ".join(all_trainings[:3])
+      # Recommendation: use profile/summary directly (frontend enforces 700 char limit)
       recommendation = structured_cv.get("profile") or structured_cv.get("summary") or ""
-      # Project experience: group by title/position, flatten for template
+      # Project experience: include company name like in CV
       project_experience_flat = []
       for job in structured_cv.get("work_experience") or []:
         if isinstance(job, dict):
-          title = job.get("title") or "Other"
+          title = job.get("title") or "Position"
+          company = job.get("company") or ""
           period = job.get("from") or ""
+          # Format: "Title - Company (Period): bullets"
+          header = f"{title}"
+          if company:
+            header += f" - {company}"
+          if period:
+            header += f" ({period})"
           bullets = [str(b) for b in job.get("bullets") or [] if b]
           if bullets:
-            project_experience_flat.append(f"{title} ({period}): {'; '.join(bullets)}")
+            project_experience_flat.append(f"{header}: {'; '.join(bullets)}")
           else:
-            project_experience_flat.append(f"{title} ({period})")
+            project_experience_flat.append(header)
+      # Footer logo absolute path (ensure visible in PDF)
+      footer_logo_path = (Path(settings.BASE_DIR).parent / "borek-logo" / "borek.jpeg").resolve()
+      footer_logo_url = footer_logo_path.as_uri() if footer_logo_path.exists() else ""
+
       # Compose context for template
       context = {
         "name": name,
@@ -276,6 +348,7 @@ def render_structured_cv_to_pdf(
         "recommendation": recommendation,
         "tech_competencies_line": " | ".join(tech_competencies_flat),
         "project_experience_line": " | ".join(project_experience_flat),
+        "footer_logo_url": footer_logo_url,
       }
       # Render with landscape orientation (force via CSS if needed)
       html_out = template.render(**context)
@@ -292,7 +365,22 @@ def render_structured_cv_to_pdf(
     else:
       # ...existing code for normal CV template...
       profile_summary_raw = str(structured_cv.get("profile") or "").strip()
-      profile_summary = profile_summary_raw[:225]
+      # Use same limit as competence template (550 chars)
+      import re
+      sentences = re.split(r'(?<=[.!?]) +', profile_summary_raw)
+      profile_summary = ''
+      char_count = 0
+      for s in sentences:
+          if not s.strip():
+              continue
+          if char_count + len(s) > 550:
+              break
+          if profile_summary:
+              profile_summary += '\n'
+          profile_summary += s.strip()
+          char_count += len(s)
+      if not profile_summary:
+          profile_summary = profile_summary_raw[:550]
       languages: List[Dict[str, str]] = []
       for lang in structured_cv.get("languages") or []:
         if isinstance(lang, dict):

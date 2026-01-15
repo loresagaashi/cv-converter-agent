@@ -209,41 +209,41 @@ _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
 
 
 def _build_skill_grouping_prompt(skills: List[str]) -> str:
-    """
-    Prompt to group a flat skills list into up to 6 human-readable categories.
+        """
+        Prompt to group a flat skills list into up to 5 human-readable categories, each with up to 5 skills.
 
-    The model should not invent new skills; it should only reorganize and label
-    the input list.
-    """
-    skills_str = ", ".join(sorted(set(s.strip() for s in skills if s.strip())))
-    return f"""
+        The model should not invent new skills; it should only reorganize and label the input list.
+        """
+        skills_str = ", ".join(sorted(set(s.strip() for s in skills if s.strip())))
+        return f"""
 You are an AI assistant that groups technical skills into high-level competence areas.
 
 TASK:
-- Take the provided flat list of skills and group them into at most 6 meaningful categories.
+- Take the provided flat list of skills and group them into at most 5 meaningful categories.
 - Each category name should be short and human-readable (e.g. "Backend Development", "Frontend & UI", "Cloud & DevOps").
 - Assign each input skill to exactly one category that best fits it.
 - Do not invent or add skills that are not in the input list.
 - Merge near-duplicates (e.g. "React" and "React.js") under the same category.
+- Each category MUST have at most 5 skills. If there are more, keep only the most important/relevant ones.
 
 OUTPUT FORMAT (JSON ONLY, NO MARKDOWN, NO EXTRA TEXT):
 {{
-  "groups": [
-    {{
-      "name": "Category name 1",
-      "skills": ["skill from input 1", "skill from input 2"]
-    }},
-    {{
-      "name": "Category name 2",
-      "skills": ["skill from input 3"]
-    }}
-  ]
+    "groups": [
+        {{
+            "name": "Category name 1",
+            "skills": ["skill from input 1", "skill from input 2"]
+        }},
+        {{
+            "name": "Category name 2",
+            "skills": ["skill from input 3"]
+        }}
+    ]
 }}
 
 RULES:
 - The top-level JSON object MUST contain exactly one key: "groups".
-- "groups" MUST be a list with at most 6 items.
-- Each "skills" list MUST contain only skills from the input list (no made up skills).
+- "groups" MUST be a list with at most 5 items.
+- Each "skills" list MUST contain only skills from the input list (no made up skills) and have at most 5 items.
 - Return exactly ONE JSON object and nothing else.
 
 INPUT SKILLS:
@@ -253,7 +253,7 @@ INPUT SKILLS:
 
 def group_skills_into_categories(skills: List[str]) -> Dict[str, List[str]]:
     """
-    Use the LLM to group a flat list of skills into at most 6 named categories.
+    Use the LLM to group a flat list of skills into at most 5 named categories, each with at most 5 skills.
 
     Returns a mapping: {category_name: [skill, ...], ...}
     On any error, returns an empty dict.
@@ -287,8 +287,8 @@ def group_skills_into_categories(skills: List[str]) -> Dict[str, List[str]]:
         return {}
 
     grouped: Dict[str, List[str]] = {}
-    # Enforce max 6 groups defensively.
-    for group in groups_raw[:6]:
+    # Enforce max 5 groups, each with max 5 skills, defensively.
+    for group in groups_raw[:5]:
         if not isinstance(group, dict):
             continue
         name = str(group.get("name") or "").strip()
@@ -298,7 +298,7 @@ def group_skills_into_categories(skills: List[str]) -> Dict[str, List[str]]:
         if not isinstance(skills_list, list):
             continue
         final_skills: List[str] = []
-        for s in skills_list:
+        for s in skills_list[:5]:
             if not isinstance(s, str):
                 continue
             s_clean = s.strip()
@@ -414,13 +414,8 @@ def _simple_structured_cv_from_text(cv_text: str) -> Dict[str, Any]:
         seen.add(key)
         skills.append(t)
 
-    # Try to group skills even in fallback mode (if LLM is available).
+    # Static skill grouping is now handled in pdf_renderer.py (no AI call needed)
     skills_grouped: Dict[str, List[str]] = {}
-    if skills:
-        try:
-            skills_grouped = group_skills_into_categories(skills)
-        except Exception:
-            skills_grouped = {}
 
     return {
         "profile": profile,
@@ -517,22 +512,15 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
     if not profile and not normalized_skills:
         return _simple_structured_cv_from_text(cv_text)
 
-    # Group skills into categories using AI (for competence PDF rendering).
-    # This is done here so the groups are available when rendering competence PDF,
-    # avoiding a second LLM call.
+    # Static skill grouping is now handled in pdf_renderer.py (no AI call needed)
+    # This avoids extra LLM calls during preview for better performance
     skills_grouped: Dict[str, List[str]] = {}
-    if normalized_skills:
-        try:
-            skills_grouped = group_skills_into_categories(normalized_skills)
-        except Exception:
-            # If grouping fails, leave it empty; pdf_renderer will handle fallback.
-            skills_grouped = {}
 
     return {
         "profile": profile,
         "languages": languages,
         "skills": normalized_skills,
-        "skills_grouped": skills_grouped,  # Pre-grouped for competence PDF
+        "skills_grouped": skills_grouped,  # Empty; pdf_renderer handles static grouping
         "work_experience": work_experience,
         "education": education,
         "projects": projects,
