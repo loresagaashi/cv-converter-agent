@@ -72,6 +72,26 @@ export default function DashboardLayout({
           >
             My CVs
           </button>
+          <button
+            onClick={() => router.push("/dashboard/competence-summaries")}
+            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              pathname === "/dashboard/competence-summaries"
+                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+            }`}
+          >
+            Competence Summaries
+          </button>
+          <button
+            onClick={() => router.push("/dashboard/conversation-competence-summaries")}
+            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              pathname === "/dashboard/conversation-competence-summaries"
+                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+            }`}
+          >
+            Conversation Summaries
+          </button>
           {user.role === "admin" && (
             <button
               onClick={() => router.push("/dashboard/users")}
@@ -128,6 +148,8 @@ export default function DashboardLayout({
             <h1 className="text-lg font-bold text-slate-50 tracking-tight">
               {pathname === "/dashboard" && "Upload CV"}
               {pathname === "/dashboard/cvs" && "My CVs"}
+              {pathname === "/dashboard/competence-summaries" && "Competence Summaries"}
+              {pathname === "/dashboard/conversation-competence-summaries" && "Conversation Summaries"}
               {pathname === "/dashboard/users" && "User Management"}
               {pathname?.startsWith("/cv/") && "CV Details"}
             </h1>

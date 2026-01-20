@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/users/', include('apps.users.urls')),
     path('api/cv/', include('apps.cv.urls')),
     path('api/', include('apps.api.urls')),
+    path('api/interview/', include('apps.interview.urls')),
 ]
 
 if settings.DEBUG:

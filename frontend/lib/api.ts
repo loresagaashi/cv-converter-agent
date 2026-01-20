@@ -247,6 +247,160 @@ export async function getStructuredCV(
 }
 
 
+export interface CompetencePaper {
+  id: number;
+  cv_id: number;
+  paper_type: "original" | "interview_based";
+  content: string;
+  created_at: string;
+  preview?: string;
+}
+
+export interface CompetencePaperListResponse {
+  cv_id: number;
+  papers: CompetencePaper[];
+  count: number;
+}
+
+export async function getCompetencePapers(
+  cvId: number,
+  token: string
+): Promise<CompetencePaperListResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/competence-papers/${cvId}/`, {
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  return handleResponse<CompetencePaperListResponse>(res);
+}
+
+export async function getCompetencePaper(
+  paperId: number,
+  token: string
+): Promise<CompetencePaper> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/competence-paper/${paperId}/`, {
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  return handleResponse<CompetencePaper>(res);
+}
+
+export interface CompetencePaperWithCV extends CompetencePaper {
+  cv_filename: string;
+  user_email?: string;
+  user_name?: string;
+}
+
+export interface AllCompetencePapersResponse {
+  papers: CompetencePaperWithCV[];
+  count: number;
+}
+
+export async function getAllCompetencePapers(
+  token: string
+): Promise<AllCompetencePapersResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/competence-papers/`, {
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  return handleResponse<AllCompetencePapersResponse>(res);
+}
+
+export async function deleteCompetencePaper(
+  paperId: number,
+  token: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/competence-paper/${paperId}/delete/`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const detail = (data?.detail as string) || "Failed to delete competence paper";
+    const error = new Error(detail);
+    (error as any).status = res.status;
+    throw error;
+  }
+}
+
+// Conversation-based competence papers
+export interface ConversationCompetencePaper {
+  id: number;
+  cv_id: number;
+  session_id: number;
+  paper_type: "conversation_based";
+  content: string;
+  created_at: string;
+  preview?: string;
+  cv_filename?: string;
+  user_email?: string;
+  user_name?: string;
+}
+
+export interface ConversationCompetencePaperWithCV extends ConversationCompetencePaper {
+  cv_filename: string;
+  user_email?: string;
+  user_name?: string;
+}
+
+export interface AllConversationCompetencePapersResponse {
+  papers: ConversationCompetencePaperWithCV[];
+  count: number;
+}
+
+export async function getAllConversationCompetencePapers(
+  token: string
+): Promise<AllConversationCompetencePapersResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-competence-papers/`, {
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  return handleResponse<AllConversationCompetencePapersResponse>(res);
+}
+
+export async function getConversationCompetencePaper(
+  paperId: number,
+  token: string
+): Promise<ConversationCompetencePaper> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/`, {
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  return handleResponse<ConversationCompetencePaper>(res);
+}
+
+export async function deleteConversationCompetencePaper(
+  paperId: number,
+  token: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/delete/`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const detail = (data?.detail as string) || "Failed to delete conversation competence paper";
+    const error = new Error(detail);
+    (error as any).status = res.status;
+    throw error;
+  }
+}
+
 export async function exportEditedCV(
   id: number,
   token: string,

@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from apps.cv.models import CV
 from apps.cv.services import read_cv_file
 from apps.llm.services import generate_competence_cv
+from apps.interview.models import CompetencePaper
 
 
 class ConvertCVView(APIView):
@@ -52,14 +53,19 @@ class ConvertCVView(APIView):
             )
 
         llm_result = generate_competence_cv(cv_text)
+        competence_summary = llm_result.get("competence_summary", "")
+        skills = llm_result.get("skills", [])
+
+        # Don't store on generate - only return the data for preview
+        # Storage will happen when user exports after editing
 
         response_data = {
             "source": {
                 "cv_id": cv_instance.id if cv_instance else None,
                 "original_filename": original_filename,
             },
-            "competence_summary": llm_result.get("competence_summary", ""),
-            "skills": llm_result.get("skills", []),
+            "competence_summary": competence_summary,
+            "skills": skills,
         }
 
         return Response(response_data, status=status.HTTP_200_OK)

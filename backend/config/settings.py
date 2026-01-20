@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.llm',
     'apps.api',
+    'apps.interview',
 ]
 
 MIDDLEWARE = [
