@@ -8,15 +8,13 @@ export default function DashboardPage() {
   const { user } = useAuth();
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl md:text-2xl font-semibold text-slate-50">
-          Welcome back
-          {user?.first_name ? `, ${user.first_name}` : ""}.
+    <div className="space-y-8">
+      <div className="space-y-2.5">
+        <h1 className="text-3xl md:text-4xl font-bold text-slate-50 tracking-tight">
+          Welcome back{user?.first_name ? `, ${user.first_name}` : ""}
         </h1>
-        <p className="text-xs md:text-sm text-slate-400">
-          Upload new CVs, review past uploads, and explore extracted text and
-          competence insights.
+        <p className="text-base text-slate-400 leading-relaxed max-w-2xl">
+          Upload your CV to extract structured data, generate competence summaries, and create professional PDFs.
         </p>
       </div>
       <CVUpload />

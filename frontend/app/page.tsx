@@ -1,27 +1,33 @@
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
-      <div className="max-w-xl text-center space-y-4">
-        <h1 className="text-3xl md:text-4xl font-semibold text-slate-50">
-          CV Converter Dashboard
-        </h1>
-        <p className="text-slate-400 text-sm md:text-base">
-          Upload your CVs in PDF or DOCX, extract clean text, and generate
-          competence summaries. Sign in to get started.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12">
+      <div className="max-w-2xl text-center space-y-6">
+        <div className="space-y-3">
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-50 leading-tight">
+            Transform Your CV into
+            <span className="block text-emerald-400 mt-1">Professional Formats</span>
+          </h1>
+          <p className="text-slate-300 text-base md:text-lg leading-relaxed max-w-xl mx-auto">
+            Upload your CV, extract structured data, and generate beautifully formatted PDFs. 
+            Get AI-powered competence summaries in seconds.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
           <a
             href="/login"
-            className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 transition-colors"
+            className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 transition-all hover:shadow-xl hover:shadow-emerald-500/50"
           >
             Sign in
           </a>
           <a
             href="/signup"
-            className="inline-flex items-center justify-center rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-900/60 transition-colors"
+            className="inline-flex items-center justify-center rounded-lg border-2 border-slate-700 px-6 py-3 text-sm font-semibold text-slate-100 hover:bg-slate-900/80 hover:border-slate-600 transition-all"
           >
             Create account
           </a>
+        </div>
+        <div className="pt-6 text-xs text-slate-500">
+          Free to use • Secure • No credit card required
         </div>
       </div>
     </div>

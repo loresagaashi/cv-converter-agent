@@ -10,6 +10,8 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   originalFilename?: string;
+  cachedStructuredCV?: StructuredCV | null;
+  onStructuredCVChange?: (cv: StructuredCV | null) => void;
 }
 
 type StructuredCVPayload = Partial<StructuredCV>;
@@ -153,16 +155,28 @@ function validateStructuredCV(cv: StructuredCVPayload): string | null {
   return null;
 }
 
-export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename }: Props) {
-  const [structuredCV, setStructuredCV] = useState<StructuredCVPayload | null>(null);
+export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename, cachedStructuredCV, onStructuredCVChange }: Props) {
+  const [structuredCV, setStructuredCV] = useState<StructuredCVPayload | null>(cachedStructuredCV || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<"cv" | "competence" | null>(null);
   const [editingSection, setEditingSection] = useState<EditingSection | null>(null);
 
-  // Load structured CV when modal opens - always reload to get fresh data
+  // Update local state when cached CV changes
+  useEffect(() => {
+    if (cachedStructuredCV) {
+      setStructuredCV(cachedStructuredCV);
+    }
+  }, [cachedStructuredCV]);
+
+  // Load structured CV when modal opens - only if not cached
   const loadStructuredCV = useCallback(async () => {
     if (!isOpen || !token) return;
+    // If we have cached data, use it instead of fetching
+    if (cachedStructuredCV) {
+      setStructuredCV(cachedStructuredCV);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -197,14 +211,18 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
         }))
       };
       setStructuredCV(normalizedData);
+      // Cache the data
+      if (onStructuredCVChange) {
+        onStructuredCVChange(normalizedData as StructuredCV);
+      }
     } catch (err: any) {
       setError(err?.message || "Failed to load CV structure");
     } finally {
       setLoading(false);
     }
-  }, [cvId, token, isOpen]);
+  }, [cvId, token, isOpen, cachedStructuredCV, onStructuredCVChange]);
 
-  // Always reload when modal opens to get fresh data
+  // Load when modal opens - only if not cached
   useEffect(() => {
     if (isOpen && token) {
       loadStructuredCV();
@@ -222,7 +240,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
       return;
     }
 
-    setExporting(true);
+    setExporting(type);
     setError(null);
     try {
       // Cast to StructuredCV since we've validated all required fields exist
@@ -239,16 +257,21 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
     } catch (err: any) {
       setError(err?.message || "Failed to export CV");
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
   const updateSection = (section: EditingSection, value: any) => {
     if (!structuredCV) return;
-    setStructuredCV({
+    const updated = {
       ...structuredCV,
       [section]: value,
-    });
+    };
+    setStructuredCV(updated);
+    // Update cache when CV is edited
+    if (onStructuredCVChange) {
+      onStructuredCVChange(updated as StructuredCV);
+    }
   };
 
   const showProfile = structuredCV?.profile !== undefined && structuredCV?.profile !== null && structuredCV.profile.trim() !== "";
@@ -263,35 +286,45 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-h-[90vh] max-w-4xl rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div className="w-full max-h-[85vh] max-w-4xl rounded-xl border border-slate-800/60 bg-slate-950/95 p-5 shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-50">Preview & Edit CV</h2>
-            <p className="text-xs text-slate-400 mt-1">
-              Review and edit sections, then export as PDF with your changes.
+        <div className="mb-4 flex items-start justify-between border-b border-slate-800/60 pb-4">
+          <div className="flex-1">
+            <h2 className="text-xl font-bold text-slate-50 mb-1 tracking-tight">Preview & Edit CV</h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Review and edit your CV sections, then export as a professional PDF
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 text-xl font-bold"
+            className="ml-4 rounded-lg p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-all duration-200"
+            aria-label="Close"
           >
-            ✕
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
         {error && (
-          <div className="mb-3 rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-xs text-red-100">
-            {error}
+          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/40 px-4 py-3 text-sm text-red-200">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{error}</span>
+            </div>
           </div>
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-slate-400 text-sm">Loading CV structure...</div>
+            <div className="flex flex-col items-center justify-center py-16">
+              <div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent mb-4"></div>
+              <div className="text-slate-400 text-sm font-medium">Loading CV structure...</div>
+              <div className="mt-2 text-xs text-slate-500">Please wait while we prepare your CV</div>
             </div>
           ) : structuredCV ? (
             <>
@@ -1186,35 +1219,57 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename 
         </div>
 
         {/* Footer */}
-        <div className="mt-4 border-t border-slate-800 pt-4 flex justify-end gap-3">
+        <div className="mt-4 border-t border-slate-800/60 pt-4 flex flex-col sm:flex-row justify-end gap-2.5">
           <button
             onClick={onClose}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+            className="rounded-lg border border-slate-700/60 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:border-slate-600/80 transition-all duration-200"
           >
-            Close
+            Cancel
           </button>
-          <button
-            onClick={() => handleExport("cv")}
-            disabled={
-              exporting ||
-              !structuredCV ||
-              !!(structuredCV && validateStructuredCV(structuredCV))
-            }
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed mr-2"
-          >
-            {exporting ? "Exporting..." : "Generate PDF"}
-          </button>
-          <button
-            onClick={() => handleExport("competence")}
-            disabled={
-              exporting ||
-              !structuredCV ||
-              !!(structuredCV && validateStructuredCV(structuredCV))
-            }
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {exporting ? "Exporting..." : "Generate Competence Letter"}
-          </button>
+          <div className="flex gap-2.5">
+            <button
+              onClick={() => handleExport("competence")}
+              disabled={
+                exporting !== null ||
+                !structuredCV ||
+                !!(structuredCV && validateStructuredCV(structuredCV))
+              }
+              className="inline-flex items-center rounded-lg border border-blue-500/50 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-200 hover:bg-blue-500/20 hover:border-blue-500/70 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              {exporting === "competence" ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 inline" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Exporting...
+                </>
+              ) : (
+                "Competence Letter"
+              )}
+            </button>
+            <button
+              onClick={() => handleExport("cv")}
+              disabled={
+                exporting !== null ||
+                !structuredCV ||
+                !!(structuredCV && validateStructuredCV(structuredCV))
+              }
+              className="inline-flex items-center rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/40"
+            >
+              {exporting === "cv" ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 inline" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Exporting...
+                </>
+              ) : (
+                "Generate PDF"
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1230,15 +1285,15 @@ interface SectionProps {
 
 function Section({ title, isEditing, onEdit, children }: SectionProps) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+    <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm hover:border-slate-700/80 transition-all duration-200">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-medium text-slate-100 text-sm">{title}</h3>
+        <h3 className="font-bold text-slate-100 text-sm">{title}</h3>
         <button
           onClick={onEdit}
-          className={`text-xs px-2 py-1 rounded ${
+          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
             isEditing
-              ? "bg-emerald-500 text-slate-950 font-medium"
-              : "border border-slate-700 text-slate-300 hover:bg-slate-800"
+              ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30"
+              : "border border-slate-700/60 text-slate-300 hover:bg-slate-800/60 hover:border-slate-600/80 hover:text-slate-100"
           }`}
         >
           {isEditing ? "Done" : "Edit"}
