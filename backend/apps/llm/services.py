@@ -326,7 +326,7 @@ You are an AI CV formatter.
 TASK:
 - Read the raw CV text carefully and extract ALL information.
 - Build a profile that merges the "About me"/header statement with key personal info (name, location/country if present) in **2-3 sentences max**.
-- Extract ALL work experience entries (jobs, internships, contracts) with **2-3 sentences total** and bullets that are **1 line each**.
+- Extract ALL work experience entries (jobs, internships, contracts). If descriptions/bullets exist in the original CV, you MUST REWRITE and SUMMARIZE them into concise bullets - rephrase the content in your own words, do NOT copy sentences directly from the source. Create **2-3 sentences total** with bullets that are **1 line each**. If no descriptions exist, include only the basic info (title, company, dates, location) with an empty bullets array. NEVER create or generate descriptions when the source has none.
 - Extract ALL certifications as their own list (1 line each entry) and place them after work_experience.
 - Extract ALL education items (degrees, diplomas) with **1-2 sentences**.
 - Extract ALL projects as their own list (do NOT merge into work_experience); include project name, context (e.g., Personal Project, client), dates, and **1-line bullets**, max **2-3 sentences total** per project.
@@ -345,6 +345,7 @@ REQUIREMENTS:
 - Do NOT miss any sections: all work experience, all projects, all education, all certifications/courses, all languages.
 - Projects stay in "projects" (not work_experience). Use company/context "Personal Project" if missing.
 - Keep every major section short: profile 2-3 sentences; each work_experience and project entry max 2-3 sentences (bullets 1 line each); education/certifications/courses entries 1-2 sentences.
+- For work_experience entries: If descriptions/bullets exist in the original CV, you MUST REWRITE and SUMMARIZE them - rephrase the content in your own words, condense into concise bullets (do NOT copy sentences verbatim from the source). If a work experience entry has no description or bullets in the source text, leave the "bullets" array empty. NEVER generate, invent, or create descriptions when none are present in the source CV.
 - Only use information present in CV; do not invent entries or dates.
 - Rewrite concisely and professionally (neutral/third-person, no "I").
 - Dates must be "YYYY-MM" or "Present".
