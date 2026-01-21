@@ -10,12 +10,272 @@ import requests
 # Basic logger for runtime visibility during backend calls.
 logger = logging.getLogger(__name__)
 
-# Use Ollama Cloud host by default; can be overridden with OLLAMA_URL.
+ # Use Ollama Cloud host by default; can be overridden with OLLAMA_URL.
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "https://ollama.com/api/generate")
 # Default cloud model as requested.
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gpt-oss:120b-cloud")
 # API key must come from env; no hardcoded fallback.
 OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
+
+# OpenAI config for recruiter assistant (gpt-4o-mini).
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_RECRUITER_MODEL = os.environ.get("OPENAI_RECRUITER_MODEL", "gpt-4o-mini")
+
+
+# ---------------------------------------------------------------------------
+# Recruiter voice assistant prompt (for realtime or chat usage)
+# ---------------------------------------------------------------------------
+
+RECRUITER_ASSISTANT_SYSTEM_PROMPT = """
+You are an AI interview assistant. Your task is to help recruiters confirm a candidate’s skills and experience from a CV and/or competence letter during a voice-only conversation.
+
+Instructions
+
+Conversation Flow
+
+- Professional, friendly, natural tone.
+- Ask one question at a time, then pause to listen.
+- Use one optional follow-up only if needed.
+- Focus on confirming real familiarity, not evaluating.
+- Do not go into technical depth or invent information.
+
+Tracking Items
+
+- Once a question about an item is asked, that item is marked as done.
+- Never ask about the same item twice unless explicitly requested.
+- Once all items in a section are done, automatically move to the next section.
+
+Section Order (strict)
+
+1) Core Skills
+2) Soft Skills
+3) Languages
+4) Education
+5) Trainings & Certifications
+6) Technical Competencies
+7) Project Experience
+8) Overall / Additional Skills
+9) Recommendation
+
+Item Rules
+
+For each item:
+- Ask one natural, open confirmation question.
+- If answer clearly confirms experience, mark done and move to next item.
+- If answer clearly indicates no experience, mark done and move to next item.
+- If answer is unclear, ask one short follow-up.
+- If still unclear, note lack of understanding and move to next item.
+
+Automatic Section Completion
+
+- When all items in a section are done, set "complete_section": true and move to the next section immediately.
+- Do not repeat items from a completed section.
+
+Section Examples
+
+- Core Skills: "The CV lists Java. Has the candidate actually worked with this?"
+- Soft Skills: "The competence letter mentions ownership. Does this reflect how the candidate usually works?"
+- Languages: "The CV lists English at C1 level. Is the candidate comfortable using English professionally?"
+- Education: "Is the listed degree completed and correct?"
+- Trainings & Certifications: "Was this training completed and relevant to the candidate’s work?"
+- Technical Competencies: "Has the candidate worked with Spring Boot in practice?"
+- Project Experience: "Did the candidate actively contribute in this role?"
+- Overall / Additional Skills: "Are there any additional skills or experiences we should include?"
+- Recommendation: "Based on this profile, what type of role would you recommend for this candidate?"
+
+Introduction Example
+
+"Hello. I’m an AI interview assistant. I’ll ask a few short questions to confirm the candidate’s skills and experience based on the CV and competence letter."
+Wait 3–4 seconds for confirmation before continuing.
+
+JSON Output Only
+
+{
+  "question": "The next spoken question, or empty string if finished",
+  "section": "introduction | core_skills | soft_skills | languages | education | trainings_certifications | technical_competencies | project_experience | overall | recommendation",
+  "complete_section": true or false,
+  "done": true or false
+}
+
+Rules for JSON:
+
+- "question" must not be empty while "done" is false.
+- "complete_section" is true only when all items in that section are done.
+- "done" is true only after all sections are complete and the recommendation question is asked.
+- No repeated questions. Once a section is finished, the AI must continue to the next section automatically.
+""".strip()
+
+
+def generate_recruiter_next_question(
+    cv_text: str,
+    competence_text: str,
+    history: List[Dict[str, str]],
+    section: str,
+) -> Dict[str, Any]:
+    """
+    Use gpt-4o-mini to drive the recruiter verification flow.
+
+    The model receives:
+    - The raw CV text (sole source of truth about the CV).
+    - The competence letter text (exported summary with structured fields).
+    - A list of prior exchanges between assistant and recruiter.
+    - The current logical section (e.g., core_skills, professional_experience, training_certifications, etc.).
+
+    Returns a small JSON object:
+    - question: the next short spoken question.
+    - section: the (possibly updated) current section name.
+    - complete_section: bool indicating whether this section is done.
+    - done: bool indicating whether the entire verification flow is complete.
+    """
+    # Defensive fallback if OpenAI is not configured.
+    if not OPENAI_API_KEY:
+        return {
+            "question": "",
+            "section": section,
+            "complete_section": True,
+            "done": True,
+        }
+
+    # Normalize history into a safe, compact structure.
+    safe_history: List[Dict[str, str]] = []
+    for item in history or []:
+        role = str(item.get("role", "")).strip().lower()
+        content = str(item.get("content", "")).strip()
+        if role not in ("assistant", "recruiter") or not content:
+            continue
+        safe_history.append({"role": role, "content": content})
+
+    # The assistant is responsible for managing its own section progression,
+    # but we still pass through the current section for context.
+    user_payload: Dict[str, Any] = {
+        "cv_text": cv_text or "",
+        "competence_letter": competence_text or "",
+        "current_section": section,
+        "history": safe_history,
+    }
+
+    try:
+        resp = requests.post(
+            OPENAI_CHAT_COMPLETIONS_URL,
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENAI_RECRUITER_MODEL,
+                "temperature": 0.2,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": RECRUITER_ASSISTANT_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": json.dumps(user_payload, ensure_ascii=False),
+                    },
+                ],
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        # Fail gracefully – end the flow rather than erroring on the client.
+        return {
+            "question": "",
+            "section": section,
+            "complete_section": True,
+            "done": True,
+        }
+
+    try:
+        content_raw = data["choices"][0]["message"]["content"]
+    except Exception:
+        return {
+            "question": "",
+            "section": section,
+            "complete_section": True,
+            "done": True,
+        }
+
+    try:
+        parsed = json.loads(content_raw)
+    except Exception:
+        parsed = {}
+
+    question = str(parsed.get("question") or "").strip()
+    next_section = str(parsed.get("section") or section).strip()
+    complete_section = bool(parsed.get("complete_section"))
+    done = bool(parsed.get("done"))
+
+    # Server-side safety guardrails:
+    # - Enforce strict section order progression.
+    # - Never allow the flow to be marked done unless we're in the final "recommendation" section.
+    # - Never treat an empty question as a normal intermediate step if more sections remain.
+
+    section_order = [
+        "introduction",
+        "core_skills",
+        "soft_skills",
+        "languages",
+        "education",
+        "trainings_certifications",
+        "technical_competencies",
+        "project_experience",
+        "overall",
+        "recommendation",
+    ]
+
+    if section not in section_order:
+        section = "core_skills"
+
+    # If the model says the current section is complete, always advance
+    # to the next section in our fixed order.
+    if complete_section:
+        try:
+            idx = section_order.index(section)
+        except ValueError:
+            idx = 0
+        if idx < len(section_order) - 1:
+            next_section = section_order[idx + 1]
+        else:
+            next_section = "recommendation"
+
+    # Do not allow "done" to be true outside the final recommendation section.
+    if next_section != "recommendation":
+        done = False
+
+    # If the model failed to provide a question but we are not truly done yet,
+    # synthesize a simple, section-specific question so the flow can continue.
+    if not question and not done:
+        fallback_by_section = {
+            "core_skills": "Let’s talk about the candidate’s core skills. Which core skill from the competence paper would you like to confirm next?",
+            "soft_skills": "Now let’s move to soft skills. Which soft skills from the competence paper should we confirm for this candidate?",
+            "languages": "Let’s talk about languages. Which languages from the competence paper should we confirm for this candidate?",
+            "education": "Now let’s move to education. Which degree or education entry from the competence paper should we confirm?",
+            "trainings_certifications": "Let’s cover trainings and certifications. Which training or certification from the competence paper should we confirm?",
+            "technical_competencies": "Now let’s move to technical competencies. Which tools or technologies from the competence paper should we confirm next?",
+            "project_experience": "Let’s discuss project experience. Which project or role from the competence paper should we confirm now?",
+            "overall": "Before we move to the recommendation, is there anything important about this candidate we haven’t covered yet?",
+            "recommendation": "Based on everything we discussed, what type of role would you recommend for this candidate?",
+        }
+
+        question = fallback_by_section.get(next_section) or fallback_by_section.get(section, "")
+
+        if question:
+            # We keep complete_section/done as they were, but since done is False here,
+            # this will produce one more turn in the current or next section.
+            pass
+        else:
+            # No sensible fallback; terminate gracefully.
+            complete_section = True
+            done = True
+
+    return {
+        "question": question,
+        "section": next_section or section,
+        "complete_section": complete_section,
+        "done": done,
+    }
 
 
 def _ollama(prompt: str, *, model: str = OLLAMA_MODEL) -> str:

@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getAllConversationCompetencePapers, getConversationCompetencePaper, deleteConversationCompetencePaper, type ConversationCompetencePaperWithCV } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { RecruiterVoiceAssistant } from "@/components/ai/RecruiterVoiceAssistant";
 
 export default function ConversationCompetenceSummariesPage() {
   const { token, user } = useAuth();
@@ -17,6 +18,7 @@ export default function ConversationCompetenceSummariesPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [paperToDelete, setPaperToDelete] = useState<ConversationCompetencePaperWithCV | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -226,6 +228,26 @@ export default function ConversationCompetenceSummariesPage() {
                 View CV
               </button>
               <button
+                onClick={() => setVoiceOpen(true)}
+                className="rounded-lg border border-emerald-500/70 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/25 hover:border-emerald-400 transition-all duration-200 flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M19 10v2a7 7 0 01-14 0v-2M12 17v4m0 0H9m3 0h3"
+                  />
+                </svg>
+                Talk to AI
+              </button>
+              <button
                 onClick={() => setViewModalOpen(false)}
                 className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-500/40"
               >
@@ -269,6 +291,16 @@ export default function ConversationCompetenceSummariesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedPaper && (
+        <RecruiterVoiceAssistant
+          isOpen={voiceOpen}
+          onClose={() => setVoiceOpen(false)}
+          cvId={selectedPaper.cv_id}
+          paperId={selectedPaper.id}
+          cvFilename={selectedPaper.cv_filename}
+        />
       )}
     </div>
   );

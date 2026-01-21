@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getAllCompetencePapers, getCompetencePaper, deleteCompetencePaper, type CompetencePaperWithCV } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { RecruiterVoiceAssistant } from "@/components/ai/RecruiterVoiceAssistant";
 
 export default function CompetenceSummariesPage() {
   const { token, user } = useAuth();
@@ -17,6 +18,7 @@ export default function CompetenceSummariesPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [paperToDelete, setPaperToDelete] = useState<CompetencePaperWithCV | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -225,22 +227,52 @@ export default function CompetenceSummariesPage() {
                 </pre>
               </div>
             </div>
-            <div className="border-t border-slate-800 p-4 flex justify-end">
+            <div className="border-t border-slate-800 p-4 flex justify-end gap-3">
               <button
                 onClick={() => {
                   setViewModalOpen(false);
                   router.push(`/cv/${selectedPaper.cv_id}`);
                 }}
-                className="inline-flex items-center rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-500/80 transition-all duration-200"
+                className="inline-flex items-center rounded-lg border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 hover:border-slate-500 transition-all duration-200"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 View CV
               </button>
+              <button
+                onClick={() => setVoiceOpen(true)}
+                className="inline-flex items-center rounded-lg border border-emerald-500/70 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/25 hover:border-emerald-400 transition-all duration-200"
+              >
+                <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.8}
+                    d="M19 10v2a7 7 0 01-14 0v-2M12 17v4m0 0H9m3 0h3"
+                  />
+                </svg>
+                Talk to AI
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {selectedPaper && (
+        <RecruiterVoiceAssistant
+          isOpen={voiceOpen}
+          onClose={() => setVoiceOpen(false)}
+          cvId={selectedPaper.cv_id}
+          paperId={selectedPaper.id}
+          cvFilename={selectedPaper.cv_filename}
+        />
       )}
 
       {/* Delete Confirmation Modal */}

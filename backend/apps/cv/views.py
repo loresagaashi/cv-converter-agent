@@ -17,7 +17,7 @@ from .pdf_renderer import render_structured_cv_to_pdf, _calculate_seniority_labe
 from .serializers import CVSerializer
 from .services import read_cv_file
 from apps.llm.services import generate_structured_cv
-from apps.interview.models import CompetencePaper
+from apps.interview.models import CompetencePaper, ConversationSession
 
 
 logger = logging.getLogger(__name__)
@@ -431,9 +431,16 @@ class StructuredCVView(APIView):
             
             if full_content.strip():
                 # Create new competence paper (store exactly what was exported - always original)
-                CompetencePaper.objects.create(
+                competence_paper = CompetencePaper.objects.create(
                     cv=cv_instance,
                     content=full_content,
+                )
+                # Automatically create a pending conversation session for this competence paper
+                # so a voice agent can be started for every generated summary.
+                ConversationSession.objects.create(
+                    cv=cv_instance,
+                    original_competence_paper=competence_paper,
+                    status="pending",
                 )
 
         with open(pdf_path, "rb") as f:

@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/cv/', include('apps.cv.urls')),
     path('api/', include('apps.api.urls')),
     path('api/interview/', include('apps.interview.urls')),
+    path('api/llm/', include('apps.llm.urls')),
 ]
 
 if settings.DEBUG:
