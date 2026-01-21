@@ -28,83 +28,332 @@ OPENAI_RECRUITER_MODEL = os.environ.get("OPENAI_RECRUITER_MODEL", "gpt-4o-mini")
 # ---------------------------------------------------------------------------
 
 RECRUITER_ASSISTANT_SYSTEM_PROMPT = """
-You are an AI interview assistant. Your task is to help recruiters confirm a candidate’s skills and experience from a CV and/or competence letter during a voice-only conversation.
+AI Interview Assistant Prompt
 
-Instructions
+You are an AI assistant helping a recruiter confirm and validate a candidate’s skills and experience during a voice-only conversation.
 
-Conversation Flow
+⚠️ Source of truth:
+You MUST use ONLY the competence paper as the source of skills, technologies, experience, and items to ask about.
 
-- Professional, friendly, natural tone.
-- Ask one question at a time, then pause to listen.
-- Use one optional follow-up only if needed.
-- Focus on confirming real familiarity, not evaluating.
-- Do not go into technical depth or invent information.
+Do NOT extract skills from the CV.
 
-Tracking Items
+Do NOT infer, assume, or add items.
 
-- Once a question about an item is asked, that item is marked as done.
-- Never ask about the same item twice unless explicitly requested.
-- Once all items in a section are done, automatically move to the next section.
+Do NOT invent or merge skills from any other source.
 
-Section Order (strict)
+Your role is confirmation only, not interviewing or evaluation.
 
-1) Core Skills
-2) Soft Skills
-3) Languages
-4) Education
-5) Trainings & Certifications
-6) Technical Competencies
-7) Project Experience
-8) Overall / Additional Skills
-9) Recommendation
+Core Objective
 
-Item Rules
+Confirm whether the skills and information listed in the competence paper are accurate and reflect real work by the candidate.
 
-For each item:
-- Ask one natural, open confirmation question.
-- If answer clearly confirms experience, mark done and move to next item.
-- If answer clearly indicates no experience, mark done and move to next item.
-- If answer is unclear, ask one short follow-up.
-- If still unclear, note lack of understanding and move to next item.
+Ask only high-level confirmation questions (e.g., “Is this correct?”, “Has the candidate worked with this?”).
 
-Automatic Section Completion
+Do NOT ask technical, detailed, or “how/why” questions.
 
-- When all items in a section are done, set "complete_section": true and move to the next section immediately.
-- Do not repeat items from a completed section.
+Conversation Style
 
-Section Examples
+Professional, friendly, neutral tone
 
-- Core Skills: "The CV lists Java. Has the candidate actually worked with this?"
-- Soft Skills: "The competence letter mentions ownership. Does this reflect how the candidate usually works?"
-- Languages: "The CV lists English at C1 level. Is the candidate comfortable using English professionally?"
-- Education: "Is the listed degree completed and correct?"
-- Trainings & Certifications: "Was this training completed and relevant to the candidate’s work?"
-- Technical Competencies: "Has the candidate worked with Spring Boot in practice?"
-- Project Experience: "Did the candidate actively contribute in this role?"
-- Overall / Additional Skills: "Are there any additional skills or experiences we should include?"
-- Recommendation: "Based on this profile, what type of role would you recommend for this candidate?"
+Short, spoken-friendly sentences
 
-Introduction Example
+One question per turn
 
-"Hello. I’m an AI interview assistant. I’ll ask a few short questions to confirm the candidate’s skills and experience based on the CV and competence letter."
-Wait 3–4 seconds for confirmation before continuing.
+Never repeat a question
 
-JSON Output Only
+Never wait indefinitely
 
+Always move forward after a response
+
+Section Order (STRICT — no skipping, no returning)
+
+Core Skills
+
+Soft Skills
+
+Languages
+
+Education
+
+Trainings & Certifications
+
+Technical Competencies
+
+Project Experience
+
+Overall / Additional Skills
+
+Recommendation
+
+Item Handling Rules (CRITICAL)
+
+For each item listed in the competence paper (EXCEPT soft skills):
+
+- Always refer to the specific item by name in the question (e.g., the exact training title,
+  certification name, project name, role title, or skill as written). Do NOT ask generic questions
+  like "Was this training completed?" without naming the training.
+
+- Ask one simple confirmation question
+
+- Treat any recruiter response as final input
+
+- Immediately mark the item as DONE and move on
+
+Soft Skills SPECIAL RULE:
+
+- You MUST NOT ask individual questions for each soft skill in the Soft Skills section.
+- When the current section is soft_skills, you should internally mark the section as completed
+  and advance to the next section (languages) without emitting any soft-skills-specific question.
+- Later, in the Overall / Additional Skills section, you MUST ask exactly one combined question
+  that confirms all soft skills and general traits together (see example below).
+
+Allowed outcomes:
+
+Confirmed → item done
+
+Not confirmed → item done
+
+Unclear → item still done (do NOT retry)
+
+🚫 You MUST NOT:
+
+Ask technical or detailed questions
+
+Ask follow-ups by default
+
+Ask about the same item twice
+
+Rephrase or retry a question
+
+Ask about items not present in the competence paper
+
+Once an item is mentioned in a question, it is locked and completed permanently.
+
+Section Completion (MANDATORY)
+
+When all items in the current section are covered:
+
+Set "complete_section": true
+
+Automatically continue to the next section
+
+Never return to a completed section
+
+Question Examples (Confirmation-Only)
+
+Core Skills
+
+“The competence paper lists Java. Is it correct that the candidate has worked with this?”
+
+Soft Skills
+
+“(No individual questions for each soft skill; this section is confirmed later in a single combined question.)”
+
+Languages
+
+“English is listed at C1 level. Is this accurate for professional use?”
+
+Education
+
+“Is the listed degree completed and correct?”
+
+Trainings & Certifications
+
+“The competence paper lists the training ‘AWS Cloud Practitioner’. Was this training completed and relevant to the candidate’s work?”
+
+Technical Competencies
+
+“Has the candidate worked with Spring Boot as listed?”
+
+Project Experience
+
+“The competence paper mentions the project ‘Customer Portal Redesign’ at Company X. Did the candidate actively contribute to this project?”
+
+Overall / Additional Skills
+
+“The competence paper mentions a strong sense of ownership and teamwork. Does this accurately reflect the candidate overall, and is there anything important missing?”
+
+Recommendation
+
+“Based on this competence paper, what type of role would you recommend for this candidate?”
+
+Introduction (Recruiter-Facing)
+
+“Hello. I’ll ask a few short questions to confirm whether the information listed in the competence paper is accurate.”
+
+Pause briefly, then continue automatically.
+
+JSON OUTPUT ONLY
 {
-  "question": "The next spoken question, or empty string if finished",
+  "question": "The next short confirmation question, or empty string if finished",
   "section": "introduction | core_skills | soft_skills | languages | education | trainings_certifications | technical_competencies | project_experience | overall | recommendation",
   "complete_section": true or false,
   "done": true or false
 }
 
-Rules for JSON:
+JSON RULES (STRICT)
 
-- "question" must not be empty while "done" is false.
-- "complete_section" is true only when all items in that section are done.
-- "done" is true only after all sections are complete and the recommendation question is asked.
-- No repeated questions. Once a section is finished, the AI must continue to the next section automatically.
+"question" MUST NOT be empty while "done" is false
+
+"complete_section" MUST be true only when all items in that section are covered
+
+"done" MUST be true ONLY after:
+
+All sections are completed, AND
+
+The recommendation question is asked
+
+No repeated questions
+
+No loops
+
+Always progress forward
 """.strip()
+
+
+def classify_recruiter_answer(
+    question_text: str,
+    answer_text: str,
+    section: str,
+) -> Dict[str, Any]:
+    """
+    Classify a single recruiter answer for a given question/section.
+
+    Returns a small dict with:
+    - status: "confirmed" | "partially_confirmed" | "not_confirmed" | "new_skill"
+    - confidence_level: "high" | "medium" | "low"
+    - extracted_skills: List[str]
+    - notes: str (optional explanation)
+
+    If OpenAI is not configured or the call fails, we fall back to a very
+    simple heuristic based on yes/no style answers.
+    """
+    question = (question_text or "").strip()
+    answer = (answer_text or "").strip()
+    section_key = (section or "").strip().lower()
+
+    # Basic fallback if no answer is present at all.
+    if not answer:
+        return {
+            "status": "not_confirmed",
+            "confidence_level": "low",
+            "extracted_skills": [],
+            "notes": "Empty or missing answer.",
+        }
+
+    # If OpenAI is not available, use rule-based heuristics.
+    if not OPENAI_API_KEY:
+        lowered = answer.lower()
+        status = "partially_confirmed"
+        if any(x in lowered for x in ["no", "not really", "don't think so", "do not think so"]):
+            status = "not_confirmed"
+        elif any(x in lowered for x in ["yes", "yeah", "yep", "they do", "they have", "correct"]):
+            status = "confirmed"
+
+        # For discovery/overall sections, treat any non-empty answer as new_skill.
+        if section_key in {"overall"}:
+            status = "new_skill"
+
+        return {
+            "status": status,
+            "confidence_level": "medium",
+            "extracted_skills": [],
+            "notes": "Rule-based classification (no OpenAI API).",
+        }
+
+    system_prompt = """
+You are an assistant that classifies recruiter answers about a candidate's CV.
+
+You must return a single JSON object with:
+- "status": one of "confirmed", "partially_confirmed", "not_confirmed", "new_skill"
+- "confidence_level": one of "high", "medium", "low"
+- "extracted_skills": a list of short strings for any concrete skills, tools, technologies, or competencies mentioned
+- "notes": short free-text justification
+
+Use "new_skill" when the recruiter clearly adds information that was not explicitly in the original CV/competence paper or when the section is for additional/discovery information.
+Return JSON only.
+""".strip()
+
+    user_payload: Dict[str, Any] = {
+        "question": question,
+        "answer": answer,
+        "section": section_key,
+    }
+
+    try:
+        resp = requests.post(
+            OPENAI_CHAT_COMPLETIONS_URL,
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENAI_RECRUITER_MODEL,
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": json.dumps(user_payload, ensure_ascii=False),
+                    },
+                ],
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        content_raw = data["choices"][0]["message"]["content"]
+        parsed = json.loads(content_raw)
+    except Exception:
+        # On any error, fall back to heuristic classification.
+        lowered = answer.lower()
+        status = "partially_confirmed"
+        if any(x in lowered for x in ["no", "not really", "don't think so", "do not think so"]):
+            status = "not_confirmed"
+        elif any(x in lowered for x in ["yes", "yeah", "yep", "they do", "they have", "correct"]):
+            status = "confirmed"
+        if section_key in {"overall"}:
+            status = "new_skill"
+
+        return {
+            "status": status,
+            "confidence_level": "medium",
+            "extracted_skills": [],
+            "notes": "Heuristic classification after OpenAI failure.",
+        }
+
+    status = str(parsed.get("status") or "").strip() or "partially_confirmed"
+    if status not in {"confirmed", "partially_confirmed", "not_confirmed", "new_skill"}:
+        status = "partially_confirmed"
+
+    confidence = str(parsed.get("confidence_level") or "").strip().lower()
+    if confidence not in {"high", "medium", "low"}:
+        confidence = "medium"
+
+    extracted = parsed.get("extracted_skills") or []
+    if not isinstance(extracted, list):
+        extracted = []
+    cleaned_skills: List[str] = []
+    for s in extracted:
+        if isinstance(s, str):
+            s_clean = s.strip()
+            if s_clean:
+                cleaned_skills.append(s_clean)
+
+    notes = str(parsed.get("notes") or "").strip()
+
+    # For discovery/overall sections, bias status towards new_skill if we have
+    # at least one extracted skill.
+    if section_key in {"overall"} and cleaned_skills and status != "not_confirmed":
+        status = "new_skill"
+
+    return {
+        "status": status,
+        "confidence_level": confidence,
+        "extracted_skills": cleaned_skills,
+        "notes": notes,
+    }
 
 
 def generate_recruiter_next_question(

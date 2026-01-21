@@ -110,6 +110,18 @@ class ConversationSession(models.Model):
 class ConversationQuestion(models.Model):
     """Questions asked during conversation"""
     
+    SECTION_CHOICES = [
+        ("core_skills", "Core Skills"),
+        ("soft_skills", "Soft Skills"),
+        ("languages", "Languages"),
+        ("education", "Education"),
+        ("trainings_certifications", "Trainings & Certifications"),
+        ("technical_competencies", "Technical Competencies"),
+        ("project_experience", "Project Experience"),
+        ("overall", "Overall / Additional"),
+        ("recommendation", "Recommendation"),
+    ]
+
     CATEGORY_CHOICES = [
         ('work_experience', 'Work Experience'),
         ('skill', 'Skill'),
@@ -126,11 +138,16 @@ class ConversationQuestion(models.Model):
         ('validation', 'Validation'),
         ('discovery', 'Discovery'),
     ]
-    
+
     session = models.ForeignKey(
         ConversationSession,
         on_delete=models.CASCADE,
         related_name='questions',
+    )
+    section = models.CharField(
+        max_length=50,
+        choices=SECTION_CHOICES,
+        help_text='Logical section this question belongs to (e.g., core_skills, soft_skills, etc.)',
     )
     category = models.CharField(
         max_length=20,

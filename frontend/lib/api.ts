@@ -437,4 +437,127 @@ export async function exportEditedCV(
   return res.blob();
 }
 
+// ---------------------------------------------------------------------------
+// Conversation sessions (voice-based verification flow)
+// ---------------------------------------------------------------------------
+
+export interface ConversationSessionStartResponse {
+  session_id: number;
+  status: "pending" | "in_progress" | "completed";
+}
+
+export async function startConversationSession(
+  token: string,
+  cvId: number,
+  paperId: number
+): Promise<ConversationSessionStartResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-session/start/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${token}`,
+    },
+    body: JSON.stringify({ cv_id: cvId, paper_id: paperId }),
+  });
+
+  return handleResponse<ConversationSessionStartResponse>(res);
+}
+
+export interface ConversationTurnPayload {
+  session_id: number;
+  section: string;
+  phase?: "validation" | "discovery";
+  question_text: string;
+  answer_text: string;
+}
+
+export interface ConversationTurnResponse {
+  question_id: number;
+  response_id: number;
+  status: "confirmed" | "partially_confirmed" | "not_confirmed" | "new_skill";
+  confidence_level: "high" | "medium" | "low" | null;
+  extracted_skills: string[];
+}
+
+export async function createConversationTurn(
+  token: string,
+  payload: ConversationTurnPayload
+): Promise<ConversationTurnResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-session/turn/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return handleResponse<ConversationTurnResponse>(res);
+}
+
+export async function generateConversationCompetencePaper(
+  token: string,
+  sessionId: number
+): Promise<ConversationCompetencePaperWithCV> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/interview/conversation-session/${sessionId}/generate-paper/`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${token}`,
+      },
+    }
+  );
+
+  return handleResponse<ConversationCompetencePaperWithCV>(res);
+}
+
+export async function updateConversationCompetencePaper(
+  token: string,
+  paperId: number,
+  content: string
+): Promise<ConversationCompetencePaperWithCV> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/edit/`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Token ${token}`,
+      },
+      body: JSON.stringify({ content }),
+    }
+  );
+
+  return handleResponse<ConversationCompetencePaperWithCV>(res);
+}
+
+export async function downloadConversationCompetencePaperPdf(
+  token: string,
+  paperId: number
+): Promise<Blob> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/pdf/`,
+    {
+      headers: {
+        Authorization: `Token ${token}`,
+      },
+    }
+  );
+
+  if (!res.ok) {
+    let detail = "Request failed";
+    try {
+      const data = await res.json();
+      detail = (data?.detail as string) || JSON.stringify(data);
+    } catch {
+      // ignore JSON parsing errors
+    }
+    const error = new Error(detail);
+    (error as any).status = res.status;
+    throw error;
+  }
+
+  return res.blob();
+}
 

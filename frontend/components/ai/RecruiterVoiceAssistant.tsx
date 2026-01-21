@@ -2,8 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
+import { createConversationTurn, generateConversationCompetencePaper, startConversationSession } from "@/lib/api";
 
-type SectionKey = "core_skills" | "professional_experience" | "training_certifications";
+// Fallback typings for browser speech recognition APIs to satisfy TypeScript
+// in environments where lib.dom.d.ts does not declare them.
+type BrowserSpeechRecognition = any;
+
+type SectionKey =
+  | "core_skills"
+  | "soft_skills"
+  | "languages"
+  | "education"
+  | "trainings_certifications"
+  | "technical_competencies"
+  | "project_experience"
+  | "overall";
 
 interface HistoryItem {
   role: "assistant" | "recruiter";
@@ -19,6 +32,28 @@ interface RecruiterVoiceAssistantProps {
 }
 
 type StatusState = "idle" | "speaking" | "listening" | "thinking" | "finished" | "error";
+
+const SECTION_ORDER: SectionKey[] = [
+  "core_skills",
+  "soft_skills",
+  "languages",
+  "education",
+  "trainings_certifications",
+  "technical_competencies",
+  "project_experience",
+  "overall",
+];
+
+const MAX_QUESTIONS_PER_SECTION: Record<SectionKey, number> = {
+  core_skills: 5,
+  soft_skills: 2,
+  languages: 3,
+  education: 2,
+  trainings_certifications: 2,
+  technical_competencies: 5,
+  project_experience: 4,
+  overall: 3,
+};
 
 /**
  * Voice-only recruiter assistant UI.
@@ -39,17 +74,30 @@ export function RecruiterVoiceAssistant({
   const [status, setStatus] = useState<StatusState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [section, setSection] = useState<SectionKey>("core_skills");
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [isGeneratingPaper, setIsGeneratingPaper] = useState(false);
+  const [hasGeneratedPaper, setHasGeneratedPaper] = useState(false);
 
   const historyRef = useRef<HistoryItem[]>([]);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const cancelledRef = useRef(false);
+  const sectionQuestionCountRef = useRef<Record<SectionKey, number>>({
+    core_skills: 0,
+    soft_skills: 0,
+    languages: 0,
+    education: 0,
+    trainings_certifications: 0,
+    technical_competencies: 0,
+    project_experience: 0,
+    overall: 0,
+  });
 
   const getSpeechSynthesis = () => {
     if (typeof window === "undefined") return null;
     return window.speechSynthesis || null;
   };
 
-  const getSpeechRecognition = (): SpeechRecognition | null => {
+  const getSpeechRecognition = (): BrowserSpeechRecognition | null => {
     if (typeof window === "undefined") return null;
     const AnyWindow = window as any;
     const SR = AnyWindow.SpeechRecognition || AnyWindow.webkitSpeechRecognition;
@@ -93,20 +141,40 @@ export function RecruiterVoiceAssistant({
       recognition.maxAlternatives = 1;
 
       let finalTranscript = "";
+      let finished = false;
 
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        const result = event.results[0];
-        if (result && result[0]) {
-          finalTranscript = result[0].transcript.trim();
+      recognition.onresult = (event: any) => {
+        if (!event || !event.results) return;
+        for (let i = event.resultIndex || 0; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result && result.isFinal && result[0]) {
+            finalTranscript = String(result[0].transcript || "").trim();
+          }
         }
       };
 
-      recognition.onerror = () => {
-        recognition.stop();
-        reject(new Error("Speech recognition error"));
+      recognition.onerror = (event: any) => {
+        if (finished) return;
+        finished = true;
+        try {
+          recognition.stop();
+        } catch {
+          // ignore
+        }
+
+        const errType = (event && event.error) || "";
+        // Treat "no-speech", "no-match", or "aborted" as soft errors: just return whatever we have.
+        if (errType === "no-speech" || errType === "no-match" || errType === "aborted") {
+          resolve(finalTranscript);
+          return;
+        }
+
+        reject(new Error(errType || "Speech recognition error"));
       };
 
       recognition.onend = () => {
+        if (finished) return;
+        finished = true;
         resolve(finalTranscript);
       };
 
@@ -177,6 +245,14 @@ export function RecruiterVoiceAssistant({
     setStatus("thinking");
 
     try {
+      if (!token) {
+        throw new Error("Missing auth token.");
+      }
+
+      // Ensure we have a conversation session (Phase 0)
+      const startRes = await startConversationSession(token, cvId, paperId);
+      setSessionId(startRes.session_id);
+
       const namePart = cvFilename ? ` for ${cvFilename}` : "";
       await speak(
         `Hello, I am an AI recruiter assistant. I will help you verify the information in this CV${namePart}. We will go section by section, starting with core skills.`,
@@ -185,6 +261,7 @@ export function RecruiterVoiceAssistant({
       let currentSection: SectionKey = "core_skills";
       let done = false;
 
+      // Phase 1: 7 main sections driven by backend question generator
       while (!done && !cancelledRef.current) {
         setStatus("thinking");
         const { question, nextSection, completeSection, done: isDone } = await fetchNextQuestion(currentSection);
@@ -193,6 +270,10 @@ export function RecruiterVoiceAssistant({
           done = true;
           break;
         }
+
+        // Track how many questions we have asked in this section.
+        sectionQuestionCountRef.current[currentSection] =
+          (sectionQuestionCountRef.current[currentSection] || 0) + 1;
 
         historyRef.current.push({ role: "assistant", content: question });
         await speak(question);
@@ -211,14 +292,124 @@ export function RecruiterVoiceAssistant({
 
         if (answer) {
           historyRef.current.push({ role: "recruiter", content: answer });
+
+          // Store this turn in backend (Phase 1 - validation)
+          if (sessionId) {
+            try {
+              await createConversationTurn(token, {
+                session_id: sessionId,
+                section: currentSection,
+                phase: "validation",
+                question_text: question,
+                answer_text: answer,
+              });
+            } catch (err: any) {
+              // Non-fatal; continue conversation but surface error.
+              setError(err?.message || "Failed to store conversation turn.");
+            }
+          }
         }
 
-        if (completeSection) {
-          currentSection = nextSection;
-          setSection(nextSection);
+        // Apply frontend guard-rails to avoid loops in a section:
+        // if the model does not mark the section complete but we have already
+        // asked our configured maximum number of questions, force completion
+        // and move to the next section in the fixed order.
+        let effectiveCompleteSection = completeSection;
+        let effectiveNextSection = nextSection;
+        let effectiveDone = isDone;
+
+        if (
+          !completeSection &&
+          sectionQuestionCountRef.current[currentSection] >= MAX_QUESTIONS_PER_SECTION[currentSection]
+        ) {
+          effectiveCompleteSection = true;
+
+          const idx = SECTION_ORDER.indexOf(currentSection);
+          if (idx >= 0 && idx < SECTION_ORDER.length - 1) {
+            effectiveNextSection = SECTION_ORDER[idx + 1];
+          } else {
+            effectiveNextSection = currentSection;
+          }
         }
 
-        done = isDone;
+        if (effectiveCompleteSection) {
+          currentSection = effectiveNextSection;
+          setSection(effectiveNextSection);
+        }
+
+        done = effectiveDone;
+      }
+
+      // Phase 2: Additional information collection (overall)
+      if (!cancelledRef.current && !done) {
+        let additionalDone = false;
+        while (!additionalDone && !cancelledRef.current) {
+          const additionalQuestion =
+            "Do you have any additional information about the candidate from the interview that's not in the CV?";
+
+          historyRef.current.push({ role: "assistant", content: additionalQuestion });
+          await speak(additionalQuestion);
+          if (cancelledRef.current) break;
+
+          let extraAnswer = "";
+          try {
+            extraAnswer = await startListening();
+          } catch (err: any) {
+            setError(err?.message || "Voice input error.");
+          } finally {
+            stopListening();
+          }
+
+          if (cancelledRef.current) break;
+
+          extraAnswer = extraAnswer.trim();
+          if (extraAnswer) {
+            historyRef.current.push({ role: "recruiter", content: extraAnswer });
+
+            // Store discovery turn in backend
+            if (sessionId) {
+              try {
+                await createConversationTurn(token, {
+                  session_id: sessionId,
+                  section: "overall",
+                  phase: "discovery",
+                  question_text: additionalQuestion,
+                  answer_text: extraAnswer,
+                });
+              } catch (err: any) {
+                setError(err?.message || "Failed to store additional information.");
+              }
+            }
+
+            const lower = extraAnswer.toLowerCase();
+            if (
+              lower === "no" ||
+              lower === "nope" ||
+              lower.includes("nothing else") ||
+              lower.includes("that's all") ||
+              lower.includes("that is all")
+            ) {
+              additionalDone = true;
+              break;
+            }
+          } else {
+            // Empty answer, ask again once.
+            additionalDone = true;
+          }
+        }
+      }
+
+      // Phase 3: Generate competence paper
+      if (!cancelledRef.current && sessionId && !hasGeneratedPaper) {
+        try {
+          setIsGeneratingPaper(true);
+          await generateConversationCompetencePaper(token, sessionId);
+          setHasGeneratedPaper(true);
+        } catch (err: any) {
+          setError(err?.message || "Failed to generate conversation competence paper.");
+        } finally {
+          setIsGeneratingPaper(false);
+        }
       }
 
       if (!cancelledRef.current) {
@@ -238,6 +429,9 @@ export function RecruiterVoiceAssistant({
 
     if (isOpen) {
       historyRef.current = [];
+      setSessionId(null);
+      setHasGeneratedPaper(false);
+      setIsGeneratingPaper(false);
       setSection("core_skills");
       runConversation();
     } else {
@@ -280,10 +474,20 @@ export function RecruiterVoiceAssistant({
     switch (section) {
       case "core_skills":
         return "Core Skills";
-      case "professional_experience":
-        return "Professional Experience";
-      case "training_certifications":
-        return "Training & Certifications";
+      case "soft_skills":
+        return "Soft Skills";
+      case "languages":
+        return "Languages";
+      case "education":
+        return "Education";
+      case "trainings_certifications":
+        return "Trainings & Certifications";
+      case "technical_competencies":
+        return "Technical Competencies";
+      case "project_experience":
+        return "Project Experience";
+      case "overall":
+        return "Additional Information";
       default:
         return "";
     }
@@ -331,7 +535,12 @@ export function RecruiterVoiceAssistant({
               <span className="absolute -inset-1 rounded-full border border-emerald-400/40 animate-ping" />
             )}
           </div>
-          {error && <p className="text-xs text-red-300 text-center">{error}</p>}
+          {error && <p className="text-xs text-red-300 text-center px-4">{error}</p>}
+          {isGeneratingPaper && (
+            <p className="text-xs text-emerald-300 text-center px-4">
+              Generating conversation-based competence paper...
+            </p>
+          )}
         </div>
 
         <div className="flex justify-end pt-2 border-t border-slate-800">

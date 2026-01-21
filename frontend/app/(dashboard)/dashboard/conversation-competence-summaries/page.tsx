@@ -2,7 +2,14 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
-import { getAllConversationCompetencePapers, getConversationCompetencePaper, deleteConversationCompetencePaper, type ConversationCompetencePaperWithCV } from "@/lib/api";
+import {
+  getAllConversationCompetencePapers,
+  getConversationCompetencePaper,
+  deleteConversationCompetencePaper,
+  type ConversationCompetencePaperWithCV,
+  updateConversationCompetencePaper,
+  downloadConversationCompetencePaperPdf,
+} from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { RecruiterVoiceAssistant } from "@/components/ai/RecruiterVoiceAssistant";
 
@@ -19,6 +26,9 @@ export default function ConversationCompetenceSummariesPage() {
   const [paperToDelete, setPaperToDelete] = useState<ConversationCompetencePaperWithCV | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [editContent, setEditContent] = useState<string>("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -47,6 +57,7 @@ export default function ConversationCompetenceSummariesPage() {
 
   const handleViewPaper = (paper: ConversationCompetencePaperWithCV) => {
     setSelectedPaper(paper);
+    setEditContent(paper.content);
     setViewModalOpen(true);
   };
 
@@ -76,6 +87,42 @@ export default function ConversationCompetenceSummariesPage() {
   const handleDeleteCancel = () => {
     setDeleteModalOpen(false);
     setPaperToDelete(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedPaper || !token) return;
+    setSavingEdit(true);
+    try {
+      const updated = await updateConversationCompetencePaper(token, selectedPaper.id, editContent);
+      setSelectedPaper(updated);
+      setPapers((prev) =>
+        prev.map((p) => (p.id === updated.id ? { ...p, content: updated.content, preview: updated.preview } : p))
+      );
+    } catch (err: any) {
+      setError(err?.message || "Failed to save conversation competence paper.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!selectedPaper || !token) return;
+    setDownloadingPdf(true);
+    try {
+      const blob = await downloadConversationCompetencePaperPdf(token, selectedPaper.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${selectedPaper.cv_filename.replace(/\.[^/.]+$/, "")}_conversation_paper.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err?.message || "Failed to download conversation competence paper PDF.");
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   return (
@@ -216,43 +263,93 @@ export default function ConversationCompetenceSummariesPage() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto pr-2 mb-4">
-              <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
-                {selectedPaper.content}
-              </div>
+              <textarea
+                className="w-full min-h-[320px] rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+              />
             </div>
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-              <button
-                onClick={() => router.push(`/cv/${selectedPaper.cv_id}`)}
-                className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
-              >
-                View CV
-              </button>
-              <button
-                onClick={() => setVoiceOpen(true)}
-                className="rounded-lg border border-emerald-500/70 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/25 hover:border-emerald-400 transition-all duration-200 flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.8}
-                    d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.8}
-                    d="M19 10v2a7 7 0 01-14 0v-2M12 17v4m0 0H9m3 0h3"
-                  />
-                </svg>
-                Talk to AI
-              </button>
-              <button
-                onClick={() => setViewModalOpen(false)}
-                className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-500/40"
-              >
-                Close
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-800">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => router.push(`/cv/${selectedPaper.cv_id}`)}
+                  className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                >
+                  View CV
+                </button>
+                <button
+                  onClick={() => setVoiceOpen(true)}
+                  className="rounded-lg border border-emerald-500/70 bg-emerald-500/15 px-4 py-2 text-xs sm:text-sm font-semibold text-emerald-200 hover:bg-emerald-500/25 hover:border-emerald-400 transition-all duration-200 flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M19 10v2a7 7 0 01-14 0v-2M12 17v4m0 0H9m3 0h3"
+                    />
+                  </svg>
+                  Talk to AI
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf}
+                  className="rounded-lg border border-slate-600 bg-slate-800/40 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-100 hover:bg-slate-800/70 hover:border-slate-500 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  {downloadingPdf ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          d="M4 12a8 8 0 018-8"
+                          strokeWidth="4"
+                        />
+                      </svg>
+                      PDF...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.8}
+                          d="M12 4v12m0 0l-4-4m4 4l4-4M4 18h16"
+                        />
+                      </svg>
+                      Download PDF
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit}
+                  className="rounded-lg bg-emerald-500 px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-500/40 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {savingEdit ? "Saving..." : "Save Changes"}
+                </button>
+                <button
+                  onClick={() => setViewModalOpen(false)}
+                  className="rounded-lg border border-slate-700/60 px-4 py-2 text-xs sm:text-sm font-medium text-slate-300 hover:bg-slate-900/70 hover:border-slate-600 transition-all"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
