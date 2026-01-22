@@ -29,6 +29,8 @@ export default function ConversationCompetenceSummariesPage() {
   const [editContent, setEditContent] = useState<string>("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [sectionContents, setSectionContents] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!token) return;
@@ -55,9 +57,49 @@ export default function ConversationCompetenceSummariesPage() {
     );
   }, [papers, searchQuery]);
 
+  const parseContentIntoSections = (content: string): Record<string, string> => {
+    const sections: Record<string, string> = {};
+    const lines = content.split('\n');
+    let currentSection: string | null = null;
+    let currentContent: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Check if this is a section header
+      if (line === "Our Recommendation" || line === "Core Skills" || line === "Soft Skills" || 
+          line === "Languages" || line === "Education" || line === "Trainings & Certifications" ||
+          line === "Technical Competencies" || line === "Project Experience" ||
+          line === "Additional Information from Interview") {
+        // Save previous section
+        if (currentSection) {
+          sections[currentSection] = currentContent.join('\n').trim();
+        }
+        // Start new section
+        currentSection = line;
+        currentContent = [];
+        // Skip the underline line
+        if (i + 1 < lines.length && lines[i + 1].trim().match(/^-+$/)) {
+          i++;
+        }
+      } else if (currentSection) {
+        currentContent.push(lines[i]);
+      }
+    }
+    
+    // Save last section
+    if (currentSection) {
+      sections[currentSection] = currentContent.join('\n').trim();
+    }
+    
+    return sections;
+  };
+
   const handleViewPaper = (paper: ConversationCompetencePaperWithCV) => {
     setSelectedPaper(paper);
     setEditContent(paper.content);
+    const sections = parseContentIntoSections(paper.content);
+    setSectionContents(sections);
     setViewModalOpen(true);
   };
 
@@ -93,10 +135,28 @@ export default function ConversationCompetenceSummariesPage() {
     if (!selectedPaper || !token) return;
     setSavingEdit(true);
     try {
-      const updated = await updateConversationCompetencePaper(token, selectedPaper.id, editContent);
+      // Rebuild full content from sections before saving to ensure all edits are included
+      let contentToSave = editContent;
+      if (Object.keys(sectionContents).length > 0) {
+        // Rebuild from current sectionContents state to capture any unsaved edits
+        // No dashes/underlines - just section name and content
+        contentToSave = Object.entries(sectionContents)
+          .map(([name, content]) => {
+            return `${name}\n${content}`;
+          })
+          .join("\n\n");
+        // Update editContent to match
+        setEditContent(contentToSave);
+      }
+      
+      const updated = await updateConversationCompetencePaper(token, selectedPaper.id, contentToSave);
       setSelectedPaper(updated);
+      // Update editContent and sectionContents to reflect saved changes
+      setEditContent(updated.content);
+      const sections = parseContentIntoSections(updated.content);
+      setSectionContents(sections);
       setPapers((prev) =>
-        prev.map((p) => (p.id === updated.id ? { ...p, content: updated.content, preview: updated.preview } : p))
+        prev.map((p) => (p.id === updated.id ? { ...p, content: updated.content } : p))
       );
     } catch (err: any) {
       setError(err?.message || "Failed to save conversation competence paper.");
@@ -199,11 +259,11 @@ export default function ConversationCompetenceSummariesPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </button>
-              <div className="flex items-start justify-between mb-2">
-                <span className="text-xs font-semibold text-blue-400 uppercase tracking-wide">
+              <div className="flex items-start justify-between mb-3">
+                <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">
                   CONVERSATION BASED
                 </span>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-400">
                   {new Date(paper.created_at).toLocaleString(undefined, {
                     month: "numeric",
                     day: "numeric",
@@ -213,14 +273,16 @@ export default function ConversationCompetenceSummariesPage() {
                   })}
                 </span>
               </div>
-              <div className="text-xs text-slate-400 mb-2">
-                From CV: <span className="text-slate-300">{paper.cv_filename}</span>
-              </div>
-              {user?.role === "admin" && paper.user_name && (
-                <div className="text-xs text-slate-400 mb-2">
-                  User: <span className="text-slate-300">{paper.user_name}</span>
+              <div className="space-y-1.5 mb-3">
+                <div className="text-sm text-slate-300">
+                  <span className="text-slate-400 font-medium">CV:</span> {paper.cv_filename}
                 </div>
-              )}
+                {user?.role === "admin" && paper.user_name && (
+                  <div className="text-sm text-slate-300">
+                    <span className="text-slate-400 font-medium">User:</span> {paper.user_name}
+                  </div>
+                )}
+              </div>
               <p className="text-sm text-slate-400 line-clamp-3 mb-3">
                 {paper.preview || paper.content.substring(0, 150) + "..."}
               </p>
@@ -248,10 +310,20 @@ export default function ConversationCompetenceSummariesPage() {
           <div className="w-full max-w-4xl max-h-[90vh] rounded-xl border border-slate-800 bg-slate-950/95 p-6 shadow-2xl flex flex-col">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-50 mb-1">Conversation Competence Paper</h3>
-                <p className="text-sm text-slate-400">
-                  {selectedPaper.cv_filename} • {new Date(selectedPaper.created_at).toLocaleString()}
-                </p>
+                <h3 className="text-lg font-bold text-slate-50 mb-2">Conversation Competence Paper</h3>
+                <div className="space-y-1">
+                  <p className="text-sm text-slate-300">
+                    <span className="text-slate-400 font-medium">CV:</span> <span className="text-slate-200">{selectedPaper.cv_filename}</span>
+                  </p>
+                  <p className="text-sm text-slate-300">
+                    <span className="text-slate-400 font-medium">Created:</span> <span className="text-slate-200">{new Date(selectedPaper.created_at).toLocaleString()}</span>
+                  </p>
+                  {selectedPaper.user_name && (
+                    <p className="text-sm text-slate-300">
+                      <span className="text-slate-400 font-medium">User:</span> <span className="text-slate-200">{selectedPaper.user_name}</span>
+                    </p>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => setViewModalOpen(false)}
@@ -262,12 +334,68 @@ export default function ConversationCompetenceSummariesPage() {
                 </svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto pr-2 mb-4">
-              <textarea
-                className="w-full min-h-[320px] rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-              />
+            <div className="flex-1 overflow-y-auto pr-2 mb-4 space-y-4">
+              {/* Section-based editing UI */}
+              {Object.keys(sectionContents).length > 0 ? (
+                Object.entries(sectionContents).map(([sectionName, sectionContent]) => (
+                  <div
+                    key={sectionName}
+                    className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm hover:border-slate-700/80 transition-all duration-200"
+                  >
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="font-bold text-slate-100 text-sm">{sectionName}</h3>
+                      <button
+                        onClick={() => {
+                          if (editingSection === sectionName) {
+                            // Section content is already updated via onChange, just rebuild full content
+                            // No dashes/underlines - just section name and content
+                            const fullContent = Object.entries(sectionContents)
+                              .map(([name, content]) => {
+                                return `${name}\n${content}`;
+                              })
+                              .join("\n\n");
+                            setEditContent(fullContent);
+                            setEditingSection(null);
+                          } else {
+                            setEditingSection(sectionName);
+                          }
+                        }}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
+                          editingSection === sectionName
+                            ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30"
+                            : "border border-slate-700/60 text-slate-300 hover:bg-slate-800/60 hover:border-slate-600/80 hover:text-slate-100"
+                        }`}
+                      >
+                        {editingSection === sectionName ? "Done" : "Edit"}
+                      </button>
+                    </div>
+                    <div className="text-slate-200">
+                      {editingSection === sectionName ? (
+                        <textarea
+                          className="w-full min-h-[100px] rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
+                          value={sectionContents[sectionName]}
+                          onChange={(e) => {
+                            const updated = { ...sectionContents };
+                            updated[sectionName] = e.target.value;
+                            setSectionContents(updated);
+                          }}
+                        />
+                      ) : (
+                        <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans">
+                          {sectionContent || <span className="text-slate-500 italic">No content</span>}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                // Fallback to full textarea if sections can't be parsed
+                <textarea
+                  className="w-full min-h-[320px] rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                />
+              )}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-800">
               <div className="flex gap-2">

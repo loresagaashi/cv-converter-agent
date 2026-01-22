@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List
 
 from django.shortcuts import get_object_or_404
@@ -9,6 +10,8 @@ from apps.cv.models import CV
 from apps.cv.services import read_cv_file
 from apps.interview.models import CompetencePaper
 from apps.llm.services import generate_recruiter_next_question
+
+logger = logging.getLogger(__name__)
 
 
 class RecruiterAssistantQuestionView(APIView):
@@ -35,7 +38,13 @@ class RecruiterAssistantQuestionView(APIView):
         history: List[Dict[str, str]] = data.get("history") or []
         section = data.get("section") or "core_skills"
 
+        logger.info(
+            f"[RecruiterAssistantQuestionView] 📥 Request: cv_id={cv_id}, paper_id={paper_id}, "
+            f"section={section}, history_length={len(history)}"
+        )
+
         if not isinstance(cv_id, int) or not isinstance(paper_id, int):
+            logger.warning(f"[RecruiterAssistantQuestionView] ❌ Invalid request: cv_id={cv_id}, paper_id={paper_id}")
             return Response(
                 {"detail": "cv_id (int) and paper_id (int) are required."},
                 status=400,
@@ -55,6 +64,14 @@ class RecruiterAssistantQuestionView(APIView):
         )
 
         competence_text = competence_paper.content or ""
+        
+        # Log last exchange for debugging
+        if history:
+            last_exchange = history[-1]
+            logger.info(
+                f"[RecruiterAssistantQuestionView] Last exchange: role={last_exchange.get('role')}, "
+                f"content_preview='{last_exchange.get('content', '')[:50]}...'"
+            )
 
         try:
             result = generate_recruiter_next_question(
@@ -63,7 +80,13 @@ class RecruiterAssistantQuestionView(APIView):
                 history=history,
                 section=section,
             )
-        except Exception:
+            logger.info(
+                f"[RecruiterAssistantQuestionView] ✅ Generated result: section={result.get('section')}, "
+                f"done={result.get('done')}, complete_section={result.get('complete_section')}, "
+                f"question_length={len(result.get('question', ''))}"
+            )
+        except Exception as e:
+            logger.error(f"[RecruiterAssistantQuestionView] ❌ Error generating question: {str(e)}", exc_info=True)
             return Response(
                 {"detail": "Failed to generate next question. Please try again."},
                 status=500,

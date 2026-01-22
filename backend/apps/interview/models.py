@@ -118,8 +118,7 @@ class ConversationQuestion(models.Model):
         ("trainings_certifications", "Trainings & Certifications"),
         ("technical_competencies", "Technical Competencies"),
         ("project_experience", "Project Experience"),
-        ("overall", "Overall / Additional"),
-        ("recommendation", "Recommendation"),
+        ("additional_info", "Additional Information"),
     ]
 
     CATEGORY_CHOICES = [
@@ -147,6 +146,7 @@ class ConversationQuestion(models.Model):
     section = models.CharField(
         max_length=50,
         choices=SECTION_CHOICES,
+        default='core_skills',
         help_text='Logical section this question belongs to (e.g., core_skills, soft_skills, etc.)',
     )
     category = models.CharField(

@@ -1,9 +1,16 @@
+import logging
+import re
+from pathlib import Path
+
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+logger = logging.getLogger(__name__)
 
 from apps.cv.models import CV
 from apps.interview.models import (
@@ -199,7 +206,12 @@ class ConversationSessionStartView(APIView):
         cv_id = request.data.get("cv_id")
         paper_id = request.data.get("paper_id")
 
+        logger.info(
+            f"[ConversationSessionStartView] 📥 POST request: cv_id={cv_id}, paper_id={paper_id}, user={request.user.id}"
+        )
+
         if not isinstance(cv_id, int) or not isinstance(paper_id, int):
+            logger.warning(f"[ConversationSessionStartView] ❌ Invalid request data types")
             return Response(
                 {"detail": "cv_id (int) and paper_id (int) are required."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -224,11 +236,13 @@ class ConversationSessionStartView(APIView):
                 original_competence_paper=competence_paper,
                 status="in_progress",
             )
+            logger.info(f"[ConversationSessionStartView] ✅ Created new session: id={session.id}")
         else:
             if session.status != "in_progress":
                 session.status = "in_progress"
                 session.completed_at = None
                 session.save(update_fields=["status", "completed_at"])
+            logger.info(f"[ConversationSessionStartView] ✅ Using existing session: id={session.id}, status={session.status}")
 
         return Response(
             {
@@ -262,8 +276,7 @@ class ConversationTurnView(APIView):
         "trainings_certifications": "training",
         "technical_competencies": "skill",
         "project_experience": "project",
-        "overall": "discovery",
-        "recommendation": "other",
+        "additional_info": "discovery",
     }
 
     def post(self, request):
@@ -274,19 +287,34 @@ class ConversationTurnView(APIView):
         question_text = (data.get("question_text") or "").strip()
         answer_text = (data.get("answer_text") or "").strip()
 
+        logger.info(
+            f"[ConversationTurnView] 📥 POST request received: session_id={session_id}, "
+            f"section={section}, phase={phase}, question_length={len(question_text)}, answer_length={len(answer_text)}"
+        )
+
         if not isinstance(session_id, int):
+            logger.warning(f"[ConversationTurnView] ❌ Invalid session_id type: {type(session_id)}")
             return Response(
                 {"detail": "session_id (int) is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not section:
+            logger.warning(f"[ConversationTurnView] ❌ Missing section")
             return Response(
                 {"detail": "section is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        session = get_object_or_404(ConversationSession, pk=session_id)
+        try:
+            session = ConversationSession.objects.get(pk=session_id)
+            logger.info(f"[ConversationTurnView] ✅ Found session: id={session.id}, status={session.status}, cv_id={session.cv.id}")
+        except ConversationSession.DoesNotExist:
+            logger.error(f"[ConversationTurnView] ❌ Session not found: session_id={session_id}")
+            return Response(
+                {"detail": f"No ConversationSession matches the given query (id={session_id})."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         # Permission check: only owner (or staff via standard DRF auth) can write.
         if session.cv.user != request.user and not getattr(request.user, "is_staff", False):
@@ -309,11 +337,23 @@ class ConversationTurnView(APIView):
         # Topic: short identifier of what is being asked about.
         topic = question_text[:255]
 
+        # Log the incoming turn data
+        logger.info(
+            f"[ConversationTurn] 📥 Received turn: session_id={session_id}, section={section}, "
+            f"phase={phase}, question_preview='{question_text[:50]}...', answer_preview='{answer_text[:50]}...'"
+        )
+
         # Classify the answer using the LLM helper with safe fallback.
+        logger.debug(f"[ConversationTurn] Classifying answer for section={section}")
         classification = classify_recruiter_answer(
             question_text=question_text,
             answer_text=answer_text,
             section=section,
+        )
+        logger.info(
+            f"[ConversationTurn] Classification result: status={classification.get('status')}, "
+            f"confidence={classification.get('confidence_level')}, "
+            f"extracted_skills={len(classification.get('extracted_skills', []))}"
         )
 
         status_value = classification.get("status") or "partially_confirmed"
@@ -321,25 +361,52 @@ class ConversationTurnView(APIView):
         extracted_skills = classification.get("extracted_skills") or []
         notes = classification.get("notes") or ""
 
-        # Create question + response records.
-        question = ConversationQuestion.objects.create(
-            session=session,
-            section=section,
-            category=category,
-            topic=topic,
-            question_text=question_text,
-            question_order=next_order,
-            phase="discovery" if phase == "discovery" else "validation",
+        # Log before creating records
+        logger.info(
+            f"[ConversationTurn] Storing turn for session_id={session_id}, section={section}, phase={phase}, "
+            f"question_order={next_order}, status={status_value}"
+        )
+        logger.debug(
+            f"[ConversationTurn] Question: {question_text[:100]}... | Answer: {answer_text[:100]}..."
         )
 
-        response = ConversationResponse.objects.create(
-            question=question,
-            answer_text=answer_text,
-            status=status_value,
-            confidence_level=confidence_level or None,
-            extracted_skills=extracted_skills,
-            notes=notes,
-        )
+        # Create question + response records.
+        try:
+            question = ConversationQuestion.objects.create(
+                session=session,
+                section=section,
+                category=category,
+                topic=topic,
+                question_text=question_text,
+                question_order=next_order,
+                phase="discovery" if phase == "discovery" else "validation",
+            )
+            logger.info(f"[ConversationTurn] ✅ Question created: question_id={question.id}, section={question.section}")
+
+            response = ConversationResponse.objects.create(
+                question=question,
+                answer_text=answer_text,
+                status=status_value,
+                confidence_level=confidence_level or None,
+                extracted_skills=extracted_skills,
+                notes=notes,
+            )
+            logger.info(
+                f"[ConversationTurn] ✅ Response created: response_id={response.id}, "
+                f"status={response.status}, confidence={response.confidence_level}, "
+                f"extracted_skills_count={len(extracted_skills)}"
+            )
+
+            # Log total questions/responses for this session
+            total_questions = ConversationQuestion.objects.filter(session=session).count()
+            total_responses = ConversationResponse.objects.filter(question__session=session).count()
+            logger.info(
+                f"[ConversationTurn] Session {session_id} now has {total_questions} questions and {total_responses} responses"
+            )
+
+        except Exception as e:
+            logger.error(f"[ConversationTurn] ❌ Failed to create question/response: {str(e)}", exc_info=True)
+            raise
 
         return Response(
             {
@@ -376,12 +443,218 @@ class ConversationSessionGeneratePaperView(APIView):
         "technical_competencies": "Technical Competencies",
         "project_experience": "Project Experience",
     }
+    
+    def _extract_item_from_question(self, question_text: str, section: str) -> str:
+        """
+        Extract the actual skill/item name from a question.
+        Questions are typically like:
+        - "The competence paper lists Java. Is it correct that..."
+        - "Has the candidate worked with Spring Boot as listed?"
+        - "English is listed at C1 level. Is this accurate..."
+        """
+        if not question_text:
+            return ""
+        
+        # Pattern 1: "The competence paper lists X. Is it correct..."
+        match = re.search(r'lists\s+([^.]+?)(?:\.|,|\?|$)', question_text, re.IGNORECASE)
+        if match:
+            item = match.group(1).strip()
+            # Remove trailing punctuation
+            item = re.sub(r'[.,;:]+$', '', item).strip()
+            if item:
+                return item
+        
+        # Pattern 2: "Has the candidate worked with X as listed?"
+        match = re.search(r'worked with\s+([^?]+?)(?:\s+as listed|\?)', question_text, re.IGNORECASE)
+        if match:
+            item = match.group(1).strip()
+            item = re.sub(r'[.,;:]+$', '', item).strip()
+            if item:
+                return item
+        
+        # Pattern 3: "X is listed at Y level..."
+        match = re.search(r'^([A-Z][^i]+?)\s+is listed', question_text, re.IGNORECASE)
+        if match:
+            item = match.group(1).strip()
+            if item:
+                return item
+        
+        # Pattern 4: "The competence paper mentions X..."
+        match = re.search(r'mentions\s+(?:the\s+)?(?:project\s+)?["\']?([^"\'.]+?)["\']?(?:\s+at|\s+\.|$)', question_text, re.IGNORECASE)
+        if match:
+            item = match.group(1).strip()
+            item = re.sub(r'[.,;:]+$', '', item).strip()
+            if item:
+                return item
+        
+        # Pattern 5: Extract quoted strings (most reliable for full text like "Data Analyst in Python – DataCamp (30 Oct 2025)")
+        match = re.search(r'["\']([^"\']+)["\']', question_text)
+        if match:
+            item = match.group(1).strip()
+            if item:
+                return item
+        
+        return ""
+    
+    def _format_project_experience(self, project_items: list) -> list:
+        """
+        Format project experience items to match preview export format: "Title - Company (Period)"
+        If the item is already in this format, keep it. Otherwise, try to parse it.
+        """
+        formatted = []
+        for item in project_items:
+            if not item:
+                continue
+            # If already in "Title - Company (Period)" format, use as-is
+            if " - " in item and "(" in item:
+                formatted.append(item)
+            else:
+                # Try to extract and format if it's a job position
+                # The item might be like "AI Developer" or "AI Developer at BOREK SOLUTIONS GROUP"
+                # We'll keep it simple and use the extracted item
+                formatted.append(item)
+        return formatted
+    
+    def _get_footer_logo_url(self) -> str:
+        """Get the footer logo URL for the template."""
+        try:
+            footer_logo_path = (Path(settings.BASE_DIR).parent / "borek-logo" / "borek.jpeg").resolve()
+            if footer_logo_path.exists():
+                return footer_logo_path.as_uri()
+        except Exception:
+            pass
+        return ""
+    
+    def _format_education(self, education_items: list) -> str:
+        """Format education items for the template."""
+        if not education_items:
+            return "-"
+        # Join with semicolons, limit to reasonable length
+        formatted = "; ".join(education_items[:3])
+        return formatted
+    
+    def _format_tech_competencies_grouped(self, tech_competencies: list) -> str:
+        """Group technical competencies by category and format for template."""
+        if not tech_competencies:
+            return ""
+        
+        # Group competencies by category
+        tech_competencies_dict = {}
+        
+        for skill in tech_competencies:
+            if not skill or not isinstance(skill, str):
+                continue
+            
+            skill_lower = skill.lower().strip()
+            category = "Other"
+            
+            # Backend Development
+            if any(x in skill_lower for x in ["python", "node.js", "nodejs", "php", "java", ".net", "c#", "ruby", "go", "golang", "rust", "spring", "django", "flask", "express", "laravel", "asp.net", "backend", "api", "rest", "graphql"]):
+                category = "Backend Development"
+            # Frontend & UI
+            elif any(x in skill_lower for x in ["react", "vue", "angular", "svelte", "frontend", "css", "html", "javascript", "typescript", "js", "ts", "jquery", "bootstrap", "tailwind", "sass", "scss", "webpack", "vite", "ui", "ux"]):
+                category = "Frontend & UI"
+            # Database & Data
+            elif any(x in skill_lower for x in ["sql", "database", "db", "mongo", "mongodb", "postgres", "postgresql", "mysql", "oracle", "redis", "cassandra", "dynamodb", "sqlite", "nosql", "firebase", "supabase"]):
+                category = "Database & Data"
+            # DevOps & Cloud
+            elif any(x in skill_lower for x in ["devops", "docker", "kubernetes", "k8s", "ci/cd", "ci", "cd", "cloud", "aws", "azure", "gcp", "jenkins", "gitlab", "github actions", "terraform", "ansible", "cloudinary", "heroku", "vercel", "netlify"]):
+                category = "DevOps & Cloud"
+            # Architecture & Practices
+            elif any(x in skill_lower for x in ["architecture", "design pattern", "clean code", "solid", "mvc", "mvvm", "microservices", "serverless", "event-driven", "tdd", "bdd", "agile", "scrum", "hexagonal", "onion", "adapter", "layered", "clean architecture"]):
+                category = "Architecture & Practices"
+            
+            if category not in tech_competencies_dict:
+                tech_competencies_dict[category] = []
+            tech_competencies_dict[category].append(skill.strip())
+        
+        # Format as "Category: skill1, skill2|Category2: skill3, skill4"
+        # Sort to put "Other" last, limit to max 6 categories
+        sorted_groups = sorted(tech_competencies_dict.items(), key=lambda x: (x[0] == "Other", x[0]))
+        formatted_items = []
+        
+        for category, skills in sorted_groups[:6]:
+            # Limit to 8 skills per category
+            skills_list = skills[:8]
+            # Format as "Category: skill1, skill2"
+            formatted_items.append(f"{category}: {', '.join(skills_list)}")
+        
+        return "|".join(formatted_items)
+    
+    def _build_structured_data_from_conversation(
+        self, session, section_items, additional_notes, original_content
+    ):
+        """Build structured data for the template from conversation responses."""
+        # Extract name and seniority from original competence paper or CV
+        name = ""
+        seniority = ""
+        
+        # Try to extract from original content
+        if original_content:
+            name_match = re.search(r'Name:\s*([^\n]+)', original_content, re.IGNORECASE)
+            if name_match:
+                name = name_match.group(1).strip()
+            
+            seniority_match = re.search(r'Seniority:\s*([^\n]+)', original_content, re.IGNORECASE)
+            if seniority_match:
+                seniority = seniority_match.group(1).strip()
+        
+        # Fallback to CV filename if name not found
+        if not name:
+            name = session.cv.original_filename.rsplit('.', 1)[0] if session.cv else ""
+        
+        # Build recommendation from confirmed items
+        all_skill_lines = section_items.get("core_skills", []) + section_items.get("technical_competencies", [])
+        all_project_lines = section_items.get("project_experience", [])
+        rec_parts = []
+        
+        if all_skill_lines:
+            rec_parts.append(f"The candidate has confirmed core and technical skills such as: {', '.join(all_skill_lines[:5])}.")
+        if all_project_lines:
+            rec_parts.append(f"They have relevant project experience, including: {', '.join(all_project_lines[:3])}.")
+        if additional_notes:
+            rec_parts.append(f"Additional strengths and context from the interview: {', '.join(additional_notes[:5])}.")
+        
+        recommendation = " ".join(rec_parts) if rec_parts else "Based on the interview, the candidate demonstrates relevant skills and experience."
+        
+        # Limit recommendation to 550 characters
+        if len(recommendation) > 550:
+            # Try to cut at sentence boundaries
+            import re
+            sentences = re.split(r'(?<=[.!?])\s+', recommendation)
+            recommendation = ''
+            for sentence in sentences:
+                if len(recommendation + sentence) <= 550:
+                    recommendation += sentence + ' '
+                else:
+                    break
+            recommendation = recommendation.strip()
+            # If still too long, hard cut
+            if len(recommendation) > 550:
+                recommendation = recommendation[:547] + "..."
+        
+        # Format data for template
+        return {
+            "name": name,
+            "seniority": seniority or "-",
+            "core_skills": section_items.get("core_skills", [])[:5],  # Limit to 5
+            "soft_skills": section_items.get("soft_skills", [])[:5],  # Limit to 5
+            "languages": section_items.get("languages", [])[:4],  # Limit to 4
+            "education": self._format_education(section_items.get("education", [])) or "-",
+            "trainings": "; ".join(section_items.get("trainings_certifications", [])) or "-",
+            "recommendation": recommendation,
+            "tech_competencies_line": self._format_tech_competencies_grouped(section_items.get("technical_competencies", [])),
+            "project_experience_line": "|".join(self._format_project_experience(section_items.get("project_experience", []))),
+            "footer_logo_url": self._get_footer_logo_url(),
+        }
 
     def post(self, request, session_id):
+        logger.info(f"[GeneratePaper] 🚀 Starting paper generation for session_id={session_id}")
         session = get_object_or_404(ConversationSession, pk=session_id)
 
         # Permission
         if session.cv.user != request.user and not getattr(request.user, "is_staff", False):
+            logger.warning(f"[GeneratePaper] ❌ Permission denied for session {session_id}, user {request.user.id}")
             return Response(
                 {"detail": "You don't have permission to generate a paper for this session."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -392,32 +665,99 @@ class ConversationSessionGeneratePaperView(APIView):
             .select_related("response")
             .order_by("question_order")
         )
+        
+        # Log session statistics
+        total_questions = questions.count()
+        questions_with_responses = questions.filter(response__isnull=False).count()
+        logger.info(
+            f"[GeneratePaper] 📊 Session {session_id} statistics: {total_questions} total questions, "
+            f"{questions_with_responses} with responses, status={session.status}"
+        )
 
         # Aggregate by section.
         section_items = {key: [] for key in self.SECTION_LABELS.keys()}
         additional_notes = []
 
+        confirmed_count = 0
+        not_confirmed_count = 0
+        new_skill_count = 0
+        
         for q in questions:
             resp = getattr(q, "response", None)
             if resp is None:
+                logger.debug(f"[GeneratePaper] Question {q.id} has no response, skipping")
                 continue
 
             status_value = resp.status
             if status_value == "not_confirmed":
+                not_confirmed_count += 1
+                logger.debug(f"[GeneratePaper] Question {q.id} not confirmed, excluding")
                 continue
+
+            # Count confirmed items
+            if status_value == "confirmed":
+                confirmed_count += 1
+            elif status_value == "new_skill":
+                new_skill_count += 1
 
             # Determine target section.
             section_key = q.section
-            if section_key not in section_items and section_key != "overall":
+            if section_key not in section_items and section_key != "additional_info":
+                logger.debug(f"[GeneratePaper] Question {q.id} section '{section_key}' not in section_items, skipping")
                 continue
 
-            summary_line = resp.answer_text.strip() or q.question_text.strip()
-
-            if section_key in section_items:
-                section_items[section_key].append(summary_line)
+            # Priority 1: Use extracted_skills from the response (this contains the actual confirmed items)
+            extracted_skills_list = resp.extracted_skills or []
+            
+            # Priority 2: If no extracted_skills, try to extract from question/topic
+            question_text = q.question_text.strip()
+            answer_text = resp.answer_text.strip()
+            
+            items_to_store = []
+            
+            if extracted_skills_list and isinstance(extracted_skills_list, list):
+                # Use the extracted_skills from the response (these are the actual confirmed items)
+                items_to_store = [str(item).strip() for item in extracted_skills_list if item and str(item).strip()]
+                logger.debug(f"[GeneratePaper] Using extracted_skills from response: {items_to_store}")
+            
+            # If extracted_skills is empty but status is confirmed, extract from question/topic
+            if not items_to_store:
+                item_extracted = self._extract_item_from_question(question_text, section_key)
+                if item_extracted:
+                    items_to_store = [item_extracted]
+                elif q.topic and q.topic.strip():
+                    # Use topic if available (it should contain the skill/item name from original CP)
+                    items_to_store = [q.topic.strip()]
+                elif status_value == "new_skill" and answer_text:
+                    # For new skills, use the answer which contains the new information
+                    items_to_store = [answer_text]
+                else:
+                    # Last fallback: try to extract from question text
+                    cleaned = question_text
+                    for prefix in ["The competence paper lists ", "Has the candidate worked with ", "The competence paper mentions ", "Is it correct that "]:
+                        if cleaned.startswith(prefix):
+                            cleaned = cleaned[len(prefix):]
+                            cleaned = cleaned.split('.')[0].split('?')[0].strip()
+                            break
+                    if cleaned and len(cleaned) < 100:
+                        items_to_store = [cleaned]
+            
+            # Store all confirmed items
+            if items_to_store:
+                if section_key in section_items:
+                    section_items[section_key].extend(items_to_store)
+                    logger.debug(f"[GeneratePaper] Added {len(items_to_store)} items to {section_key}: {items_to_store}")
+                else:
+                    # additional_info / discovery-style information goes into additional notes.
+                    additional_notes.extend(items_to_store)
+                    logger.debug(f"[GeneratePaper] Added {len(items_to_store)} items to additional_notes: {items_to_store}")
             else:
-                # overall / discovery-style information goes into additional notes.
-                additional_notes.append(summary_line)
+                logger.warning(f"[GeneratePaper] No items extracted for question {q.id}, section {section_key}, status {status_value}")
+        
+        logger.info(
+            f"[GeneratePaper] Processing results: {confirmed_count} confirmed, {new_skill_count} new_skill, "
+            f"{not_confirmed_count} not_confirmed"
+        )
 
         # Build text content.
         lines = []
@@ -438,6 +778,7 @@ class ConversationSessionGeneratePaperView(APIView):
             rec_parts.append("Additional strengths and context from the interview:")
             rec_parts.append("- " + "; ".join(additional_notes[:5]))
 
+        # Add recommendation section only once
         if rec_parts:
             lines.append("Our Recommendation")
             lines.append("------------------")
@@ -463,9 +804,11 @@ class ConversationSessionGeneratePaperView(APIView):
                 lines.append(f"- {note}")
             lines.append("")
 
-        full_content = "\n".join(lines).strip()
+        # Store TEXT version in database (not HTML)
+        # HTML will be generated only when exporting to PDF
+        text_content = "\n".join(lines).strip()
 
-        if not full_content:
+        if not text_content:
             return Response(
                 {
                     "detail": "No confirmed or new items were found for this session. Cannot generate a competence paper."
@@ -474,22 +817,44 @@ class ConversationSessionGeneratePaperView(APIView):
             )
 
         # Create or update the conversation-based competence paper.
+        # Store TEXT content in database (HTML will be generated only for PDF export)
         conversation_paper = session.conversation_competence_paper
         if conversation_paper is None:
             conversation_paper = ConversationCompetencePaper.objects.create(
                 conversation_session=session,
-                content=full_content,
+                content=text_content,
             )
             session.conversation_competence_paper = conversation_paper
+            logger.info(
+                f"[GeneratePaper] ✅ Created new ConversationCompetencePaper: id={conversation_paper.id}, "
+                f"content_length={len(text_content)} (TEXT format)"
+            )
         else:
-            conversation_paper.content = full_content
+            conversation_paper.content = text_content
             conversation_paper.save(update_fields=["content"])
+            logger.info(
+                f"[GeneratePaper] ✅ Updated existing ConversationCompetencePaper: id={conversation_paper.id}, "
+                f"content_length={len(text_content)} (TEXT format)"
+            )
 
+        # Mark session as completed and link the paper
         session.status = "completed"
         session.completed_at = timezone.now()
+        session.conversation_competence_paper = conversation_paper
         session.save(update_fields=["status", "completed_at", "conversation_competence_paper"])
+        
+        logger.info(
+            f"[GeneratePaper] ✅ Session {session_id} marked as completed at {session.completed_at}. "
+            f"Paper ID: {conversation_paper.id}, Content length: {len(text_content)} characters (TEXT format)"
+        )
+        logger.info(
+            f"[GeneratePaper] 📋 Final summary - Confirmed: {confirmed_count}, "
+            f"New Skills: {new_skill_count}, Not Confirmed: {not_confirmed_count}, "
+            f"Additional Notes: {len(additional_notes)}"
+        )
 
         serializer = ConversationCompetencePaperSerializer(conversation_paper)
+        logger.info(f"[GeneratePaper] ✅ Paper generation complete. Returning paper data to client.")
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -546,14 +911,171 @@ class ConversationCompetencePaperPDFView(APIView):
         session = conversation_paper.conversation_session
         cv_instance = session.cv
 
+        # Get stored text content (this is the edited content from the user)
+        text_content = conversation_paper.content or ""
+        
+        # Parse the stored text content to extract sections for template rendering
+        # This ensures we use the edited content, not the original session data
+        section_items = {
+            "core_skills": [],
+            "soft_skills": [],
+            "languages": [],
+            "education": [],
+            "trainings_certifications": [],
+            "technical_competencies": [],
+            "project_experience": [],
+        }
+        additional_notes = []
+        recommendation = ""
+        
+        # Parse text content into sections
+        lines = text_content.split('\n')
+        current_section = None
+        current_content = []
+        
+        def parse_section_content(content_text, section_name):
+            """Parse section content, handling both bullet points and plain text."""
+            if section_name == "Our Recommendation":
+                # Recommendation can be plain text or bullet points
+                return content_text
+            else:
+                # Extract bullet points
+                items = []
+                for item in content_text.split('\n'):
+                    item = item.strip()
+                    if item.startswith('-'):
+                        items.append(item.replace('-', '').strip())
+                    elif item and not item.startswith('-'):
+                        # Handle plain text lines (like in recommendation)
+                        items.append(item)
+                return items
+        
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            # Check for section headers
+            if line_stripped in ["Our Recommendation", "Core Skills", "Soft Skills", "Languages", 
+                                "Education", "Trainings & Certifications", "Technical Competencies",
+                                "Project Experience", "Additional Information from Interview"]:
+                # Save previous section
+                if current_section and current_content:
+                    content_text = '\n'.join(current_content).strip()
+                    parsed = parse_section_content(content_text, current_section)
+                    if current_section == "Our Recommendation":
+                        recommendation = parsed if isinstance(parsed, str) else '\n'.join(parsed)
+                    elif current_section == "Core Skills":
+                        section_items["core_skills"] = parsed if isinstance(parsed, list) else []
+                    elif current_section == "Soft Skills":
+                        section_items["soft_skills"] = parsed if isinstance(parsed, list) else []
+                    elif current_section == "Languages":
+                        section_items["languages"] = parsed if isinstance(parsed, list) else []
+                    elif current_section == "Education":
+                        section_items["education"] = parsed if isinstance(parsed, list) else []
+                    elif current_section == "Trainings & Certifications":
+                        section_items["trainings_certifications"] = parsed if isinstance(parsed, list) else []
+                    elif current_section == "Technical Competencies":
+                        section_items["technical_competencies"] = parsed if isinstance(parsed, list) else []
+                    elif current_section == "Project Experience":
+                        section_items["project_experience"] = parsed if isinstance(parsed, list) else []
+                    elif current_section == "Additional Information from Interview":
+                        additional_notes = parsed if isinstance(parsed, list) else []
+                
+                current_section = line_stripped
+                current_content = []
+                # Skip the underline line (dashes) if present
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if next_line and next_line.replace('-', '').strip() == '':
+                        i += 1  # Skip the underline line
+                        continue
+            elif current_section:
+                # Skip underline lines
+                if not (line_stripped.replace('-', '').strip() == '' and len(line_stripped) > 0):
+                    current_content.append(line)
+        
+        # Save last section
+        if current_section and current_content:
+            content_text = '\n'.join(current_content).strip()
+            parsed = parse_section_content(content_text, current_section)
+            if current_section == "Our Recommendation":
+                recommendation = parsed if isinstance(parsed, str) else '\n'.join(parsed)
+            elif current_section == "Core Skills":
+                section_items["core_skills"] = parsed if isinstance(parsed, list) else []
+            elif current_section == "Soft Skills":
+                section_items["soft_skills"] = parsed if isinstance(parsed, list) else []
+            elif current_section == "Languages":
+                section_items["languages"] = parsed if isinstance(parsed, list) else []
+            elif current_section == "Education":
+                section_items["education"] = parsed if isinstance(parsed, list) else []
+            elif current_section == "Trainings & Certifications":
+                section_items["trainings_certifications"] = parsed if isinstance(parsed, list) else []
+            elif current_section == "Technical Competencies":
+                section_items["technical_competencies"] = parsed if isinstance(parsed, list) else []
+            elif current_section == "Project Experience":
+                section_items["project_experience"] = parsed if isinstance(parsed, list) else []
+            elif current_section == "Additional Information from Interview":
+                additional_notes = parsed if isinstance(parsed, list) else []
+        
+        # Get original competence paper for name/seniority
+        original_paper = session.original_competence_paper
+        original_content = original_paper.content if original_paper else ""
+        
+        # Extract name and seniority
+        name = ""
+        seniority = ""
+        if original_content:
+            name_match = re.search(r'Name:\s*([^\n]+)', original_content, re.IGNORECASE)
+            if name_match:
+                name = name_match.group(1).strip()
+            seniority_match = re.search(r'Seniority:\s*([^\n]+)', original_content, re.IGNORECASE)
+            if seniority_match:
+                seniority = seniority_match.group(1).strip()
+        
+        if not name:
+            name = session.cv.original_filename.rsplit('.', 1)[0] if session.cv else ""
+        
+        # Build structured data for template
+        view_instance = ConversationSessionGeneratePaperView()
+        structured_data = {
+            "name": name,
+            "seniority": seniority or "-",
+            "core_skills": section_items.get("core_skills", [])[:5],
+            "soft_skills": section_items.get("soft_skills", [])[:5],
+            "languages": section_items.get("languages", [])[:4],
+            "education": view_instance._format_education(section_items.get("education", [])) or "-",
+            "trainings": "; ".join(section_items.get("trainings_certifications", [])) or "-",
+            "recommendation": recommendation or "Based on the interview, the candidate demonstrates relevant skills and experience.",
+            "tech_competencies_line": view_instance._format_tech_competencies_grouped(section_items.get("technical_competencies", [])),
+            "project_experience_line": "|".join(view_instance._format_project_experience(section_items.get("project_experience", []))),
+            "footer_logo_url": view_instance._get_footer_logo_url(),
+        }
+        
+        # Generate HTML from template for PDF export
+        template_path = Path(settings.BASE_DIR) / "templates" / "competence_template.html"
+        html_content = text_content  # Fallback to text if template fails
+        
+        if template_path.exists():
+            try:
+                from jinja2 import Environment, FileSystemLoader
+                env = Environment(loader=FileSystemLoader(template_path.parent))
+                template = env.get_template(template_path.name)
+                html_content = template.render(**structured_data)
+                logger.info(f"[PDFExport] ✅ Generated HTML from template for paper {paper_id} using edited content")
+            except Exception as e:
+                logger.warning(f"[PDFExport] ⚠️ Failed to use template, using text format: {str(e)}")
+                html_content = text_content
+        else:
+            logger.warning(f"[PDFExport] ⚠️ Template not found, using text format")
+            html_content = text_content
+
         output_dir = Path(settings.MEDIA_ROOT) / "conversation_papers"
         safe_name = cv_instance.original_filename.replace("/", "_").replace("\\", "_")
         output_path = output_dir / f"conversation_paper_{conversation_paper.id}_{safe_name}"
         if not output_path.suffix.lower().endswith(".pdf"):
             output_path = output_path.with_suffix(".pdf")
 
+        # Render HTML to PDF
         pdf_path = render_conversation_paper_to_pdf(
-            conversation_paper.content,
+            html_content,
             output_path=output_path,
             title="Conversation Competence Paper",
         )

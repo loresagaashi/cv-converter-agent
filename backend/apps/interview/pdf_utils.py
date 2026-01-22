@@ -1,9 +1,18 @@
 from pathlib import Path
 from typing import Any
 
+from django.conf import settings
 from fpdf import FPDF
 
 from apps.cv.pdf_renderer import _sanitize_for_pdf
+
+try:
+    from weasyprint import HTML, CSS  # type: ignore
+    _HTML_RENDER_AVAILABLE = True
+except Exception:
+    _HTML_RENDER_AVAILABLE = False
+    HTML = None  # type: ignore
+    CSS = None  # type: ignore
 
 
 def render_conversation_paper_to_pdf(
@@ -13,13 +22,31 @@ def render_conversation_paper_to_pdf(
     title: str = "Conversation Competence Paper",
 ) -> Path:
     """
-    Render a plain-text conversation-based competence paper to a simple PDF.
-
-    This is intentionally minimal but uses the same latin-1 sanitization as the
-    main CV renderer to avoid font issues.
+    Render a conversation-based competence paper to PDF.
+    
+    If content is HTML (starts with <!DOCTYPE html> or <html), use WeasyPrint to render it.
+    Otherwise, fall back to FPDF for plain text.
     """
-    text = (content or "").strip()
-
+    content = (content or "").strip()
+    
+    # Check if content is HTML
+    is_html = content.startswith('<!DOCTYPE html>') or content.startswith('<html')
+    
+    if is_html and _HTML_RENDER_AVAILABLE and HTML:
+        try:
+            # Use WeasyPrint to render HTML to PDF (same as preview mode)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            # Use landscape orientation for competence papers (same as preview)
+            css_landscape = CSS(string='@page { size: A4 landscape; }')
+            HTML(string=content).write_pdf(str(output_path), stylesheets=[css_landscape])
+            return output_path
+        except Exception as e:
+            # Fall back to FPDF if WeasyPrint fails
+            print(f"[PDF] WeasyPrint render failed, falling back to FPDF: {e}")
+    
+    # Fallback to FPDF for plain text or if WeasyPrint is unavailable
+    text = content
+    
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()

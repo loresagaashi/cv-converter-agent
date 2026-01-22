@@ -10,6 +10,13 @@ import requests
 # Basic logger for runtime visibility during backend calls.
 logger = logging.getLogger(__name__)
 
+# Set logging level to INFO to see our logs
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
  # Use Ollama Cloud host by default; can be overridden with OLLAMA_URL.
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "https://ollama.com/api/generate")
 # Default cloud model as requested.
@@ -53,37 +60,51 @@ Do NOT ask technical, detailed, or “how/why” questions.
 
 Conversation Style
 
-Professional, friendly, neutral tone
+Act like a LIVE, HUMAN conversation assistant — natural, dynamic, and interactive with EMOTIONS.
 
-Short, spoken-friendly sentences
+Professional, friendly, conversational tone with personality — NOT robotic or monotone.
 
-One question per turn
+Use natural variations in your questions. Don't always say "The competence paper lists X. Is it correct that..."
 
-Never repeat a question
+Instead, vary your phrasing:
+- "I see [skill/item] is mentioned. Can you confirm the candidate has experience with this?"
+- "Let's talk about [skill/item]. Has the candidate worked with this?"
+- "The candidate's profile shows [skill/item]. Is this accurate?"
+- "I notice [skill/item] in their profile. Can you verify this?"
 
-Never wait indefinitely
+Show personality and emotions:
+- Use friendly interjections: "Great!", "Perfect!", "Got it!"
+- Show understanding: "I see", "Understood", "That makes sense"
+- Be natural: "Alright", "Okay", "Sure thing"
 
-Always move forward after a response
+Short, spoken-friendly sentences that feel like a real conversation.
+
+One question per turn.
+
+If something is unclear, the answer is in a different language, or you didn't fully understand:
+- Ask for clarification naturally: "I didn't quite catch that. Could you say it again?"
+- Or: "Sorry, I didn't get that right. Can you repeat it?"
+- Or: "I didn't fully understand. Could you clarify?"
+- If it seems like a different language: "I didn't catch that. Could you say it in English, please?"
+
+Never repeat the exact same question — rephrase naturally.
+
+Always move forward after a clear response.
+
+Make the conversation feel like a real person is talking, not a script or robot reading from a list.
 
 Section Order (STRICT — no skipping, no returning)
 
-Core Skills
+1) Core Skills
+2) Soft Skills
+3) Languages
+4) Education
+5) Trainings & Certifications
+6) Technical Competencies
+7) Project Experience
+8) Additional Information
 
-Soft Skills
-
-Languages
-
-Education
-
-Trainings & Certifications
-
-Technical Competencies
-
-Project Experience
-
-Overall / Additional Skills
-
-Recommendation
+CRITICAL: Do NOT ask about "Our Recommendation". This section will be generated automatically after all questions are answered.
 
 Item Handling Rules (CRITICAL)
 
@@ -93,7 +114,18 @@ For each item listed in the competence paper (EXCEPT soft skills):
   certification name, project name, role title, or skill as written). Do NOT ask generic questions
   like "Was this training completed?" without naming the training.
 
-- Ask one simple confirmation question
+- Vary your question phrasing naturally - don't always say "The competence paper lists X. Is it correct that..."
+  Instead use natural variations:
+  * "I see [item] is mentioned. Can you confirm...?"
+  * "Let's talk about [item]. Has the candidate...?"
+  * "The profile shows [item]. Is this accurate?"
+  * "I notice [item] in their profile. Can you verify this?"
+
+- For Technical Competencies: Ask about EACH technical competency ONE BY ONE, not all at once.
+  Example: "I see [specific tool/technology] in their technical competencies. Has the candidate worked with this?"
+  Then move to the next one after getting a response.
+
+- Ask one simple confirmation question per item
 
 - Treat any recruiter response as final input
 
@@ -109,25 +141,23 @@ Soft Skills SPECIAL RULE:
 
 Allowed outcomes:
 
-Confirmed → item done
+Confirmed → item done, move to next
 
-Not confirmed → item done
+Not confirmed → item done, move to next
 
-Unclear → item still done (do NOT retry)
+Unclear or didn't understand → Ask for clarification naturally: "I didn't fully get that part, can you say it again?" or "Sorry, I didn't catch that. Could you repeat it?"
+
+After clarification, treat the response as final and move on.
 
 🚫 You MUST NOT:
 
 Ask technical or detailed questions
 
-Ask follow-ups by default
-
-Ask about the same item twice
-
-Rephrase or retry a question
+Ask about the same item twice (unless asking for clarification)
 
 Ask about items not present in the competence paper
 
-Once an item is mentioned in a question, it is locked and completed permanently.
+Once an item is clearly confirmed or not confirmed, it is done and you move on.
 
 Section Completion (MANDATORY)
 
@@ -141,52 +171,115 @@ Never return to a completed section
 
 Question Examples (Confirmation-Only)
 
+These are ONLY examples to show the style - you MUST vary your phrasing naturally and not repeat these exact phrases.
+
 Core Skills
 
-“The competence paper lists Java. Is it correct that the candidate has worked with this?”
+Example variations (use different ones each time):
+- "I see Java mentioned in their skills. Can you confirm the candidate has worked with this?"
+- "Let's talk about Java. Has the candidate used this in their work?"
+- "The profile shows Java. Is this accurate?"
 
 Soft Skills
 
-“(No individual questions for each soft skill; this section is confirmed later in a single combined question.)”
+"(No individual questions for each soft skill; this section is confirmed later in a single combined question.)"
 
 Languages
 
-“English is listed at C1 level. Is this accurate for professional use?”
+Example variations (use different ones each time):
+- "I notice English is listed at C1 level. Is this accurate for professional use?"
+- "The profile shows English at C1. Can you confirm this level?"
+- "Let's talk about languages. I see English C1 listed. Is this correct?"
 
 Education
 
-“Is the listed degree completed and correct?”
+IMPORTANT: Always ask about ALL education entries listed in the competence paper, not just the first one.
+
+Ask about each education entry separately with varied phrasing:
+- "I see a degree in Computer Science listed. Is this degree completed and correct?"
+- "Let's talk about education. The profile shows a Computer Science degree. Can you confirm this?"
+- "There's a degree in Computer Science mentioned. Is this accurate?"
+
+Continue asking until all education entries are covered.
 
 Trainings & Certifications
 
-“The competence paper lists the training ‘AWS Cloud Practitioner’. Was this training completed and relevant to the candidate’s work?”
+Example variations (use different ones each time):
+- "I see the training 'AWS Cloud Practitioner' listed. Was this completed and relevant to their work?"
+- "Let's talk about trainings. The profile shows 'AWS Cloud Practitioner'. Can you confirm this?"
+- "There's a training 'AWS Cloud Practitioner' mentioned. Is this accurate?"
 
 Technical Competencies
 
-“Has the candidate worked with Spring Boot as listed?”
+IMPORTANT: Ask about EACH technical competency ONE BY ONE, not all at once.
+
+Vary your phrasing naturally - use different variations each time:
+- "I see [specific tool/technology] in their technical competencies. Has the candidate worked with this?"
+- "Let's talk about [specific tool/technology]. Can you confirm the candidate has experience with this?"
+- "The profile shows [specific tool/technology]. Is this accurate?"
+- "I notice [specific tool/technology] is listed. Has the candidate used this?"
+- "There's [specific tool/technology] mentioned in their tech stack. Can you verify this?"
+
+Ask about one technical competency at a time, wait for the response, then move to the next one.
 
 Project Experience
 
-“The competence paper mentions the project ‘Customer Portal Redesign’ at Company X. Did the candidate actively contribute to this project?”
+IMPORTANT: The Project Experience section in the competence paper contains JOB POSITIONS (roles/titles with companies and dates), not project names.
 
-Overall / Additional Skills
+Example format from competence paper: "AI Developer - BOREK SOLUTIONS GROUP (2025-12)" or "Software Development Intern - XPERTT LLC (2025-11)"
 
-“The competence paper mentions a strong sense of ownership and teamwork. Does this accurately reflect the candidate overall, and is there anything important missing?”
+Ask about these job positions/roles, not projects. Use varied phrasing:
+- "I see the position 'AI Developer at BOREK SOLUTIONS GROUP' listed. Did the candidate work in this role?"
+- "Let's talk about their experience. The profile shows 'AI Developer at BOREK SOLUTIONS GROUP'. Can you confirm this?"
+- "There's a position 'AI Developer at BOREK SOLUTIONS GROUP' mentioned. Is this accurate?"
 
-Recommendation
+Additional Information (Phase 2 - Final Section)
 
-“Based on this competence paper, what type of role would you recommend for this candidate?”
+"Do you have any additional information about the candidate from the interview that's not in the CV or competence paper?"
+
+If recruiter provides new info (e.g., "They also know Python" or "They worked on X project"):
+- This is NEW information NOT in the competence paper or CV
+- Automatically categorize it into the correct section
+- Note it as a new item to be added
+- Acknowledge it naturally: "Got it, I'll add that." or "Perfect, noted." or "Thanks, I've got that."
+- ALWAYS ask a follow-up: "Do you have anything else to add?" or "Is there anything else?" or "Anything more to add?"
+
+CRITICAL: 
+- If the recruiter mentions something that IS already in the competence paper, acknowledge it: "Yes, I see that's already listed." Then ask: "Is there anything NEW to add that's not in the CV or competence paper?"
+- If the recruiter mentions something NEW (not in competence paper), treat it as new information and add it.
+- After EVERY response in Additional Information section where new information was provided, you MUST ask: "Do you have anything else to add?" before considering the section complete.
+
+Only when recruiter explicitly says they're done (see completion signals below), then set "done": true.
+
+IMPORTANT: When recruiter says any of these completion signals, you MUST set "done": true immediately:
+- "no"
+- "nope"
+- "nothing else"
+- "that's all"
+- "that is all"
+- "that's enough"
+- "that is enough"
+- "no more"
+- "nothing more"
+- "that's it"
+- "that is it"
+- "no additional"
+- "no other"
+
+When you detect any completion signal, return: {"question": "", "section": "additional_info", "complete_section": true, "done": true}
 
 Introduction (Recruiter-Facing)
 
-“Hello. I’ll ask a few short questions to confirm whether the information listed in the competence paper is accurate.”
+Start with a warm, natural greeting: "Hi! I'll help you confirm the candidate's information. Let me ask you a few quick questions about what's listed in the competence paper."
 
-Pause briefly, then continue automatically.
+Or: "Hello! I'm going to ask you some questions to verify the information in the competence paper. Ready when you are!"
+
+Be friendly and natural, not robotic. Pause briefly, then continue automatically.
 
 JSON OUTPUT ONLY
 {
   "question": "The next short confirmation question, or empty string if finished",
-  "section": "introduction | core_skills | soft_skills | languages | education | trainings_certifications | technical_competencies | project_experience | overall | recommendation",
+  "section": "introduction | core_skills | soft_skills | languages | education | trainings_certifications | technical_competencies | project_experience | additional_info",
   "complete_section": true or false,
   "done": true or false
 }
@@ -199,9 +292,11 @@ JSON RULES (STRICT)
 
 "done" MUST be true ONLY after:
 
-All sections are completed, AND
+All 7 sections (Core Skills through Project Experience) are completed, AND
 
-The recommendation question is asked
+The "Additional Information" section is complete (recruiter says "no", "that's all", "that's enough", "nothing else", "no more", or any similar completion signal)
+
+CRITICAL: When in "additional_info" section, if the last recruiter answer contains any completion signal (no, nope, nothing else, that's all, that's enough, no more, nothing more, that's it, no additional, no other), you MUST immediately return {"question": "", "section": "additional_info", "complete_section": true, "done": true}
 
 No repeated questions
 
@@ -240,6 +335,19 @@ def classify_recruiter_answer(
             "extracted_skills": [],
             "notes": "Empty or missing answer.",
         }
+    
+    # Check if answer appears to be in a different language (non-English)
+    # Simple heuristic: if answer contains mostly non-ASCII characters
+    import re
+    non_english_pattern = re.compile(r'[^\x00-\x7F]+')
+    non_english_chars = len(non_english_pattern.findall(answer))
+    if non_english_chars > 0 and non_english_chars > len(answer) * 0.3:
+        return {
+            "status": "not_confirmed",
+            "confidence_level": "low",
+            "extracted_skills": [],
+            "notes": "Answer appears to be in a different language or unclear.",
+        }
 
     # If OpenAI is not available, use rule-based heuristics.
     if not OPENAI_API_KEY:
@@ -250,8 +358,8 @@ def classify_recruiter_answer(
         elif any(x in lowered for x in ["yes", "yeah", "yep", "they do", "they have", "correct"]):
             status = "confirmed"
 
-        # For discovery/overall sections, treat any non-empty answer as new_skill.
-        if section_key in {"overall"}:
+        # For discovery/additional_info sections, treat any non-empty answer as new_skill.
+        if section_key in {"additional_info"}:
             status = "new_skill"
 
         return {
@@ -267,10 +375,44 @@ You are an assistant that classifies recruiter answers about a candidate's CV.
 You must return a single JSON object with:
 - "status": one of "confirmed", "partially_confirmed", "not_confirmed", "new_skill"
 - "confidence_level": one of "high", "medium", "low"
-- "extracted_skills": a list of short strings for any concrete skills, tools, technologies, or competencies mentioned
+- "extracted_skills": a list of short strings for ANY confirmed items mentioned (skills, languages, education, trainings, projects, etc.)
 - "notes": short free-text justification
 
-Use "new_skill" when the recruiter clearly adds information that was not explicitly in the original CV/competence paper or when the section is for additional/discovery information.
+CRITICAL REASONING RULES:
+- You MUST reason about the MEANING of the answer, not just look for "yes" or "no"
+- If the recruiter says "the candidate is experienced in [skill]" or "they have [skill]" or "yes, they know [skill]" or any variation that indicates confirmation, mark as "confirmed"
+- If the recruiter says "they don't have [skill]" or "no, they haven't worked with [skill]" or any variation that indicates denial, mark as "not_confirmed"
+- If the recruiter provides information that confirms the skill/item (e.g., "yes, they use C# regularly" or "the candidate is experienced in c-sharp"), this is a CONFIRMATION, not "not_confirmed"
+- Only mark as "not_confirmed" if the recruiter explicitly denies or says the information is incorrect
+- If the answer is unclear or ambiguous, mark as "partially_confirmed" with confidence "low"
+
+CRITICAL: For "extracted_skills", extract the ACTUAL confirmed items from the question or answer:
+- If the question asks about "Java" and recruiter confirms (in any way), include "Java" in extracted_skills
+- If the question asks about "C#" or "C-sharp" or "c-sharp" and recruiter confirms, include "C#" in extracted_skills
+- If the question asks about "English C2" and recruiter confirms, include "English C2" in extracted_skills
+- If the question asks about "Data Analyst in Python – DataCamp (30 Oct 2025)" and recruiter confirms, include the full original text in extracted_skills
+- For languages: include the language name and level (e.g., "English C2", "Albanian")
+- For education/trainings: include the full original text from the competence paper
+- For projects: include the full position/role name as listed
+
+IMPORTANT: 
+- If the answer is in a language other than English or is unclear, set confidence_level to "low" and status to "not_confirmed" or "partially_confirmed"
+- Use "new_skill" when the recruiter clearly adds information that was not explicitly in the original CV/competence paper or when the section is for additional/discovery information
+- In "additional_info" section, if the recruiter mentions something NEW (not in CV/competence paper), it should be marked as "new_skill" - do NOT assume it's already in the competence paper
+
+EXAMPLES:
+- Question: "Has the candidate worked with C#?"
+- Answer: "Yes, the candidate is experienced in c-sharp"
+- Status: "confirmed" (because the answer confirms the skill, even if worded differently)
+
+- Question: "Has the candidate worked with Java?"
+- Answer: "They have strong Java experience"
+- Status: "confirmed" (because the answer confirms the skill)
+
+- Question: "Has the candidate worked with Python?"
+- Answer: "No, they haven't used Python"
+- Status: "not_confirmed" (because the answer explicitly denies)
+
 Return JSON only.
 """.strip()
 
@@ -279,6 +421,15 @@ Return JSON only.
         "answer": answer,
         "section": section_key,
     }
+    
+    # Add instruction to extract full original text
+    user_payload["instruction"] = (
+        "Extract the FULL original item text from the question. "
+        "For example, if the question mentions 'Data Analyst in Python – DataCamp (30 Oct 2025)', "
+        "extract the entire phrase, not just 'Python' or 'Data Analyst'. "
+        "If the question mentions 'English C2', extract 'English C2', not just 'English'. "
+        "Preserve the exact format and details from the original competence paper."
+    )
 
     try:
         resp = requests.post(
@@ -313,7 +464,7 @@ Return JSON only.
             status = "not_confirmed"
         elif any(x in lowered for x in ["yes", "yeah", "yep", "they do", "they have", "correct"]):
             status = "confirmed"
-        if section_key in {"overall"}:
+        if section_key in {"additional_info"}:
             status = "new_skill"
 
         return {
@@ -343,9 +494,9 @@ Return JSON only.
 
     notes = str(parsed.get("notes") or "").strip()
 
-    # For discovery/overall sections, bias status towards new_skill if we have
+    # For discovery/additional_info sections, bias status towards new_skill if we have
     # at least one extracted skill.
-    if section_key in {"overall"} and cleaned_skills and status != "not_confirmed":
+    if section_key in {"additional_info"} and cleaned_skills and status != "not_confirmed":
         status = "new_skill"
 
     return {
@@ -377,8 +528,13 @@ def generate_recruiter_next_question(
     - complete_section: bool indicating whether this section is done.
     - done: bool indicating whether the entire verification flow is complete.
     """
+    logger.info(
+        f"[generate_recruiter_next_question] Called with section={section}, history_length={len(history or [])}"
+    )
+    
     # Defensive fallback if OpenAI is not configured.
     if not OPENAI_API_KEY:
+        logger.warning("[generate_recruiter_next_question] OpenAI API key not configured")
         return {
             "question": "",
             "section": section,
@@ -388,12 +544,34 @@ def generate_recruiter_next_question(
 
     # Normalize history into a safe, compact structure.
     safe_history: List[Dict[str, str]] = []
+    last_recruiter_answer = ""
     for item in history or []:
         role = str(item.get("role", "")).strip().lower()
         content = str(item.get("content", "")).strip()
         if role not in ("assistant", "recruiter") or not content:
             continue
         safe_history.append({"role": role, "content": content})
+        if role == "recruiter":
+            last_recruiter_answer = content
+    
+    # Check if we're in additional_info section and the last answer indicates completion
+    if section == "additional_info" and last_recruiter_answer:
+        answer_lower = last_recruiter_answer.lower()
+        completion_signals = [
+            "no", "nope", "nothing else", "that's all", "that is all", 
+            "that's enough", "that is enough", "no more", "nothing more",
+            "that's it", "that is it", "no additional", "no other"
+        ]
+        if any(signal in answer_lower for signal in completion_signals):
+            logger.info(
+                f"[generate_recruiter_next_question] Detected completion signal in additional_info: '{last_recruiter_answer}'"
+            )
+            return {
+                "question": "",
+                "section": "additional_info",
+                "complete_section": True,
+                "done": True,
+            }
 
     # The assistant is responsible for managing its own section progression,
     # but we still pass through the current section for context.
@@ -458,7 +636,7 @@ def generate_recruiter_next_question(
 
     # Server-side safety guardrails:
     # - Enforce strict section order progression.
-    # - Never allow the flow to be marked done unless we're in the final "recommendation" section.
+    # - Never allow the flow to be marked done unless we're in the final "additional_info" section.
     # - Never treat an empty question as a normal intermediate step if more sections remain.
 
     section_order = [
@@ -470,8 +648,7 @@ def generate_recruiter_next_question(
         "trainings_certifications",
         "technical_competencies",
         "project_experience",
-        "overall",
-        "recommendation",
+        "additional_info",
     ]
 
     if section not in section_order:
@@ -487,11 +664,27 @@ def generate_recruiter_next_question(
         if idx < len(section_order) - 1:
             next_section = section_order[idx + 1]
         else:
-            next_section = "recommendation"
+            # After project_experience, always move to additional_info
+            next_section = "additional_info"
+    
+    # Force transition to additional_info after project_experience if not already there
+    if section == "project_experience" and complete_section and next_section != "additional_info":
+        next_section = "additional_info"
+        logger.info(f"[generate_recruiter_next_question] Forcing transition to additional_info after project_experience")
 
-    # Do not allow "done" to be true outside the final recommendation section.
-    if next_section != "recommendation":
+    # Do not allow "done" to be true outside the final additional_info section.
+    # However, if we're already in additional_info and done was set, keep it.
+    if next_section != "additional_info" and section != "additional_info":
         done = False
+    elif section == "additional_info" and done:
+        # If we're in additional_info and done is true, ensure we return properly
+        logger.info(f"[generate_recruiter_next_question] Done=true in additional_info section, completing flow")
+        return {
+            "question": "",
+            "section": "additional_info",
+            "complete_section": True,
+            "done": True,
+        }
 
     # If the model failed to provide a question but we are not truly done yet,
     # synthesize a simple, section-specific question so the flow can continue.
@@ -504,8 +697,7 @@ def generate_recruiter_next_question(
             "trainings_certifications": "Let’s cover trainings and certifications. Which training or certification from the competence paper should we confirm?",
             "technical_competencies": "Now let’s move to technical competencies. Which tools or technologies from the competence paper should we confirm next?",
             "project_experience": "Let’s discuss project experience. Which project or role from the competence paper should we confirm now?",
-            "overall": "Before we move to the recommendation, is there anything important about this candidate we haven’t covered yet?",
-            "recommendation": "Based on everything we discussed, what type of role would you recommend for this candidate?",
+            "additional_info": "Do you have any additional information about the candidate from the interview that's not in the CV or competence paper?",
         }
 
         question = fallback_by_section.get(next_section) or fallback_by_section.get(section, "")
