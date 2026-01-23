@@ -250,24 +250,72 @@ export function RecruiterVoiceAssistant({
 
       recognitionRef.current = recognition;
       recognition.lang = "en-US";
-      recognition.interimResults = false;
+      recognition.continuous = true; // Keep listening continuously
+      recognition.interimResults = true; // Get interim results to detect ongoing speech
       recognition.maxAlternatives = 1;
 
       let finalTranscript = "";
+      let interimTranscript = "";
       let finished = false;
+      let silenceTimeout: NodeJS.Timeout | null = null;
+      const SILENCE_TIMEOUT_MS = 4000; // Wait 4 seconds of silence before considering speech complete
+
+      const resetSilenceTimeout = () => {
+        if (silenceTimeout) {
+          clearTimeout(silenceTimeout);
+        }
+        silenceTimeout = setTimeout(() => {
+          // If we've had silence for 4 seconds and have some transcript, consider it complete
+          if (finalTranscript || interimTranscript) {
+            finished = true;
+            try {
+              recognition.stop();
+            } catch {
+              // ignore
+            }
+            resolve(finalTranscript || interimTranscript);
+          }
+        }, SILENCE_TIMEOUT_MS);
+      };
 
       recognition.onresult = (event: any) => {
-        if (!event || !event.results) return;
+        if (!event || !event.results || finished) return;
+        
+        let hasNewFinal = false;
+        let hasNewInterim = false;
+        
         for (let i = event.resultIndex || 0; i < event.results.length; i++) {
           const result = event.results[i];
-          if (result && result.isFinal && result[0]) {
-            finalTranscript = String(result[0].transcript || "").trim();
+          if (result && result[0]) {
+            const transcript = String(result[0].transcript || "").trim();
+            if (result.isFinal) {
+              // Append final results to finalTranscript
+              if (transcript) {
+                finalTranscript += (finalTranscript ? " " : "") + transcript;
+                hasNewFinal = true;
+                interimTranscript = ""; // Clear interim when we get final
+              }
+            } else {
+              // Update interim results
+              interimTranscript = transcript;
+              hasNewInterim = true;
+            }
           }
+        }
+
+        // Reset silence timeout whenever we get new results (final or interim)
+        if (hasNewFinal || hasNewInterim) {
+          resetSilenceTimeout();
         }
       };
 
       recognition.onerror = (event: any) => {
         if (finished) return;
+        
+        if (silenceTimeout) {
+          clearTimeout(silenceTimeout);
+        }
+        
         finished = true;
         try {
           recognition.stop();
@@ -278,7 +326,7 @@ export function RecruiterVoiceAssistant({
         const errType = (event && event.error) || "";
         // Treat "no-speech", "no-match", or "aborted" as soft errors: just return whatever we have.
         if (errType === "no-speech" || errType === "no-match" || errType === "aborted") {
-          resolve(finalTranscript);
+          resolve(finalTranscript || interimTranscript);
           return;
         }
 
@@ -287,12 +335,21 @@ export function RecruiterVoiceAssistant({
 
       recognition.onend = () => {
         if (finished) return;
+        
+        if (silenceTimeout) {
+          clearTimeout(silenceTimeout);
+        }
+        
         finished = true;
-        resolve(finalTranscript);
+        // Return whatever we have (final or interim)
+        resolve(finalTranscript || interimTranscript);
       };
 
       setStatus("listening");
       recognition.start();
+      
+      // Start the silence timeout
+      resetSilenceTimeout();
     });
   };
 

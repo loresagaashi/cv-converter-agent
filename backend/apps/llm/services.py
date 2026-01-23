@@ -145,8 +145,8 @@ IMPORTANT: After the recruiter provides an answer listing items, you MUST ask "D
 
 ADDITIONAL INFORMATION (FINAL SECTION)
 
-Ask:
-"Do you have any additional information from the interview that's not in the CV or competence paper?"
+When you reach the final "additional_info" section, ask:
+"Is there any additional information from the interview that's not in the CV or competence paper?"
 
 If new info appears:
 - Automatically assign it to the correct section
@@ -282,6 +282,8 @@ CRITICAL: For "extracted_skills", extract the ACTUAL confirmed items from the qu
 - For languages: include the language name and level (e.g., "English C2", "Albanian")
 - For education/trainings: include the full original text from the competence paper
 - For projects: include the full position/role name as listed
+- For SOFT SKILLS: If the question is open-ended (e.g., "What can you tell me about soft skills?"), extract the soft skills mentioned in the ANSWER itself (e.g., "communicative", "teamwork", "works well in a team", "good communication skills", etc.)
+- For SOFT SKILLS: Extract each distinct soft skill mentioned, even if the question doesn't list specific skills
 
 IMPORTANT: 
 - If the answer is in a language other than English or is unclear, set confidence_level to "low" and status to "not_confirmed" or "partially_confirmed"
@@ -369,6 +371,12 @@ Return JSON only.
     confidence = str(parsed.get("confidence_level") or "").strip().lower()
     if confidence not in {"high", "medium", "low"}:
         confidence = "medium"
+    
+    # For soft_skills section, be more lenient - accept medium confidence as high
+    # This ensures soft skills are stored even with medium confidence
+    if section_key == "soft_skills" and confidence == "medium":
+        confidence = "high"
+        logger.info(f"[classify_recruiter_answer] Adjusted confidence for soft_skills from medium to high")
 
     extracted = parsed.get("extracted_skills") or []
     if not isinstance(extracted, list):
@@ -418,6 +426,56 @@ Return JSON only.
             # If only completion signals, mark as not_confirmed so nothing is stored
             cleaned_skills = []
             status = "not_confirmed"
+    
+    # SPECIAL HANDLING FOR SOFT SKILLS: If extracted_skills is empty but status is confirmed/partially_confirmed,
+    # try to extract soft skills from the answer text itself
+    if section_key == "soft_skills" and not cleaned_skills and status in {"confirmed", "partially_confirmed"}:
+        # Try to extract soft skills from the answer
+        answer_lower = answer.lower()
+        soft_skill_keywords = {
+            "Communication": ["communicative", "communication", "communicates", "communicating", "good communication"],
+            "Teamwork": ["team", "teamwork", "works well in a team", "team player", "collaborative", "collaboration"],
+            "Leadership": ["leader", "leadership", "leads", "leading"],
+            "Problem Solving": ["problem solving", "problem-solving", "solves problems", "analytical"],
+            "Adaptability": ["adaptable", "adaptability", "flexible", "flexibility"],
+            "Time Management": ["time management", "manages time", "punctual", "punctuality"],
+            "Creativity": ["creative", "creativity", "innovative", "innovation"],
+            "Work Ethic": ["work ethic", "hardworking", "dedicated", "dedication", "reliable"],
+        }
+        
+        extracted_soft_skills = []
+        for skill_name, keywords in soft_skill_keywords.items():
+            if any(keyword in answer_lower for keyword in keywords):
+                extracted_soft_skills.append(skill_name)
+        
+        # If we found soft skills, use them
+        if extracted_soft_skills:
+            cleaned_skills = extracted_soft_skills
+            logger.info(f"[classify_recruiter_answer] Extracted soft skills from answer: {cleaned_skills}")
+        # If still no skills found, use a cleaned version of the answer as fallback
+        elif answer.strip():
+            # Clean the answer and use it as the skill (for soft skills, descriptive answers are acceptable)
+            cleaned_answer = answer.strip()
+            # Remove common phrases
+            for phrase in ["the candidate", "they are", "they're", "the person", "he is", "she is", "he's", "she's"]:
+                cleaned_answer = cleaned_answer.replace(phrase, "").strip()
+            # Capitalize first letter
+            if cleaned_answer:
+                cleaned_answer = cleaned_answer[0].upper() + cleaned_answer[1:] if len(cleaned_answer) > 1 else cleaned_answer.upper()
+                cleaned_skills = [cleaned_answer]
+                logger.info(f"[classify_recruiter_answer] Using answer text as soft skill: {cleaned_skills}")
+    
+    # LOWER CONFIDENCE THRESHOLD: Accept ALL confidence levels if status is confirmed/partially_confirmed
+    # If recruiter mentions something, we trust them - store it regardless of confidence
+    if status in {"confirmed", "partially_confirmed", "new_skill"}:
+        # Upgrade low confidence to medium to ensure items are stored
+        if confidence == "low":
+            confidence = "medium"
+            logger.info(f"[classify_recruiter_answer] Upgraded confidence from low to medium for section {section_key} to ensure storage")
+        # For soft_skills, always upgrade to high if we have skills to store
+        if section_key == "soft_skills" and cleaned_skills and confidence in {"medium", "low"}:
+            confidence = "high"
+            logger.info(f"[classify_recruiter_answer] Upgraded confidence to high for soft_skills to ensure storage")
 
     return {
         "status": status,
@@ -491,12 +549,59 @@ def generate_recruiter_next_question(
             "anything more", "anything more to add", "is there anything more"
         ]
         
+        # Check if last question was asking about "additional information" (but NOT the final additional_info section)
+        # This prevents "no" from skipping sections when asked as a follow-up
+        is_additional_info_followup = (
+            ("additional information" in question_lower or "additional info" in question_lower) and
+            section != "additional_info"
+        )
+        
         # Check if last question was a follow-up question
         is_followup_question = any(fq in question_lower for fq in followup_questions)
         
+        # If assistant asked about "additional information" as a follow-up (not the final section), 
+        # treat "no" as a completion signal for the CURRENT section, not skip to next
+        if is_additional_info_followup:
+            answer_stripped = answer_lower.strip()
+            is_completion = any(
+                signal == answer_stripped or 
+                answer_stripped.startswith(signal + " ") or 
+                answer_stripped == signal 
+                for signal in completion_signals
+            )
+            if is_completion:
+                # Mark current section as complete and move to next
+                logger.info(
+                    f"[generate_recruiter_next_question] Detected 'no' to additional info follow-up, completing section: "
+                    f"section={section}, answer='{last_recruiter_answer}'"
+                )
+                section_order = [
+                    "introduction",
+                    "core_skills",
+                    "soft_skills",
+                    "languages",
+                    "education",
+                    "trainings_certifications",
+                    "technical_competencies",
+                    "project_experience",
+                    "additional_info",
+                ]
+                try:
+                    idx = section_order.index(section)
+                    if idx < len(section_order) - 1:
+                        next_section = section_order[idx + 1]
+                        return {
+                            "question": f"Based on your assessment, what is your experience with the candidate regarding their {next_section.replace('_', ' ')}?",
+                            "section": next_section,
+                            "complete_section": False,
+                            "done": False,
+                        }
+                except ValueError:
+                    pass
+        
         # If assistant asked follow-up and recruiter gave completion signal
         # IMPORTANT: Only process if NOT in additional_info (additional_info is handled separately above)
-        if is_followup_question and section != "additional_info":
+        if is_followup_question and section != "additional_info" and not is_additional_info_followup:
             # Check if answer is ONLY a completion signal (exact match or starts with signal)
             answer_stripped = answer_lower.strip()
             is_completion = any(
@@ -671,6 +776,14 @@ def generate_recruiter_next_question(
                     if idx < len(section_order) - 1:
                         next_section = section_order[idx + 1]
                         section_label = next_section.replace("_", " ")
+                        # Special handling for additional_info section - use correct wording
+                        if next_section == "additional_info":
+                            return {
+                                "question": "Is there any additional information from the interview that's not in the CV or competence paper?",
+                                "section": next_section,
+                                "complete_section": False,
+                                "done": False,
+                            }
                         return {
                             "question": f"Based on your assessment, what is your experience with the candidate regarding their {section_label}?",
                             "section": next_section,
@@ -773,9 +886,14 @@ def generate_recruiter_next_question(
             idx = 0
         if idx < len(section_order) - 1:
             next_section = section_order[idx + 1]
+            # Special handling for additional_info section - use correct wording
+            if next_section == "additional_info" and not question:
+                question = "Is there any additional information from the interview that's not in the CV or competence paper?"
         else:
             # After project_experience, always move to additional_info
             next_section = "additional_info"
+            if not question:
+                question = "Is there any additional information from the interview that's not in the CV or competence paper?"
     
     # Force transition to additional_info after project_experience if not already there
     if section == "project_experience" and complete_section and next_section != "additional_info":

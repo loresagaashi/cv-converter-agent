@@ -753,15 +753,19 @@ class ConversationSessionGeneratePaperView(APIView):
                     is_question = any(indicator in topic_lower for indicator in question_indicators) or topic.endswith('?')
                     if not is_question:
                         items_to_store = [topic]
-                elif status_value == "new_skill" and answer_text:
-                    # For new skills, use the answer which contains the new information
+                elif status_value in {"confirmed", "partially_confirmed", "new_skill"} and answer_text:
+                    # For confirmed/partially_confirmed/new_skill, use the answer which contains the information
+                    # This is especially important for soft_skills where answers are descriptive
                     # Filter out questions and completion signals
                     answer_lower = answer_text.lower()
                     completion_signals = ["no", "nope", "nothing else", "that's all", "that is all"]
                     is_completion = any(signal in answer_lower for signal in completion_signals)
                     is_question = answer_text.strip().endswith('?') or "based on your assessment" in answer_lower
                     if not is_completion and not is_question:
-                        items_to_store = [answer_text]
+                        # For soft_skills, always use the answer text if extracted_skills is empty
+                        # For other sections, use answer text as fallback if no items extracted
+                        if section_key == "soft_skills" or not items_to_store:
+                            items_to_store = [answer_text.strip()]
                 else:
                     # Last fallback: try to extract from question text
                     cleaned = question_text
@@ -780,15 +784,32 @@ class ConversationSessionGeneratePaperView(APIView):
                     if cleaned and len(cleaned) < 100 and not is_question:
                         items_to_store = [cleaned]
             
-            # Store all confirmed items
+            # Store all confirmed items (with deduplication)
             if items_to_store:
                 if section_key in section_items:
-                    section_items[section_key].extend(items_to_store)
-                    logger.debug(f"[GeneratePaper] Added {len(items_to_store)} items to {section_key}: {items_to_store}")
+                    # Deduplicate items before adding (case-insensitive comparison)
+                    existing_items_lower = [item.lower() for item in section_items[section_key]]
+                    for item in items_to_store:
+                        item_lower = item.lower().strip()
+                        # Check if item already exists (case-insensitive)
+                        if item_lower and item_lower not in existing_items_lower:
+                            section_items[section_key].append(item)
+                            existing_items_lower.append(item_lower)
+                            logger.debug(f"[GeneratePaper] Added new item to {section_key}: {item}")
+                        else:
+                            logger.debug(f"[GeneratePaper] Skipped duplicate item in {section_key}: {item}")
                 else:
                     # additional_info / discovery-style information goes into additional notes.
-                    additional_notes.extend(items_to_store)
-                    logger.debug(f"[GeneratePaper] Added {len(items_to_store)} items to additional_notes: {items_to_store}")
+                    # Deduplicate additional notes as well
+                    existing_notes_lower = [note.lower() for note in additional_notes]
+                    for item in items_to_store:
+                        item_lower = item.lower().strip()
+                        if item_lower and item_lower not in existing_notes_lower:
+                            additional_notes.append(item)
+                            existing_notes_lower.append(item_lower)
+                            logger.debug(f"[GeneratePaper] Added new item to additional_notes: {item}")
+                        else:
+                            logger.debug(f"[GeneratePaper] Skipped duplicate item in additional_notes: {item}")
             else:
                 logger.warning(f"[GeneratePaper] No items extracted for question {q.id}, section {section_key}, status {status_value}")
         
