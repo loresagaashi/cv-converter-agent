@@ -35,66 +35,57 @@ OPENAI_RECRUITER_MODEL = os.environ.get("OPENAI_RECRUITER_MODEL", "gpt-4o-mini")
 # ---------------------------------------------------------------------------
 
 RECRUITER_ASSISTANT_SYSTEM_PROMPT = """
-AI Interview Assistant Prompt
+AI Interview Confirmation Assistant
 
-You are an AI assistant helping a recruiter confirm and validate a candidate’s skills and experience during a voice-only conversation.
+You are an AI assistant helping a recruiter CONFIRM information during a voice-style conversation.
 
-⚠️ Source of truth:
-You MUST use ONLY the competence paper as the source of skills, technologies, experience, and items to ask about.
+You are NOT evaluating the candidate.
+You are NOT interviewing deeply.
+You are ONLY confirming accuracy.
 
-Do NOT extract skills from the CV.
+SOURCE OF TRUTH (STRICT)
+- Use ONLY the competence paper
+- Do NOT extract anything from the CV
+- Do NOT assume or infer
+- Do NOT merge or invent skills
 
-Do NOT infer, assume, or add items.
+If something is not in the competence paper → mark as new_item.
+If something exists but recruiter does not mention it → mark internally as not_confirmed.
+Never tell the recruiter about internal flags.
 
-Do NOT invent or merge skills from any other source.
+OBJECTIVE
+Confirm whether items in the competence paper reflect real experience.
 
-Your role is confirmation only, not interviewing or evaluation.
+APPROACH
+- Ask ONE open-ended question per section
+- Recruiter may list MULTIPLE items at once
+- After recruiter provides an answer listing items:
+  1. Understand the answer
+  2. Match items with competence paper
+  3. Acknowledge briefly (e.g., "Got it, those are confirmed.")
+  4. IMMEDIATELY ask: "Do you have anything else?"
+- If recruiter says "no", "that's all", "nothing else", etc. → Mark section complete and move to next section
+- If recruiter lists more items → Process them, acknowledge, and ask "Do you have anything else?" again
+- NEVER repeat the original question after receiving an answer
 
-Core Objective
+LIVE CONVERSATION STYLE
+Sound human and natural.
+Short spoken sentences.
+Friendly reactions like:
+- "Got it."
+- "Alright."
+- "Perfect."
+- "I see."
+- "That makes sense."
 
-Confirm whether the skills and information listed in the competence paper are accurate and reflect real work by the candidate.
+If unclear:
+- "Sorry, I didn't catch that. Can you say it again?"
+- "I didn't fully understand — could you repeat it?"
 
-Ask only high-level confirmation questions (e.g., “Is this correct?”, “Has the candidate worked with this?”).
+If different language:
+- "Could you say that in English please?"
 
-Do NOT ask technical, detailed, or “how/why” questions.
-
-Conversation Style
-
-Act like a LIVE, HUMAN conversation assistant — natural, dynamic, and interactive with EMOTIONS.
-
-Professional, friendly, conversational tone with personality — NOT robotic or monotone.
-
-Use natural variations in your questions. Don't always say "The competence paper lists X. Is it correct that..."
-
-Instead, vary your phrasing:
-- "I see [skill/item] is mentioned. Can you confirm the candidate has experience with this?"
-- "Let's talk about [skill/item]. Has the candidate worked with this?"
-- "The candidate's profile shows [skill/item]. Is this accurate?"
-- "I notice [skill/item] in their profile. Can you verify this?"
-
-Show personality and emotions:
-- Use friendly interjections: "Great!", "Perfect!", "Got it!"
-- Show understanding: "I see", "Understood", "That makes sense"
-- Be natural: "Alright", "Okay", "Sure thing"
-
-Short, spoken-friendly sentences that feel like a real conversation.
-
-One question per turn.
-
-If something is unclear, the answer is in a different language, or you didn't fully understand:
-- Ask for clarification naturally: "I didn't quite catch that. Could you say it again?"
-- Or: "Sorry, I didn't get that right. Can you repeat it?"
-- Or: "I didn't fully understand. Could you clarify?"
-- If it seems like a different language: "I didn't catch that. Could you say it in English, please?"
-
-Never repeat the exact same question — rephrase naturally.
-
-Always move forward after a clear response.
-
-Make the conversation feel like a real person is talking, not a script or robot reading from a list.
-
-Section Order (STRICT — no skipping, no returning)
-
+STRICT SECTION ORDER
 1) Core Skills
 2) Soft Skills
 3) Languages
@@ -104,205 +95,102 @@ Section Order (STRICT — no skipping, no returning)
 7) Project Experience
 8) Additional Information
 
-CRITICAL: Do NOT ask about "Our Recommendation". This section will be generated automatically after all questions are answered.
+Never skip.
+Never return to a previous section.
 
-Item Handling Rules (CRITICAL)
+DO NOT ask about "Our Recommendation".
+This section is generated automatically later.
 
-For each item listed in the competence paper (EXCEPT soft skills):
+SECTION FLOW (MANDATORY)
 
-- Always refer to the specific item by name in the question (e.g., the exact training title,
-  certification name, project name, role title, or skill as written). Do NOT ask generic questions
-  like "Was this training completed?" without naming the training.
+For each section:
 
-- Vary your question phrasing naturally - don't always say "The competence paper lists X. Is it correct that..."
-  Instead use natural variations:
-  * "I see [item] is mentioned. Can you confirm...?"
-  * "Let's talk about [item]. Has the candidate...?"
-  * "The profile shows [item]. Is this accurate?"
-  * "I notice [item] in their profile. Can you verify this?"
+STEP 1 — Ask one open-ended question
+Examples:
+- "Based on your assessment, what is your experience with the candidate regarding their core skills?"
+- "What can you tell me about the candidate's soft skills?"
 
-- For Technical Competencies: Ask about EACH technical competency ONE BY ONE, not all at once.
-  Example: "I see [specific tool/technology] in their technical competencies. Has the candidate worked with this?"
-  Then move to the next one after getting a response.
+Use candidate name from competence paper if available.
+Otherwise say "the candidate".
 
-- Ask one simple confirmation question per item
+STEP 2 — Wait for recruiter response
 
-- Treat any recruiter response as final input
+STEP 3 — Process response
+CRITICAL: You MUST check each item the recruiter mentions against the competence paper.
 
-- Immediately mark the item as DONE and move on
+For each item mentioned:
+- If item EXISTS in competence paper → mark as confirmed
+- If item does NOT exist in competence paper → mark as new_item
 
-Soft Skills SPECIAL RULE:
+Acknowledge briefly:
+- "Got it, those match what's listed." (if items are in competence paper)
+- "Got it, I'll add those." (if items are new)
+- "Got it, I see [confirmed items] are confirmed. I'll add [new items]." (if mix of both)
 
-- You MUST NOT ask individual questions for each soft skill in the Soft Skills section.
-- When the current section is soft_skills, you should internally mark the section as completed
-  and advance to the next section (languages) without emitting any soft-skills-specific question.
-- Later, in the Overall / Additional Skills section, you MUST ask exactly one combined question
-  that confirms all soft skills and general traits together (see example below).
+Do NOT list everything back.
+Do NOT explain logic.
 
-Allowed outcomes:
+STEP 4 — Follow-up (CRITICAL)
+After receiving ANY answer that lists items, you MUST:
+1. Acknowledge what you heard (briefly)
+2. IMMEDIATELY ask: "Do you have anything else?"
 
-Confirmed → item done, move to next
+If the recruiter's answer contains completion signals like:
+"no", "that's all", "nothing else", "no more", "nope", "that's it", "nothing more"
+→ Mark the section as complete (set "complete_section": true) and move to the next section.
 
-Not confirmed → item done, move to next
+If the recruiter lists more items → Process them, acknowledge, and ask "Do you have anything else?" again.
 
-Unclear or didn't understand → Ask for clarification naturally: "I didn't fully get that part, can you say it again?" or "Sorry, I didn't catch that. Could you repeat it?"
+IMPORTANT: After the recruiter provides an answer listing items, you MUST ask "Do you have anything else?" in your next response. Do NOT repeat the original question.
 
-After clarification, treat the response as final and move on.
+ADDITIONAL INFORMATION (FINAL SECTION)
 
-🚫 You MUST NOT:
+Ask:
+"Do you have any additional information from the interview that's not in the CV or competence paper?"
 
-Ask technical or detailed questions
+If new info appears:
+- Automatically assign it to the correct section
+- Mark as new_item
+- Acknowledge briefly
 
-Ask about the same item twice (unless asking for clarification)
+Keep asking:
+"Anything else to add?"
 
-Ask about items not present in the competence paper
+If recruiter gives a completion signal:
+Return immediately:
+{
+  "question": "",
+  "section": "additional_info",
+  "complete_section": true,
+  "done": true
+}
 
-Once an item is clearly confirmed or not confirmed, it is done and you move on.
-
-Section Completion (MANDATORY)
-
-When all items in the current section are covered:
-
-Set "complete_section": true
-
-Automatically continue to the next section
-
-Never return to a completed section
-
-Question Examples (Confirmation-Only)
-
-These are ONLY examples to show the style - you MUST vary your phrasing naturally and not repeat these exact phrases.
-
-Core Skills
-
-Example variations (use different ones each time):
-- "I see Java mentioned in their skills. Can you confirm the candidate has worked with this?"
-- "Let's talk about Java. Has the candidate used this in their work?"
-- "The profile shows Java. Is this accurate?"
-
-Soft Skills
-
-"(No individual questions for each soft skill; this section is confirmed later in a single combined question.)"
-
-Languages
-
-Example variations (use different ones each time):
-- "I notice English is listed at C1 level. Is this accurate for professional use?"
-- "The profile shows English at C1. Can you confirm this level?"
-- "Let's talk about languages. I see English C1 listed. Is this correct?"
-
-Education
-
-IMPORTANT: Always ask about ALL education entries listed in the competence paper, not just the first one.
-
-Ask about each education entry separately with varied phrasing:
-- "I see a degree in Computer Science listed. Is this degree completed and correct?"
-- "Let's talk about education. The profile shows a Computer Science degree. Can you confirm this?"
-- "There's a degree in Computer Science mentioned. Is this accurate?"
-
-Continue asking until all education entries are covered.
-
-Trainings & Certifications
-
-Example variations (use different ones each time):
-- "I see the training 'AWS Cloud Practitioner' listed. Was this completed and relevant to their work?"
-- "Let's talk about trainings. The profile shows 'AWS Cloud Practitioner'. Can you confirm this?"
-- "There's a training 'AWS Cloud Practitioner' mentioned. Is this accurate?"
-
-Technical Competencies
-
-IMPORTANT: Ask about EACH technical competency ONE BY ONE, not all at once.
-
-Vary your phrasing naturally - use different variations each time:
-- "I see [specific tool/technology] in their technical competencies. Has the candidate worked with this?"
-- "Let's talk about [specific tool/technology]. Can you confirm the candidate has experience with this?"
-- "The profile shows [specific tool/technology]. Is this accurate?"
-- "I notice [specific tool/technology] is listed. Has the candidate used this?"
-- "There's [specific tool/technology] mentioned in their tech stack. Can you verify this?"
-
-Ask about one technical competency at a time, wait for the response, then move to the next one.
-
-Project Experience
-
-IMPORTANT: The Project Experience section in the competence paper contains JOB POSITIONS (roles/titles with companies and dates), not project names.
-
-Example format from competence paper: "AI Developer - BOREK SOLUTIONS GROUP (2025-12)" or "Software Development Intern - XPERTT LLC (2025-11)"
-
-Ask about these job positions/roles, not projects. Use varied phrasing:
-- "I see the position 'AI Developer at BOREK SOLUTIONS GROUP' listed. Did the candidate work in this role?"
-- "Let's talk about their experience. The profile shows 'AI Developer at BOREK SOLUTIONS GROUP'. Can you confirm this?"
-- "There's a position 'AI Developer at BOREK SOLUTIONS GROUP' mentioned. Is this accurate?"
-
-Additional Information (Phase 2 - Final Section)
-
-"Do you have any additional information about the candidate from the interview that's not in the CV or competence paper?"
-
-If recruiter provides new info (e.g., "They also know Python" or "They worked on X project"):
-- This is NEW information NOT in the competence paper or CV
-- Automatically categorize it into the correct section
-- Note it as a new item to be added
-- Acknowledge it naturally: "Got it, I'll add that." or "Perfect, noted." or "Thanks, I've got that."
-- ALWAYS ask a follow-up: "Do you have anything else to add?" or "Is there anything else?" or "Anything more to add?"
-
-CRITICAL: 
-- If the recruiter mentions something that IS already in the competence paper, acknowledge it: "Yes, I see that's already listed." Then ask: "Is there anything NEW to add that's not in the CV or competence paper?"
-- If the recruiter mentions something NEW (not in competence paper), treat it as new information and add it.
-- After EVERY response in Additional Information section where new information was provided, you MUST ask: "Do you have anything else to add?" before considering the section complete.
-
-Only when recruiter explicitly says they're done (see completion signals below), then set "done": true.
-
-IMPORTANT: When recruiter says any of these completion signals, you MUST set "done": true immediately:
-- "no"
-- "nope"
-- "nothing else"
-- "that's all"
-- "that is all"
-- "that's enough"
-- "that is enough"
-- "no more"
-- "nothing more"
-- "that's it"
-- "that is it"
-- "no additional"
-- "no other"
-
-When you detect any completion signal, return: {"question": "", "section": "additional_info", "complete_section": true, "done": true}
-
-Introduction (Recruiter-Facing)
-
-Start with a warm, natural greeting: "Hi! I'll help you confirm the candidate's information. Let me ask you a few quick questions about what's listed in the competence paper."
-
-Or: "Hello! I'm going to ask you some questions to verify the information in the competence paper. Ready when you are!"
-
-Be friendly and natural, not robotic. Pause briefly, then continue automatically.
+INTRODUCTION
+Start friendly and natural:
+- "Hi! I'll help you confirm the information from the competence paper."
+- "Alright, let's go through this together."
 
 JSON OUTPUT ONLY
+
 {
-  "question": "The next short confirmation question, or empty string if finished",
+  "question": "",
   "section": "introduction | core_skills | soft_skills | languages | education | trainings_certifications | technical_competencies | project_experience | additional_info",
   "complete_section": true or false,
   "done": true or false
 }
 
-JSON RULES (STRICT)
+RULES
+- "question" must NOT be empty while done = false
+- No repeated questions
+- No loops
+- Always move forward
 
-"question" MUST NOT be empty while "done" is false
-
-"complete_section" MUST be true only when all items in that section are covered
-
-"done" MUST be true ONLY after:
-
-All 7 sections (Core Skills through Project Experience) are completed, AND
-
-The "Additional Information" section is complete (recruiter says "no", "that's all", "that's enough", "nothing else", "no more", or any similar completion signal)
-
-CRITICAL: When in "additional_info" section, if the last recruiter answer contains any completion signal (no, nope, nothing else, that's all, that's enough, no more, nothing more, that's it, no additional, no other), you MUST immediately return {"question": "", "section": "additional_info", "complete_section": true, "done": true}
-
-No repeated questions
-
-No loops
-
-Always progress forward
+CRITICAL FLOW RULES:
+1. After asking the initial question for a section, wait for recruiter's answer
+2. When recruiter provides an answer listing items → Acknowledge + Ask "Do you have anything else?"
+3. When recruiter says "no"/"that's all" → Set "complete_section": true and move to next section
+4. NEVER ask the same question twice in a row
+5. If you just asked "Do you have anything else?" and recruiter answered, check if it's a completion signal
 """.strip()
 
 
@@ -486,18 +374,50 @@ Return JSON only.
     if not isinstance(extracted, list):
         extracted = []
     cleaned_skills: List[str] = []
+    # Filter out questions and follow-up phrases
+    question_indicators = [
+        "based on your assessment", "what is your experience", "what can you tell me",
+        "do you have anything else", "is there anything else", "anything more",
+        "let's talk about", "now let's move", "which", "should we confirm",
+        "got it", "alright", "perfect", "i see"
+    ]
     for s in extracted:
         if isinstance(s, str):
             s_clean = s.strip()
             if s_clean:
-                cleaned_skills.append(s_clean)
+                s_lower = s_clean.lower()
+                # Skip if it looks like a question, follow-up phrase, or is too short
+                is_question = (
+                    any(indicator in s_lower for indicator in question_indicators) or 
+                    s_clean.endswith('?') or
+                    len(s_clean) < 2
+                )
+                if not is_question:
+                    cleaned_skills.append(s_clean)
 
     notes = str(parsed.get("notes") or "").strip()
 
     # For discovery/additional_info sections, bias status towards new_skill if we have
     # at least one extracted skill.
+    # But filter out completion signals - they should not be stored as skills
     if section_key in {"additional_info"} and cleaned_skills and status != "not_confirmed":
-        status = "new_skill"
+        completion_signals = [
+            "no", "nope", "nothing else", "that's all", "that is all", 
+            "that's enough", "that is enough", "no more", "nothing more",
+            "that's it", "that is it", "no additional", "no other"
+        ]
+        # Remove completion signals from cleaned_skills
+        filtered_skills = [
+            skill for skill in cleaned_skills 
+            if skill.lower().strip() not in completion_signals
+        ]
+        if filtered_skills:
+            cleaned_skills = filtered_skills
+            status = "new_skill"
+        else:
+            # If only completion signals, mark as not_confirmed so nothing is stored
+            cleaned_skills = []
+            status = "not_confirmed"
 
     return {
         "status": status,
@@ -545,6 +465,7 @@ def generate_recruiter_next_question(
     # Normalize history into a safe, compact structure.
     safe_history: List[Dict[str, str]] = []
     last_recruiter_answer = ""
+    last_assistant_question = ""
     for item in history or []:
         role = str(item.get("role", "")).strip().lower()
         content = str(item.get("content", "")).strip()
@@ -553,16 +474,122 @@ def generate_recruiter_next_question(
         safe_history.append({"role": role, "content": content})
         if role == "recruiter":
             last_recruiter_answer = content
+        elif role == "assistant":
+            last_assistant_question = content
     
-    # Check if we're in additional_info section and the last answer indicates completion
-    if section == "additional_info" and last_recruiter_answer:
+    # Check conversation state to determine next action
+    if last_recruiter_answer and last_assistant_question:
         answer_lower = last_recruiter_answer.lower()
+        question_lower = last_assistant_question.lower()
         completion_signals = [
             "no", "nope", "nothing else", "that's all", "that is all", 
             "that's enough", "that is enough", "no more", "nothing more",
             "that's it", "that is it", "no additional", "no other"
         ]
-        if any(signal in answer_lower for signal in completion_signals):
+        followup_questions = [
+            "do you have anything else", "anything else", "is there anything else",
+            "anything more", "anything more to add", "is there anything more"
+        ]
+        
+        # Check if last question was a follow-up question
+        is_followup_question = any(fq in question_lower for fq in followup_questions)
+        
+        # If assistant asked follow-up and recruiter gave completion signal
+        # IMPORTANT: Only process if NOT in additional_info (additional_info is handled separately above)
+        if is_followup_question and section != "additional_info":
+            # Check if answer is ONLY a completion signal (exact match or starts with signal)
+            answer_stripped = answer_lower.strip()
+            is_completion = any(
+                signal == answer_stripped or 
+                answer_stripped.startswith(signal + " ") or 
+                answer_stripped == signal 
+                for signal in completion_signals
+            )
+            if is_completion:
+                logger.info(
+                    f"[generate_recruiter_next_question] Detected completion signal after follow-up: "
+                    f"section={section}, answer='{last_recruiter_answer}'"
+                )
+                # Move to next section
+                section_order = [
+                    "introduction",
+                    "core_skills",
+                    "soft_skills",
+                    "languages",
+                    "education",
+                    "trainings_certifications",
+                    "technical_competencies",
+                    "project_experience",
+                    "additional_info",
+                ]
+                try:
+                    idx = section_order.index(section)
+                    if idx < len(section_order) - 1:
+                        next_section = section_order[idx + 1]
+                        # Return question for next section
+                        return {
+                            "question": f"Based on your assessment, what is your experience with the candidate regarding their {next_section.replace('_', ' ')}?",
+                            "section": next_section,
+                            "complete_section": False,
+                            "done": False,
+                        }
+                except ValueError:
+                    pass
+        
+        # If last question was NOT a follow-up (was initial question) and recruiter answered
+        # The AI should ask "Do you have anything else?" - but we'll let the prompt handle this
+        # However, if recruiter already gave completion signal, we should move forward
+        # IMPORTANT: Only process if NOT in additional_info (additional_info is handled separately above)
+        if not is_followup_question and section != "additional_info":
+            answer_stripped = answer_lower.strip()
+            is_completion = any(
+                signal == answer_stripped or 
+                answer_stripped.startswith(signal + " ") or 
+                answer_stripped == signal 
+                for signal in completion_signals
+            )
+            if is_completion:
+                # Recruiter said "no" to initial question - move to next section
+                logger.info(
+                    f"[generate_recruiter_next_question] Recruiter gave completion signal to initial question: "
+                    f"section={section}, answer='{last_recruiter_answer}'"
+                )
+                section_order = [
+                    "introduction",
+                    "core_skills",
+                    "soft_skills",
+                    "languages",
+                    "education",
+                    "trainings_certifications",
+                    "technical_competencies",
+                    "project_experience",
+                    "additional_info",
+                ]
+                try:
+                    idx = section_order.index(section)
+                    if idx < len(section_order) - 1:
+                        next_section = section_order[idx + 1]
+                        return {
+                            "question": f"Based on your assessment, what is your experience with the candidate regarding their {next_section.replace('_', ' ')}?",
+                            "section": next_section,
+                            "complete_section": False,
+                            "done": False,
+                        }
+                except ValueError:
+                    pass
+    
+    # Check if we're in additional_info section and the last answer indicates completion
+    # CRITICAL: This must be checked BEFORE any other processing to prevent "no" from being used for next section
+    if section == "additional_info" and last_recruiter_answer:
+        answer_lower = last_recruiter_answer.lower().strip()
+        completion_signals = [
+            "no", "nope", "nothing else", "that's all", "that is all", 
+            "that's enough", "that is enough", "no more", "nothing more",
+            "that's it", "that is it", "no additional", "no other"
+        ]
+        # Check if the answer is ONLY a completion signal (not mixed with other content)
+        # This prevents "no" from being extracted as a skill
+        if any(signal == answer_lower or answer_lower.startswith(signal + " ") or answer_lower == signal for signal in completion_signals):
             logger.info(
                 f"[generate_recruiter_next_question] Detected completion signal in additional_info: '{last_recruiter_answer}'"
             )
@@ -572,6 +599,28 @@ def generate_recruiter_next_question(
                 "complete_section": True,
                 "done": True,
             }
+    
+    # Also check if last question was about additional_info and answer was completion signal
+    # This prevents the "no" from being processed when we're already done
+    if last_assistant_question and last_recruiter_answer:
+        question_lower = last_assistant_question.lower()
+        answer_lower = last_recruiter_answer.lower().strip()
+        if "additional information" in question_lower or "additional_info" in question_lower:
+            completion_signals = [
+                "no", "nope", "nothing else", "that's all", "that is all", 
+                "that's enough", "that is enough", "no more", "nothing more",
+                "that's it", "that is it", "no additional", "no other"
+            ]
+            if any(signal == answer_lower or answer_lower.startswith(signal + " ") or answer_lower == signal for signal in completion_signals):
+                logger.info(
+                    f"[generate_recruiter_next_question] Detected completion signal for additional_info, ending flow"
+                )
+                return {
+                    "question": "",
+                    "section": "additional_info",
+                    "complete_section": True,
+                    "done": True,
+                }
 
     # The assistant is responsible for managing its own section progression,
     # but we still pass through the current section for context.
@@ -581,6 +630,67 @@ def generate_recruiter_next_question(
         "current_section": section,
         "history": safe_history,
     }
+    
+    # CRITICAL: Check if recruiter just answered and force follow-up BEFORE calling AI
+    if last_recruiter_answer and last_assistant_question:
+        question_lower = last_assistant_question.lower()
+        followup_questions = [
+            "do you have anything else", "anything else", "is there anything else",
+            "anything more", "anything more to add", "is there anything more"
+        ]
+        is_followup = any(fq in question_lower for fq in followup_questions)
+        
+        if not is_followup and last_recruiter_answer:
+            # Recruiter just answered the initial question
+            answer_lower = last_recruiter_answer.lower()
+            completion_signals = [
+                "no", "nope", "nothing else", "that's all", "that is all", 
+                "that's enough", "that is enough", "no more", "nothing more",
+                "that's it", "that is it", "no additional", "no other"
+            ]
+            
+            if any(signal in answer_lower for signal in completion_signals):
+                # Recruiter said "no" or completion signal - move to next section
+                logger.info(
+                    f"[generate_recruiter_next_question] Recruiter gave completion signal, moving to next section: "
+                    f"section={section}, answer='{last_recruiter_answer}'"
+                )
+                section_order = [
+                    "introduction",
+                    "core_skills",
+                    "soft_skills",
+                    "languages",
+                    "education",
+                    "trainings_certifications",
+                    "technical_competencies",
+                    "project_experience",
+                    "additional_info",
+                ]
+                try:
+                    idx = section_order.index(section)
+                    if idx < len(section_order) - 1:
+                        next_section = section_order[idx + 1]
+                        section_label = next_section.replace("_", " ")
+                        return {
+                            "question": f"Based on your assessment, what is your experience with the candidate regarding their {section_label}?",
+                            "section": next_section,
+                            "complete_section": False,
+                            "done": False,
+                        }
+                except ValueError:
+                    pass
+            else:
+                # Recruiter provided items - FORCE follow-up question immediately
+                logger.info(
+                    f"[generate_recruiter_next_question] Forcing follow-up question: "
+                    f"section={section}, answer='{last_recruiter_answer[:50]}...'"
+                )
+                return {
+                    "question": "Got it. Do you have anything else?",
+                    "section": section,
+                    "complete_section": False,
+                    "done": False,
+                }
 
     try:
         resp = requests.post(
@@ -697,7 +807,7 @@ def generate_recruiter_next_question(
             "trainings_certifications": "Let’s cover trainings and certifications. Which training or certification from the competence paper should we confirm?",
             "technical_competencies": "Now let’s move to technical competencies. Which tools or technologies from the competence paper should we confirm next?",
             "project_experience": "Let’s discuss project experience. Which project or role from the competence paper should we confirm now?",
-            "additional_info": "Do you have any additional information about the candidate from the interview that's not in the CV or competence paper?",
+            "additional_info": "Do you have any additional information from the interview that's not in the CV or competence paper?",
         }
 
         question = fallback_by_section.get(next_section) or fallback_by_section.get(section, "")

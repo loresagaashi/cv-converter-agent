@@ -717,8 +717,23 @@ class ConversationSessionGeneratePaperView(APIView):
             
             if extracted_skills_list and isinstance(extracted_skills_list, list):
                 # Use the extracted_skills from the response (these are the actual confirmed items)
-                items_to_store = [str(item).strip() for item in extracted_skills_list if item and str(item).strip()]
-                logger.debug(f"[GeneratePaper] Using extracted_skills from response: {items_to_store}")
+                # Filter out questions and follow-up phrases
+                filtered_items = []
+                question_indicators = [
+                    "based on your assessment", "what is your experience", "what can you tell me",
+                    "do you have anything else", "is there anything else", "anything more",
+                    "let's talk about", "now let's move", "which", "should we confirm"
+                ]
+                for item in extracted_skills_list:
+                    item_str = str(item).strip()
+                    if item_str:
+                        item_lower = item_str.lower()
+                        # Skip if it looks like a question or follow-up phrase
+                        is_question = any(indicator in item_lower for indicator in question_indicators) or item_str.endswith('?')
+                        if not is_question:
+                            filtered_items.append(item_str)
+                items_to_store = filtered_items
+                logger.debug(f"[GeneratePaper] Using extracted_skills from response (filtered): {items_to_store}")
             
             # If extracted_skills is empty but status is confirmed, extract from question/topic
             if not items_to_store:
@@ -727,10 +742,26 @@ class ConversationSessionGeneratePaperView(APIView):
                     items_to_store = [item_extracted]
                 elif q.topic and q.topic.strip():
                     # Use topic if available (it should contain the skill/item name from original CP)
-                    items_to_store = [q.topic.strip()]
+                    topic = q.topic.strip()
+                    # Filter out questions
+                    question_indicators = [
+                        "based on your assessment", "what is your experience", "what can you tell me",
+                        "do you have anything else", "is there anything else", "anything more",
+                        "let's talk about", "now let's move", "which", "should we confirm"
+                    ]
+                    topic_lower = topic.lower()
+                    is_question = any(indicator in topic_lower for indicator in question_indicators) or topic.endswith('?')
+                    if not is_question:
+                        items_to_store = [topic]
                 elif status_value == "new_skill" and answer_text:
                     # For new skills, use the answer which contains the new information
-                    items_to_store = [answer_text]
+                    # Filter out questions and completion signals
+                    answer_lower = answer_text.lower()
+                    completion_signals = ["no", "nope", "nothing else", "that's all", "that is all"]
+                    is_completion = any(signal in answer_lower for signal in completion_signals)
+                    is_question = answer_text.strip().endswith('?') or "based on your assessment" in answer_lower
+                    if not is_completion and not is_question:
+                        items_to_store = [answer_text]
                 else:
                     # Last fallback: try to extract from question text
                     cleaned = question_text
@@ -739,7 +770,14 @@ class ConversationSessionGeneratePaperView(APIView):
                             cleaned = cleaned[len(prefix):]
                             cleaned = cleaned.split('.')[0].split('?')[0].strip()
                             break
-                    if cleaned and len(cleaned) < 100:
+                    # Filter out questions
+                    question_indicators = [
+                        "based on your assessment", "what is your experience", "what can you tell me",
+                        "do you have anything else", "is there anything else", "anything more"
+                    ]
+                    cleaned_lower = cleaned.lower()
+                    is_question = any(indicator in cleaned_lower for indicator in question_indicators) or cleaned.endswith('?')
+                    if cleaned and len(cleaned) < 100 and not is_question:
                         items_to_store = [cleaned]
             
             # Store all confirmed items
