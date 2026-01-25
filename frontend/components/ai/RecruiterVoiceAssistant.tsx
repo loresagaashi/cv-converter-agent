@@ -258,7 +258,7 @@ export function RecruiterVoiceAssistant({
     const textLower = text.toLowerCase();
 
     let basePitch = 1.0;
-    let baseRate = 1.0;
+    let baseRate = 1.08;
     let baseVolume = 1.0;
 
     // Subtle question intonation and pacing
@@ -269,9 +269,9 @@ export function RecruiterVoiceAssistant({
 
     // Short phrases sound more natural when a bit slower
     if (text.length < 30) {
-      baseRate = Math.min(baseRate, 0.94);
+      baseRate = Math.min(baseRate, 1.0);
     } else if (text.length > 150) {
-      baseRate = Math.max(baseRate, 1.06);
+      baseRate = Math.max(baseRate, 1.12);
     }
 
     // Emotional tone hints (kept subtle and content-agnostic)
@@ -290,8 +290,8 @@ export function RecruiterVoiceAssistant({
     const volumeVariation = 0.04;
 
     utterance.rate = Math.max(
-      0.75,
-      Math.min(1.25, baseRate + (Math.random() * rateVariation - rateVariation / 2))
+      0.85,
+      Math.min(1.35, baseRate + (Math.random() * rateVariation - rateVariation / 2))
     );
     utterance.pitch = Math.max(
       0.75,
@@ -524,8 +524,13 @@ export function RecruiterVoiceAssistant({
 
         historyRef.current.push({ role: "assistant", content: question });
 
+        const isAdditionalInfoFinalPrompt =
+          currentSection === "additional_info" &&
+          isDone &&
+          /\b(anything else|add anything|add more|else we haven't covered)\b/i.test(question || "");
+
         // If this is the final turn (done=true), speak the outro and exit WITHOUT listening
-        if (isDone) {
+        if (isDone && !isAdditionalInfoFinalPrompt) {
           console.log(`[Frontend] 🎬 Final outro detected. Speaking and then exiting conversation loop.`);
           await speak(question);
           if (cancelledRef.current) break;
@@ -634,6 +639,12 @@ export function RecruiterVoiceAssistant({
         let effectiveCompleteSection = completeSection;
         let effectiveNextSection = nextSection as SectionKey;
         let effectiveDone = isDone;
+
+        if (isAdditionalInfoFinalPrompt) {
+          // Backend sometimes marks additional_info as done too early.
+          effectiveCompleteSection = false;
+          effectiveDone = false;
+        }
 
         if (
           !completeSection &&

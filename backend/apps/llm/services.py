@@ -74,6 +74,8 @@ LOGIC FLOW (Per Section):
    - *Good:* "Got that. Is there anything else regarding their soft skills?"
    - *Good:* "Understood. Any other soft skills worth mentioning?"
 4. **Completion:** If they say "No", "That's all", or "Skip", set `"complete_section": true`.
+5. **Output Rules:** When you ask a question (contains a '?'), set `"complete_section": false` and `"done": false`.  
+   Only set `"done": true` when you're ending the conversation with a short closing statement (no question).
 
 JSON OUTPUT ONLY:
 {
@@ -254,6 +256,18 @@ def generate_recruiter_next_question(
     complete_section = bool(parsed.get("complete_section"))
     done = bool(parsed.get("done"))
 
+    is_question_text = "?" in question
+
+    # For additional_info, questions should not end the conversation.
+    if section == "additional_info" and question and is_question_text and done:
+        complete_section = False
+        done = False
+
+    # For additional_info, a non-question statement is treated as the closing message.
+    if section == "additional_info" and question and not is_question_text:
+        complete_section = True
+        done = True
+
     # Strict Server-side Section Ordering Guardrail
     section_order = [
         "introduction",
@@ -292,8 +306,8 @@ def generate_recruiter_next_question(
 
     if next_section != "additional_info" and section != "additional_info":
         done = False
-    elif section == "additional_info" and done:
-         return {
+    elif section == "additional_info" and done and not question:
+        return {
             "question": "",
             "section": "additional_info",
             "complete_section": True,
