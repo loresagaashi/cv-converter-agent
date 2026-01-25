@@ -30,6 +30,38 @@ export default function ConversationCompetenceSummariesPage() {
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [sectionContents, setSectionContents] = useState<Record<string, string>>({});
 
+  const listSections = new Set([
+    "Core Skills",
+    "Soft Skills",
+    "Languages",
+    "Education",
+    "Trainings & Certifications",
+    "Technical Competencies",
+    "Project Experience",
+    "Additional Information from Interview",
+  ]);
+
+  const parseListItems = (content: string): string[] => {
+    return content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => line.replace(/^[-•]\s*/, "").trim());
+  };
+
+  const formatListItems = (items: string[]): string => {
+    return items
+      .map((item) => item.trim())
+      .map((item) => (item ? `- ${item}` : "- "))
+      .join("\n");
+  };
+
+  const updateSectionItems = (sectionName: string, items: string[]) => {
+    const updated = { ...sectionContents };
+    updated[sectionName] = formatListItems(items);
+    setSectionContents(updated);
+  };
+
   useEffect(() => {
     if (!token) return;
     setLoading(true);
@@ -369,15 +401,59 @@ export default function ConversationCompetenceSummariesPage() {
                     </div>
                     <div className="text-slate-200">
                       {editingSection === sectionName ? (
-                        <textarea
-                          className="w-full min-h-[100px] rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
-                          value={sectionContents[sectionName]}
-                          onChange={(e) => {
-                            const updated = { ...sectionContents };
-                            updated[sectionName] = e.target.value;
-                            setSectionContents(updated);
-                          }}
-                        />
+                        listSections.has(sectionName) ? (
+                          <div className="space-y-2">
+                            {(parseListItems(sectionContents[sectionName] || "").length
+                              ? parseListItems(sectionContents[sectionName] || "")
+                              : [""]).map((item, index) => (
+                              <div key={`${sectionName}-${index}`} className="flex items-center gap-2">
+                                <input
+                                  className="flex-1 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
+                                  placeholder="Add item"
+                                  value={item}
+                                  onChange={(e) => {
+                                    const items = parseListItems(sectionContents[sectionName] || "");
+                                    const nextItems = items.length ? [...items] : [""];
+                                    nextItems[index] = e.target.value;
+                                    updateSectionItems(sectionName, nextItems);
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-slate-700/60 px-2.5 py-2 text-xs text-slate-300 hover:bg-slate-800/60"
+                                  onClick={() => {
+                                    const items = parseListItems(sectionContents[sectionName] || "");
+                                    const nextItems = items.length ? [...items] : [""];
+                                    nextItems.splice(index, 1);
+                                    updateSectionItems(sectionName, nextItems);
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="rounded-lg border border-slate-700/60 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800/60"
+                              onClick={() => {
+                                const items = parseListItems(sectionContents[sectionName] || "");
+                                updateSectionItems(sectionName, [...items, ""]);
+                              }}
+                            >
+                              Add item
+                            </button>
+                          </div>
+                        ) : (
+                          <textarea
+                            className="w-full min-h-[100px] rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
+                            value={sectionContents[sectionName]}
+                            onChange={(e) => {
+                              const updated = { ...sectionContents };
+                              updated[sectionName] = e.target.value;
+                              setSectionContents(updated);
+                            }}
+                          />
+                        )
                       ) : (
                         <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans">
                           {sectionContent || <span className="text-slate-500 italic">No content</span>}

@@ -271,7 +271,6 @@ export default function CompetenceSummariesPage() {
           onClose={() => setVoiceOpen(false)}
           cvId={selectedPaper.cv_id}
           paperId={selectedPaper.id}
-          cvFilename={selectedPaper.cv_filename}
         />
       )}
 

@@ -28,7 +28,6 @@ interface RecruiterVoiceAssistantProps {
   onClose: () => void;
   cvId: number;
   paperId: number;
-  cvFilename?: string;
 }
 
 type StatusState = "idle" | "speaking" | "listening" | "thinking" | "generating" | "completed" | "finished" | "error";
@@ -67,7 +66,6 @@ export function RecruiterVoiceAssistant({
   onClose,
   cvId,
   paperId,
-  cvFilename,
 }: RecruiterVoiceAssistantProps) {
   const { token } = useAuth();
 
@@ -82,6 +80,7 @@ export function RecruiterVoiceAssistant({
   const historyRef = useRef<HistoryItem[]>([]);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const cancelledRef = useRef(false);
+  const loggedVoiceRef = useRef(false);
   const sessionIdRef = useRef<number | null>(null); // Use ref to always have latest sessionId
   const sectionQuestionCountRef = useRef<Record<SectionKey, number>>({
     core_skills: 0,
@@ -123,6 +122,13 @@ export function RecruiterVoiceAssistant({
       "Google US English Female",
       "Google UK English Male",
       "Google US English Male",
+      // Microsoft neural voices (Windows)
+      "Microsoft Aria",
+      "Microsoft Jenny",
+      "Microsoft Guy",
+      "Microsoft Sonia",
+      "Microsoft Natasha",
+      "Microsoft Clara",
       // Google standard voices
       "Google UK English",
       "Google US English",
@@ -157,6 +163,37 @@ export function RecruiterVoiceAssistant({
     return voices[0];
   };
 
+  const normalizeForSpeech = (text: string): string => {
+    // Insert light pauses without changing meaning.
+    return text
+      .replace(/\s+/g, " ")
+      .replace(/\s+(and|but|however|also|then)\s+/gi, ", $1 ")
+      .replace(/,\s*,/g, ",")
+      .trim();
+  };
+
+  const splitIntoChunks = (text: string): string[] => {
+    const normalized = normalizeForSpeech(text);
+    const parts = normalized.split(/([.!?])\s+/);
+    const chunks: string[] = [];
+    for (let i = 0; i < parts.length; i += 2) {
+      const sentence = parts[i];
+      const punctuation = parts[i + 1] || "";
+      const chunk = `${sentence}${punctuation}`.trim();
+      if (chunk) chunks.push(chunk);
+    }
+    return chunks.length ? chunks : [normalized];
+  };
+
+  const getPauseMs = (chunk: string): number => {
+    const trimmed = chunk.trim();
+    if (trimmed.endsWith("?")) return 260;
+    if (trimmed.endsWith("!")) return 220;
+    if (trimmed.endsWith(".")) return 200;
+    if (trimmed.endsWith(",")) return 140;
+    return 100;
+  };
+
   const speak = (text: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const synth = getSpeechSynthesis();
@@ -165,31 +202,40 @@ export function RecruiterVoiceAssistant({
         return;
       }
 
+      const chunks = splitIntoChunks(text);
+      let idx = 0;
+
+      const speakNext = () => {
+        if (idx >= chunks.length) {
+          resolve();
+          return;
+        }
+        const chunk = chunks[idx++];
+        const utterance = createUtterance(chunk);
+        utterance.onend = () => {
+          const pause = getPauseMs(chunk);
+          setTimeout(speakNext, pause);
+        };
+        utterance.onerror = () => reject(new Error("Speech synthesis error"));
+        synth.speak(utterance);
+      };
+
       // Wait for voices to load if needed (Chrome requires this)
       if (synth.getVoices().length === 0) {
         synth.onvoiceschanged = () => {
-          const utterance = createUtterance(text, synth);
           setStatus("speaking");
-          utterance.onend = () => resolve();
-          utterance.onerror = () => reject(new Error("Speech synthesis error"));
-          synth.speak(utterance);
+          speakNext();
         };
         // Trigger voices to load
         synth.getVoices();
       } else {
-        const utterance = createUtterance(text, synth);
         setStatus("speaking");
-        utterance.onend = () => resolve();
-        utterance.onerror = () => reject(new Error("Speech synthesis error"));
-        synth.speak(utterance);
+        speakNext();
       }
     });
   };
 
-  const createUtterance = (
-    text: string,
-    synth: SpeechSynthesis
-  ): SpeechSynthesisUtterance => {
+  const createUtterance = (text: string): SpeechSynthesisUtterance => {
     const utterance = new SpeechSynthesisUtterance(text);
 
     // Select best voice
@@ -197,6 +243,12 @@ export function RecruiterVoiceAssistant({
     if (voice) {
       utterance.voice = voice;
       utterance.lang = voice.lang;
+      if (!loggedVoiceRef.current) {
+        console.log(
+          `[Voice] Using voice: name="${voice.name}", lang="${voice.lang}", localService=${voice.localService}`
+        );
+        loggedVoiceRef.current = true;
+      }
     } else {
       // Fallback to default
       utterance.lang = "en-US";
@@ -204,38 +256,51 @@ export function RecruiterVoiceAssistant({
 
     // Add emotions and natural variations based on content
     const textLower = text.toLowerCase();
-    
-    // Adjust pitch for different emotions (more variation for expressiveness)
+
     let basePitch = 1.0;
-    if (textLower.includes('great') || textLower.includes('perfect') || textLower.includes('got it') || 
-        textLower.includes('thanks') || textLower.includes('excellent') || textLower.includes('awesome')) {
-      basePitch = 1.15; // Higher for positive/excited responses
-    } else if (textLower.includes('sorry') || textLower.includes("didn't") || textLower.includes("didn't catch") || 
-               textLower.includes('clarify') || textLower.includes("didn't get")) {
-      basePitch = 0.9; // Lower for apologies/clarifications (more empathetic)
-    } else if (textLower.includes('!') || textLower.includes('hi') || textLower.includes('hello')) {
-      basePitch = 1.12; // Higher for exclamations and greetings
-    } else if (textLower.includes('?') && (textLower.includes('anything else') || textLower.includes('anything more'))) {
-      basePitch = 1.05; // Slightly higher for follow-up questions
-    }
-    
-    // Adjust rate for natural speech (more variation)
     let baseRate = 1.0;
-    if (text.length < 30) {
-      baseRate = 0.92; // Slower for very short phrases (more emphasis)
-    } else if (text.length < 60) {
-      baseRate = 0.96; // Slightly slower for short phrases
-    } else if (text.length > 150) {
-      baseRate = 1.08; // Faster for longer sentences
+    let baseVolume = 1.0;
+
+    // Subtle question intonation and pacing
+    if (text.trim().endsWith("?")) {
+      basePitch = 1.08;
+      baseRate = 0.98;
     }
-    
-    // Add more variation for naturalness and emotion
-    const pitchVariation = 0.05; // More variation for expressiveness
-    const rateVariation = 0.04;
-    
-    utterance.rate = Math.max(0.8, Math.min(1.2, baseRate + (Math.random() * rateVariation - rateVariation / 2)));
-    utterance.pitch = Math.max(0.8, Math.min(1.3, basePitch + (Math.random() * pitchVariation - pitchVariation / 2)));
-    utterance.volume = 1.0; // Full volume (0 to 1, default 1)
+
+    // Short phrases sound more natural when a bit slower
+    if (text.length < 30) {
+      baseRate = Math.min(baseRate, 0.94);
+    } else if (text.length > 150) {
+      baseRate = Math.max(baseRate, 1.06);
+    }
+
+    // Emotional tone hints (kept subtle and content-agnostic)
+    if (textLower.includes("sorry") || textLower.includes("apologize")) {
+      basePitch = 0.9;
+      baseRate = 0.92;
+      baseVolume = 0.92;
+    } else if (textLower.includes("thank") || textLower.includes("great")) {
+      basePitch = 1.15;
+      baseRate = 1.02;
+    }
+
+    // Add more variation for naturalness
+    const pitchVariation = 0.12;
+    const rateVariation = 0.08;
+    const volumeVariation = 0.04;
+
+    utterance.rate = Math.max(
+      0.75,
+      Math.min(1.25, baseRate + (Math.random() * rateVariation - rateVariation / 2))
+    );
+    utterance.pitch = Math.max(
+      0.75,
+      Math.min(1.35, basePitch + (Math.random() * pitchVariation - pitchVariation / 2))
+    );
+    utterance.volume = Math.max(
+      0.85,
+      Math.min(1.0, baseVolume + (Math.random() * volumeVariation - volumeVariation / 2))
+    );
 
     return utterance;
   };
@@ -258,7 +323,7 @@ export function RecruiterVoiceAssistant({
       let interimTranscript = "";
       let finished = false;
       let silenceTimeout: NodeJS.Timeout | null = null;
-      const SILENCE_TIMEOUT_MS = 4000; // Wait 4 seconds of silence before considering speech complete
+      const SILENCE_TIMEOUT_MS = 2000; // Wait 4 seconds of silence before considering speech complete
 
       const resetSilenceTimeout = () => {
         if (silenceTimeout) {
@@ -280,10 +345,10 @@ export function RecruiterVoiceAssistant({
 
       recognition.onresult = (event: any) => {
         if (!event || !event.results || finished) return;
-        
+
         let hasNewFinal = false;
         let hasNewInterim = false;
-        
+
         for (let i = event.resultIndex || 0; i < event.results.length; i++) {
           const result = event.results[i];
           if (result && result[0]) {
@@ -311,11 +376,11 @@ export function RecruiterVoiceAssistant({
 
       recognition.onerror = (event: any) => {
         if (finished) return;
-        
+
         if (silenceTimeout) {
           clearTimeout(silenceTimeout);
         }
-        
+
         finished = true;
         try {
           recognition.stop();
@@ -335,11 +400,11 @@ export function RecruiterVoiceAssistant({
 
       recognition.onend = () => {
         if (finished) return;
-        
+
         if (silenceTimeout) {
           clearTimeout(silenceTimeout);
         }
-        
+
         finished = true;
         // Return whatever we have (final or interim)
         resolve(finalTranscript || interimTranscript);
@@ -347,7 +412,7 @@ export function RecruiterVoiceAssistant({
 
       setStatus("listening");
       recognition.start();
-      
+
       // Start the silence timeout
       resetSilenceTimeout();
     });
@@ -426,11 +491,6 @@ export function RecruiterVoiceAssistant({
       setSessionId(startRes.session_id);
       sessionIdRef.current = startRes.session_id; // Also store in ref for immediate access
 
-      const namePart = cvFilename ? ` for ${cvFilename}` : "";
-      await speak(
-        `Hello, I am an AI recruiter assistant. I will help you verify the information in this CV${namePart}. We will go section by section, starting with core skills.`,
-      );
-
       let currentSection: SectionKey = "core_skills";
       setSection(currentSection); // Set initial section
       let done = false;
@@ -441,7 +501,7 @@ export function RecruiterVoiceAssistant({
         setStatus("thinking");
         console.log(`[Frontend] 🔄 Fetching next question for section: ${currentSection}`);
         const { question, nextSection, completeSection, done: isDone } = await fetchNextQuestion(currentSection);
-        
+
         console.log(
           `[Frontend] 📥 Received from backend: section=${nextSection}, complete_section=${completeSection}, done=${isDone}, question="${question?.substring(0, 50)}..."`
         );
@@ -463,6 +523,17 @@ export function RecruiterVoiceAssistant({
           (sectionQuestionCountRef.current[currentSection] || 0) + 1;
 
         historyRef.current.push({ role: "assistant", content: question });
+
+        // If this is the final turn (done=true), speak the outro and exit WITHOUT listening
+        if (isDone) {
+          console.log(`[Frontend] 🎬 Final outro detected. Speaking and then exiting conversation loop.`);
+          await speak(question);
+          if (cancelledRef.current) break;
+          done = true;
+          break;
+        }
+
+        // For normal questions, speak then listen for answer
         await speak(question);
         if (cancelledRef.current) break;
 
@@ -489,7 +560,7 @@ export function RecruiterVoiceAssistant({
           // Phase 1: validation for main sections, Phase 2: discovery for additional_info
           // Use ref to get the latest sessionId (React state updates are async)
           const currentSessionId = sessionIdRef.current || sessionId;
-          
+
           if (!currentSessionId) {
             console.error("[Frontend] ❌ Cannot store conversation turn: sessionId is null");
             console.error("[Frontend] Attempting to re-create session...");
@@ -498,7 +569,7 @@ export function RecruiterVoiceAssistant({
               console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
               setSessionId(startRes.session_id);
               sessionIdRef.current = startRes.session_id;
-              
+
               // Retry storing the turn with the new session
               const phase = currentSection === "additional_info" ? "discovery" : "validation";
               const result = await createConversationTurn(token, {
@@ -523,7 +594,7 @@ export function RecruiterVoiceAssistant({
               );
               console.log(`[Frontend] Question: ${question.substring(0, 50)}...`);
               console.log(`[Frontend] Answer: ${answer.substring(0, 50)}...`);
-              
+
               const result = await createConversationTurn(token, {
                 session_id: currentSessionId,
                 section: currentSection, // Use current section from backend
@@ -531,7 +602,7 @@ export function RecruiterVoiceAssistant({
                 question_text: question,
                 answer_text: answer,
               });
-              
+
               console.log(
                 `[Frontend] ✅ Successfully stored: question_id=${result.question_id}, response_id=${result.response_id}, status=${result.status}`
               );
@@ -581,7 +652,7 @@ export function RecruiterVoiceAssistant({
         if (effectiveCompleteSection) {
           currentSection = effectiveNextSection;
           setSection(effectiveNextSection);
-          
+
           // Check if all 7 main sections are complete (before additional_info)
           const mainSections = SECTION_ORDER.slice(0, 7); // First 7 sections
           if (effectiveNextSection === "additional_info") {
@@ -590,19 +661,19 @@ export function RecruiterVoiceAssistant({
         }
 
         done = effectiveDone;
-        
+
         console.log(
           `[Frontend] 📊 Loop state: currentSection=${currentSection}, done=${done}, ` +
           `completeSection=${effectiveCompleteSection}, allSectionsComplete=${allSectionsComplete}`
         );
-        
+
         // If done is true, all sections including additional_info are complete
         if (done) {
           allSectionsComplete = true;
           console.log(`[Frontend] ✅ Conversation complete! All sections done.`);
         }
       }
-      
+
       console.log(`[Frontend] 🏁 Exited main loop. done=${done}, allSectionsComplete=${allSectionsComplete}`);
 
       // Phase 2 is handled automatically by the backend - it will move to additional_info
@@ -614,34 +685,31 @@ export function RecruiterVoiceAssistant({
         `[Frontend] 🔍 Checking generation conditions: cancelled=${cancelledRef.current}, ` +
         `sessionId=${finalSessionId}, done=${done}, hasGeneratedPaper=${hasGeneratedPaper}`
       );
-      
+
       if (!cancelledRef.current && finalSessionId && done && !hasGeneratedPaper) {
         try {
           console.log(`[Frontend] 🚀 Starting competence paper generation...`);
           console.log(`[Frontend] 📊 Session summary: sessionId=${finalSessionId}, totalQuestions=${historyRef.current.filter(h => h.role === 'assistant').length}`);
           setStatus("generating");
           setIsGeneratingPaper(true);
-          await speak("Thank you for all the information. I'm now generating the competence paper based on our conversation. This may take a moment.");
-          
           console.log(`[Frontend] 📞 Calling generateConversationCompetencePaper API for session ${finalSessionId}...`);
           const startTime = Date.now();
           const generatedPaper = await generateConversationCompetencePaper(token, finalSessionId);
           const duration = Date.now() - startTime;
-          
+
           console.log(`[Frontend] ✅ Paper generated successfully in ${duration}ms:`, generatedPaper);
           console.log(`[Frontend] 📄 Paper details: id=${generatedPaper.id}, content_length=${generatedPaper.content?.length || 0}, cv_id=${generatedPaper.cv_id}`);
-          
+
           setHasGeneratedPaper(true);
           setGeneratedPaperId(generatedPaper.id);
-          
+
           // Store the paper ID for later editing/exporting
           if (generatedPaper?.id) {
             console.log(`[Frontend] 💾 Stored paper ID ${generatedPaper.id} for editing/exporting`);
           }
-          
-          await speak("The competence paper has been generated successfully. You can now review, edit, and export it.");
+
           setStatus("completed");
-          
+
           // Close the bot automatically after a short delay
           setTimeout(() => {
             console.log(`[Frontend] 🚪 Auto-closing bot after paper generation`);
@@ -652,7 +720,6 @@ export function RecruiterVoiceAssistant({
           console.error(`[Frontend] Error details:`, err?.message, err?.response);
           setError(err?.message || "Failed to generate conversation competence paper.");
           setStatus("error");
-          await speak("I encountered an error while generating the competence paper. Please try again.");
         } finally {
           setIsGeneratingPaper(false);
         }
@@ -670,9 +737,7 @@ export function RecruiterVoiceAssistant({
 
       if (!cancelledRef.current) {
         setStatus("finished");
-        if (!hasGeneratedPaper && done) {
-          await speak("Thank you. The verification conversation for this CV is now complete.");
-        }
+        // No static outro; rely on backend-generated prompts only.
       }
     } catch (err: any) {
       setStatus("error");
@@ -756,93 +821,153 @@ export function RecruiterVoiceAssistant({
     }
   })();
 
+  const statusLabel: string = (() => {
+    switch (status) {
+      case "speaking":
+        return "Speaking";
+      case "listening":
+        return "Listening";
+      case "thinking":
+        return "Thinking";
+      case "generating":
+        return "Generating";
+      case "completed":
+        return "Completed";
+      case "finished":
+        return "Finished";
+      case "error":
+        return "Error";
+      default:
+        return "Idle";
+    }
+  })();
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950/95 p-6 shadow-2xl flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-slate-400">
-              Voice-only recruiter assistant •{" "}
-              <span className="font-semibold text-emerald-300">{sectionLabel}</span>
-            </p>
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 backdrop-blur-md px-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-800/70 bg-gradient-to-b from-slate-950/95 to-slate-950/90 p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="h-11 w-11 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center">
+              <svg className="w-5 h-5 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 10v2a7 7 0 01-14 0v-2M12 17v4m0 0H9m3 0h3" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-emerald-300/80">Recruiter Voice Assistant</p>
+              <h2 className="text-lg font-semibold text-slate-100">Interview Verification</h2>
+              <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                <span className="rounded-full bg-slate-800/70 px-2 py-0.5 text-slate-300">
+                  Section: {sectionLabel}
+                </span>
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                  {statusLabel}
+                </span>
+              </div>
+            </div>
           </div>
           <button
             onClick={handleEnd}
-            className="rounded-full bg-red-500/90 hover:bg-red-600 text-xs font-semibold text-white px-3 py-1.5 shadow-lg shadow-red-500/30 transition-colors"
+            className="rounded-lg bg-red-500/90 hover:bg-red-600 text-xs font-semibold text-white px-3 py-2 shadow-lg shadow-red-500/30 transition-colors"
           >
-            End
+            End Session
           </button>
         </div>
 
-        <div className="flex flex-col items-center justify-center py-6 gap-3">
-          <div className="relative">
-            <div className="w-14 h-14 rounded-full bg-emerald-500/15 border border-emerald-400/40 flex items-center justify-center">
-              <span className="w-7 h-7 rounded-full bg-emerald-400/90 text-slate-950 flex items-center justify-center">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.8}
-                    d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.8}
-                    d="M19 10v2a7 7 0 01-14 0v-2M12 17v4m0 0H9m3 0h3"
-                  />
-                </svg>
-              </span>
+        {/* Show completion screen when finished */}
+        {status === "finished" && !isGeneratingPaper && !hasGeneratedPaper ? (
+          <div className="mt-6 rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 p-8 text-center">
+            <div className="mx-auto h-16 w-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400/40 flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
             </div>
-            {(status === "speaking" || status === "listening") && (
-              <span className="absolute -inset-1 rounded-full border border-emerald-400/40 animate-ping" />
-            )}
-            {(status === "generating" || isGeneratingPaper) && (
-              <div className="absolute -inset-1 rounded-full border border-emerald-400/40 animate-pulse" />
-            )}
+            <h3 className="text-xl font-bold text-emerald-200 mb-2">Interview Complete!</h3>
+            <p className="text-sm text-slate-300 mb-6 max-w-md mx-auto">
+              Thank you for completing the verification interview. All information has been collected successfully.
+            </p>
+            <button
+              onClick={handleEnd}
+              className="rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-sm font-semibold text-slate-950 px-6 py-3 shadow-lg shadow-emerald-500/30 transition-all hover:scale-105"
+            >
+              Close Interview
+            </button>
           </div>
-          {error && <p className="text-xs text-red-300 text-center px-4">{error}</p>}
-          {(status === "generating" || isGeneratingPaper) && (
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-6 h-6 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin"></div>
-              <p className="text-xs text-emerald-300 text-center px-4 font-medium">
-                Saving the new competence paper...
-              </p>
-              <p className="text-xs text-slate-500 text-center px-4">
-                Processing your answers and generating the document
-              </p>
-            </div>
-          )}
-          {status === "completed" && hasGeneratedPaper && (
-            <div className="flex flex-col items-center gap-3 mt-2">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center">
-                <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+        ) : (
+          <div className="mt-6 rounded-xl border border-slate-800/60 bg-slate-950/60 p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="h-16 w-16 rounded-full bg-emerald-500/10 border border-emerald-400/30 flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-full bg-emerald-400/90" />
+                  </div>
+                  {(status === "speaking" || status === "listening") && (
+                    <span className="absolute -inset-1 rounded-full border border-emerald-400/30 animate-ping" />
+                  )}
+                  {(status === "generating" || isGeneratingPaper) && (
+                    <span className="absolute -inset-1 rounded-full border border-emerald-400/30 animate-pulse" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm text-slate-200 font-medium">Live Session</p>
+                  <p className="text-xs text-slate-400">Audio I/O is active while listening or speaking.</p>
+                </div>
               </div>
-              <p className="text-sm text-emerald-300 font-semibold">Competence Paper Generated!</p>
-              <p className="text-xs text-slate-400 text-center">The paper has been saved and is ready for review</p>
-              {generatedPaperId && (
-                <div className="flex gap-2 mt-2">
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <span
+                    key={idx}
+                    className={`h-6 w-1.5 rounded-full ${status === "speaking" || status === "listening"
+                      ? "bg-emerald-400/90 animate-pulse"
+                      : "bg-slate-700/70"
+                      }`}
+                    style={{ animationDelay: `${idx * 120}ms` }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+                {error}
+              </div>
+            )}
+
+            {(status === "generating" || isGeneratingPaper) && (
+              <div className="mt-5 flex items-center gap-3">
+                <div className="h-5 w-5 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin"></div>
+                <div>
+                  <p className="text-xs text-emerald-300 font-medium">Generating competence paper</p>
+                  <p className="text-xs text-slate-400">Processing your answers in the background.</p>
+                </div>
+              </div>
+            )}
+
+            {status === "completed" && hasGeneratedPaper && (
+              <div className="mt-5 flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                <div>
+                  <p className="text-xs text-emerald-200 font-semibold">Competence paper ready</p>
+                  <p className="text-xs text-emerald-200/70">Open to review or export.</p>
+                </div>
+                {generatedPaperId && (
                   <button
                     onClick={() => {
-                      // Navigate to edit page or open modal - you can customize this
                       window.location.href = `/dashboard/cv?paperId=${generatedPaperId}`;
                     }}
-                    className="px-4 py-2 text-xs font-medium bg-blue-500/90 hover:bg-blue-600 text-white rounded-lg transition-colors"
+                    className="rounded-md bg-emerald-400/90 hover:bg-emerald-400 text-xs font-semibold text-slate-950 px-3 py-1.5"
                   >
-                    Edit & Export
+                    Open
                   </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-        <div className="flex justify-end pt-2 border-t border-slate-800">
+        <div className="mt-6 flex justify-end gap-2 border-t border-slate-800/60 pt-4">
           <button
             onClick={handleEnd}
-            className="rounded-lg border border-slate-700/60 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-900/70 hover:border-slate-600 transition-colors"
+            className="rounded-lg border border-slate-700/70 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-900/70 hover:border-slate-600 transition-colors"
           >
             Close
           </button>

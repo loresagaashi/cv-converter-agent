@@ -326,6 +326,15 @@ class ConversationTurnView(APIView):
         # Derive category from section.
         category = self.SECTION_CATEGORY_MAP.get(section, "other")
 
+        # Strict section validation: only allow known sections
+        allowed_sections = set(self.SECTION_CATEGORY_MAP.keys())
+        if section not in allowed_sections:
+            logger.warning(f"[ConversationTurnView] ❌ Invalid or unknown section: {section}")
+            return Response(
+                {"detail": f"Invalid section: {section}. Must be one of: {', '.join(allowed_sections)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Compute next question_order.
         last_q = (
             ConversationQuestion.objects.filter(session=session)
@@ -529,8 +538,8 @@ class ConversationSessionGeneratePaperView(APIView):
         """Format education items for the template."""
         if not education_items:
             return "-"
-        # Join with semicolons, limit to reasonable length
-        formatted = "; ".join(education_items[:3])
+        # Join with newlines, limit to reasonable length
+        formatted = "\n".join(education_items[:3])
         return formatted
     
     def _format_tech_competencies_grouped(self, tech_competencies: list) -> str:
@@ -641,7 +650,7 @@ class ConversationSessionGeneratePaperView(APIView):
             "soft_skills": section_items.get("soft_skills", [])[:5],  # Limit to 5
             "languages": section_items.get("languages", [])[:4],  # Limit to 4
             "education": self._format_education(section_items.get("education", [])) or "-",
-            "trainings": "; ".join(section_items.get("trainings_certifications", [])) or "-",
+            "trainings": "\n".join(section_items.get("trainings_certifications", [])) or "-",
             "recommendation": recommendation,
             "tech_competencies_line": self._format_tech_competencies_grouped(section_items.get("technical_competencies", [])),
             "project_experience_line": "|".join(self._format_project_experience(section_items.get("project_experience", []))),
@@ -1101,7 +1110,7 @@ class ConversationCompetencePaperPDFView(APIView):
             "soft_skills": section_items.get("soft_skills", [])[:5],
             "languages": section_items.get("languages", [])[:4],
             "education": view_instance._format_education(section_items.get("education", [])) or "-",
-            "trainings": "; ".join(section_items.get("trainings_certifications", [])) or "-",
+            "trainings": "\n".join(section_items.get("trainings_certifications", [])) or "-",
             "recommendation": recommendation or "Based on the interview, the candidate demonstrates relevant skills and experience.",
             "tech_competencies_line": view_instance._format_tech_competencies_grouped(section_items.get("technical_competencies", [])),
             "project_experience_line": "|".join(view_instance._format_project_experience(section_items.get("project_experience", []))),

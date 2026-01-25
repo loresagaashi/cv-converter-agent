@@ -89,6 +89,7 @@
             content: '■';
             position: absolute;
             left: 0;
+            top: 0.45em;
             font-size: 4pt;
         }
 
@@ -172,6 +173,7 @@
         .right-content ul {
             list-style: none;
             padding-left: 0;
+            margin-top: 1px;
             margin-bottom: 15px;
         }
 
@@ -189,6 +191,7 @@
             content: '■';
             position: absolute;
             left: 0;
+            top: 0.45em;
             font-size: 4pt;
             font-weight: bold;
         }
@@ -202,6 +205,7 @@
         .main-content ul.sub-bullets li::before,
         .right-content ul.sub-bullets li::before {
             content: '–';
+            top: 0.4em;
             font-size: 6pt;
         }
 
@@ -304,10 +308,10 @@
             </ul>
 
             <h2>EDUCATION:</h2>
-            <p>{{ education if education else '-' }}</p>
+            <p style="white-space: pre-line;">{{ education if education else '-' }}</p>
 
             <h2>TRAININGS:</h2>
-            <p>{{ trainings if trainings else '-' }}</p>
+            <p style="white-space: pre-line;">{{ trainings if trainings else '-' }}</p>
         </div>
 
         <!-- Main Content -->
