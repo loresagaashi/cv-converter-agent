@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
-import { createConversationTurn, generateConversationCompetencePaper, startConversationSession } from "@/lib/api";
+import { createConversationTurn, generateConversationCompetencePaper, startConversationSession, playTextToSpeech } from "@/lib/api";
 
 // Fallback typings for browser speech recognition APIs to satisfy TypeScript
 // in environments where lib.dom.d.ts does not declare them.
@@ -93,11 +93,6 @@ export function RecruiterVoiceAssistant({
     additional_info: 0,
   });
 
-  const getSpeechSynthesis = () => {
-    if (typeof window === "undefined") return null;
-    return window.speechSynthesis || null;
-  };
-
   const getSpeechRecognition = (): BrowserSpeechRecognition | null => {
     if (typeof window === "undefined") return null;
     const AnyWindow = window as any;
@@ -106,204 +101,27 @@ export function RecruiterVoiceAssistant({
     return new SR();
   };
 
-  // Select the best available voice (prefer natural-sounding voices)
-  const getBestVoice = (): SpeechSynthesisVoice | null => {
-    const synth = getSpeechSynthesis();
-    if (!synth) return null;
-
-    const voices = synth.getVoices();
-    if (voices.length === 0) return null;
-
-    // Priority order: Google Neural voices > Google voices > Microsoft voices > others
-    // Prefer female voices as they often sound more natural
-    const preferredNames = [
-      // Google Neural voices (best quality)
-      "Google UK English Female",
-      "Google US English Female",
-      "Google UK English Male",
-      "Google US English Male",
-      // Microsoft neural voices (Windows)
-      "Microsoft Aria",
-      "Microsoft Jenny",
-      "Microsoft Guy",
-      "Microsoft Sonia",
-      "Microsoft Natasha",
-      "Microsoft Clara",
-      // Google standard voices
-      "Google UK English",
-      "Google US English",
-      // Microsoft voices
-      "Microsoft Zira - English (United States)",
-      "Microsoft Hazel - English (Great Britain)",
-      "Microsoft Susan - English (United States)",
-      // Other natural voices
-      "Samantha",
-      "Victoria",
-      "Alex",
-      "Karen",
-      "Fiona",
-    ];
-
-    // Try to find a preferred voice
-    for (const name of preferredNames) {
-      const voice = voices.find((v) => v.name.includes(name));
-      if (voice) return voice;
+  const speak = async (text: string): Promise<void> => {
+    if (!token) {
+      throw new Error("Missing auth token for TTS.");
     }
 
-    // Fallback: find any English voice that's not obviously robotic
-    const englishVoice = voices.find(
-      (v) =>
-        v.lang.startsWith("en") &&
-        !v.name.toLowerCase().includes("robotic") &&
-        !v.name.toLowerCase().includes("novox")
-    );
-    if (englishVoice) return englishVoice;
+    try {
+      setStatus("speaking");
+      const audio = await playTextToSpeech(text, token);
 
-    // Last resort: return first available voice
-    return voices[0];
-  };
-
-  const normalizeForSpeech = (text: string): string => {
-    // Insert light pauses without changing meaning.
-    return text
-      .replace(/\s+/g, " ")
-      .replace(/\s+(and|but|however|also|then)\s+/gi, ", $1 ")
-      .replace(/,\s*,/g, ",")
-      .trim();
-  };
-
-  const splitIntoChunks = (text: string): string[] => {
-    const normalized = normalizeForSpeech(text);
-    const parts = normalized.split(/([.!?])\s+/);
-    const chunks: string[] = [];
-    for (let i = 0; i < parts.length; i += 2) {
-      const sentence = parts[i];
-      const punctuation = parts[i + 1] || "";
-      const chunk = `${sentence}${punctuation}`.trim();
-      if (chunk) chunks.push(chunk);
+      return new Promise((resolve, reject) => {
+        audio.onended = () => resolve();
+        audio.onerror = () => reject(new Error("Audio playback error"));
+        audio.play().catch(reject);
+      });
+    } catch (err) {
+      console.error("[speak] TTS error:", err);
+      throw err;
     }
-    return chunks.length ? chunks : [normalized];
   };
 
-  const getPauseMs = (chunk: string): number => {
-    const trimmed = chunk.trim();
-    if (trimmed.endsWith("?")) return 260;
-    if (trimmed.endsWith("!")) return 220;
-    if (trimmed.endsWith(".")) return 200;
-    if (trimmed.endsWith(",")) return 140;
-    return 100;
-  };
 
-  const speak = (text: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const synth = getSpeechSynthesis();
-      if (!synth) {
-        reject(new Error("Speech synthesis not supported in this browser."));
-        return;
-      }
-
-      const chunks = splitIntoChunks(text);
-      let idx = 0;
-
-      const speakNext = () => {
-        if (idx >= chunks.length) {
-          resolve();
-          return;
-        }
-        const chunk = chunks[idx++];
-        const utterance = createUtterance(chunk);
-        utterance.onend = () => {
-          const pause = getPauseMs(chunk);
-          setTimeout(speakNext, pause);
-        };
-        utterance.onerror = () => reject(new Error("Speech synthesis error"));
-        synth.speak(utterance);
-      };
-
-      // Wait for voices to load if needed (Chrome requires this)
-      if (synth.getVoices().length === 0) {
-        synth.onvoiceschanged = () => {
-          setStatus("speaking");
-          speakNext();
-        };
-        // Trigger voices to load
-        synth.getVoices();
-      } else {
-        setStatus("speaking");
-        speakNext();
-      }
-    });
-  };
-
-  const createUtterance = (text: string): SpeechSynthesisUtterance => {
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    // Select best voice
-    const voice = getBestVoice();
-    if (voice) {
-      utterance.voice = voice;
-      utterance.lang = voice.lang;
-      if (!loggedVoiceRef.current) {
-        console.log(
-          `[Voice] Using voice: name="${voice.name}", lang="${voice.lang}", localService=${voice.localService}`
-        );
-        loggedVoiceRef.current = true;
-      }
-    } else {
-      // Fallback to default
-      utterance.lang = "en-US";
-    }
-
-    // Add emotions and natural variations based on content
-    const textLower = text.toLowerCase();
-
-    let basePitch = 1.0;
-    let baseRate = 1.08;
-    let baseVolume = 1.0;
-
-    // Subtle question intonation and pacing
-    if (text.trim().endsWith("?")) {
-      basePitch = 1.08;
-      baseRate = 0.98;
-    }
-
-    // Short phrases sound more natural when a bit slower
-    if (text.length < 30) {
-      baseRate = Math.min(baseRate, 1.0);
-    } else if (text.length > 150) {
-      baseRate = Math.max(baseRate, 1.12);
-    }
-
-    // Emotional tone hints (kept subtle and content-agnostic)
-    if (textLower.includes("sorry") || textLower.includes("apologize")) {
-      basePitch = 0.9;
-      baseRate = 0.92;
-      baseVolume = 0.92;
-    } else if (textLower.includes("thank") || textLower.includes("great")) {
-      basePitch = 1.15;
-      baseRate = 1.02;
-    }
-
-    // Add more variation for naturalness
-    const pitchVariation = 0.12;
-    const rateVariation = 0.08;
-    const volumeVariation = 0.04;
-
-    utterance.rate = Math.max(
-      0.85,
-      Math.min(1.35, baseRate + (Math.random() * rateVariation - rateVariation / 2))
-    );
-    utterance.pitch = Math.max(
-      0.75,
-      Math.min(1.35, basePitch + (Math.random() * pitchVariation - pitchVariation / 2))
-    );
-    utterance.volume = Math.max(
-      0.85,
-      Math.min(1.0, baseVolume + (Math.random() * volumeVariation - volumeVariation / 2))
-    );
-
-    return utterance;
-  };
 
   const startListening = (): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -323,7 +141,7 @@ export function RecruiterVoiceAssistant({
       let interimTranscript = "";
       let finished = false;
       let silenceTimeout: NodeJS.Timeout | null = null;
-      const SILENCE_TIMEOUT_MS = 2000; // Wait 4 seconds of silence before considering speech complete
+      const SILENCE_TIMEOUT_MS = 1500; // Wait 1 second of silence before considering speech complete (optimized for snappier responses)
 
       const resetSilenceTimeout = () => {
         if (silenceTimeout) {
@@ -777,10 +595,6 @@ export function RecruiterVoiceAssistant({
     } else {
       cancelledRef.current = true;
       stopListening();
-      const synth = getSpeechSynthesis();
-      if (synth && synth.speaking) {
-        synth.cancel();
-      }
       setStatus("idle");
       setError(null);
       setHasGeneratedPaper(false);
@@ -794,10 +608,6 @@ export function RecruiterVoiceAssistant({
     return () => {
       cancelledRef.current = true;
       stopListening();
-      const synth = getSpeechSynthesis();
-      if (synth && synth.speaking) {
-        synth.cancel();
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -805,10 +615,6 @@ export function RecruiterVoiceAssistant({
   const handleEnd = () => {
     cancelledRef.current = true;
     stopListening();
-    const synth = getSpeechSynthesis();
-    if (synth && synth.speaking) {
-      synth.cancel();
-    }
     setStatus("finished");
     onClose();
   };

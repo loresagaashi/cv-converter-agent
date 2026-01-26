@@ -27,6 +27,7 @@ OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
 # OpenAI config for recruiter assistant (gpt-4o-mini).
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_AUDIO_SPEECH_URL = "https://api.openai.com/v1/audio/speech"
 OPENAI_RECRUITER_MODEL = os.environ.get("OPENAI_RECRUITER_MODEL", "gpt-4o-mini")
 
 
@@ -56,14 +57,17 @@ STRICT SECTION ORDER:
 8) Project Experience (slug: project_experience)
 9) Additional Information (slug: additional_info)
 
-PERSONALITY & SPEAKING STYLE:
-- **NO ROBOTIC PHRASING:** Do not say underscores (e.g., never say "project_experience"). Say "Project Experience".
+PERSONALITY & SPEAKING STYLE (Human-Like & Varied):
+- **NO ROBOTIC PHRASING:** NEVER read technical underscores aloud. Say "Project Experience", NOT "project_experience".
+- **CONVERSATIONAL FILLERS:** Use natural breathing-like phrases: "Oh, I see", "That's great", "Hmm, interesting", "Got it", "Alright".
 - **VARY YOUR QUESTIONS:** Do not start every sentence with "Based on your assessment...". Mix it up:
    - "Let's move on to..."
    - "What can you tell me about..."
    - "How about their..."
    - "Next up is..."
-- **BE REACTIVE:** Use short fillers to sound engaged. (e.g., "Oh, that's great.", "I see.", "Interesting.", "Got it.").
+   - "Okay, so..."
+- **BREATHING PUNCTUATION:** Use commas and ellipses naturally to create pauses: "Well... let's see", "Alright, so..."
+- **BE REACTIVE:** Acknowledge answers warmly before moving on.
 - **FINAL SECTION:** When asking about "Additional Information", sound natural. Ask: "Is there anything else we haven't covered?" or "Do you want to add anything else?"
 
 LOGIC FLOW (Per Section):
@@ -113,7 +117,7 @@ Analyze the User's Answer in response to the Question.
 
 Task:
 1. Identify if the user is Confirming, Denying, or Adding new skills.
-2. Extract the specific skills mentioned.
+2. Extract the specific items mentioned.
 
 Output JSON:
 {
@@ -124,6 +128,11 @@ Output JSON:
 }
 
 Rules:
+- **CRITICAL EXTRACTION RULE:** For Role, Project, Education, or Training, ALWAYS include the SOURCE/INSTITUTION/COMPANY if mentioned.
+  * Example: Extract "AI Developer at Borek Solutions" instead of just "AI Developer"
+  * Example: Extract "Bachelor's in Computer Science from MIT" instead of just "Bachelor's in Computer Science"
+  * Example: Extract "AWS Certification from Amazon" instead of just "AWS Certification"
+- For Languages, include proficiency level if mentioned (e.g., "English - C1", "Spanish - Native").
 - "confirmed": User agrees or confirms existing skills.
 - "new_skill": User provides NEW info not asked in the question.
 - "not_confirmed": User explicitly denies ("No, they don't know that").
@@ -320,6 +329,48 @@ def generate_recruiter_next_question(
         "complete_section": complete_section,
         "done": done,
     }
+
+
+def generate_ai_voice(text: str) -> bytes:
+    """
+    Generate emotional AI voice using OpenAI's TTS API.
+    Uses the 'shimmer' voice for an expressive, natural tone.
+    
+    Args:
+        text: The text to convert to speech
+        
+    Returns:
+        Binary audio content (MP3 format)
+        
+    Raises:
+        Exception: If the API call fails
+    """
+    if not text or not text.strip():
+        raise ValueError("Text cannot be empty")
+    
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY is not configured")
+    
+    try:
+        resp = requests.post(
+            OPENAI_AUDIO_SPEECH_URL,
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "tts-1",
+                "voice": "shimmer",  # Expressive, warm female voice
+                "speed": 1.1,
+                "input": text.strip(),
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        return resp.content
+    except Exception as e:
+        logger.error(f"OpenAI TTS generation failed: {e}")
+        raise
 
 
 def _ollama(prompt: str, *, model: str = OLLAMA_MODEL) -> str:
