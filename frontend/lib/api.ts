@@ -561,3 +561,37 @@ export async function downloadConversationCompetencePaperPdf(
   return res.blob();
 }
 
+// ---------------------------------------------------------------------------
+// Text-to-Speech (OpenAI Emotional TTS)
+// ---------------------------------------------------------------------------
+
+export async function playTextToSpeech(text: string, token: string): Promise<HTMLAudioElement> {
+  const res = await fetch(`${API_BASE_URL}/api/llm/tts/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${token}`,
+    },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!res.ok) {
+    let detail = "Request failed";
+    try {
+      const data = await res.json();
+      detail = (data?.detail as string) || JSON.stringify(data);
+    } catch {
+      // ignore JSON parsing errors
+    }
+    const error = new Error(detail);
+    (error as any).status = res.status;
+    throw error;
+  }
+
+  const audioBlob = await res.blob();
+  const audioUrl = URL.createObjectURL(audioBlob);
+  const audio = new Audio(audioUrl);
+
+  return audio;
+}
+

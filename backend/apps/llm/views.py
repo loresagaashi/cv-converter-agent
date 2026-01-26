@@ -1,7 +1,9 @@
 import logging
 from typing import Any, Dict, List
 
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,7 +11,7 @@ from rest_framework.views import APIView
 from apps.cv.models import CV
 from apps.cv.services import read_cv_file
 from apps.interview.models import CompetencePaper
-from apps.llm.services import generate_recruiter_next_question
+from apps.llm.services import generate_recruiter_next_question, generate_ai_voice
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +95,36 @@ class RecruiterAssistantQuestionView(APIView):
             )
 
         return Response(result, status=200)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def text_to_speech(request):
+    """
+    Convert text to speech using OpenAI's emotional TTS (shimmer voice).
+    
+    Expects JSON payload:
+    {
+        "text": "The text to convert to speech"
+    }
+    
+    Returns audio/mpeg binary content.
+    """
+    data: Dict[str, Any] = request.data or {}
+    text = data.get("text", "").strip()
+    
+    if not text:
+        return Response(
+            {"detail": "Text is required."},
+            status=400,
+        )
+    
+    try:
+        audio_content = generate_ai_voice(text)
+        return HttpResponse(audio_content, content_type="audio/mpeg")
+    except Exception as e:
+        logger.error(f"[text_to_speech] ❌ Error generating audio: {str(e)}", exc_info=True)
+        return Response(
+            {"detail": f"Failed to generate audio: {str(e)}"},
+            status=500,
+        )
