@@ -524,9 +524,15 @@ export function RecruiterVoiceAssistant({
 
         historyRef.current.push({ role: "assistant", content: question });
 
+        // Check if the question actually contains a question mark
+        const hasQuestionMark = (question || "").includes("?");
+
+        // If done=true and there's no question mark, it's definitely a closing statement
+        // The regex check should only apply when there's actually a question mark
         const isAdditionalInfoFinalPrompt =
           currentSection === "additional_info" &&
           isDone &&
+          hasQuestionMark &&
           /\b(anything else|add anything|add more|else we haven't covered)\b/i.test(question || "");
 
         // If this is the final turn (done=true), speak the outro and exit WITHOUT listening
