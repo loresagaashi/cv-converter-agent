@@ -1245,7 +1245,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   Exporting...
                 </>
               ) : (
-                "Competence Letter"
+                "Competence Paper"
               )}
             </button>
             <button
