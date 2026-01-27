@@ -16,6 +16,7 @@ type SectionKey =
   | "trainings_certifications"
   | "technical_competencies"
   | "project_experience"
+  | "recommendations"
   | "additional_info";
 
 interface HistoryItem {
@@ -40,6 +41,7 @@ const SECTION_ORDER: SectionKey[] = [
   "trainings_certifications",
   "technical_competencies",
   "project_experience",
+  "recommendations",
   "additional_info",
 ];
 
@@ -51,6 +53,7 @@ const MAX_QUESTIONS_PER_SECTION: Record<SectionKey, number> = {
   trainings_certifications: 2,
   technical_competencies: 5,
   project_experience: 4,
+  recommendations: 2,
   additional_info: 10, // Allow more questions for additional info collection
 };
 
@@ -92,6 +95,7 @@ export function RecruiterVoiceAssistant({
     trainings_certifications: 0,
     technical_competencies: 0,
     project_experience: 0,
+    recommendations: 0,
     additional_info: 0,
   });
 
@@ -653,6 +657,8 @@ export function RecruiterVoiceAssistant({
         return "Technical Competencies";
       case "project_experience":
         return "Project Experience";
+      case "recommendations":
+        return "Recommendations";
       case "additional_info":
         return "Additional Information";
       default:

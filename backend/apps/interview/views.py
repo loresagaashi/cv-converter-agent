@@ -276,6 +276,7 @@ class ConversationTurnView(APIView):
         "trainings_certifications": "training",
         "technical_competencies": "skill",
         "project_experience": "project",
+        "recommendations": "recommendation",
         "additional_info": "discovery",
     }
 
@@ -451,6 +452,7 @@ class ConversationSessionGeneratePaperView(APIView):
         "trainings_certifications": "Trainings & Certifications",
         "technical_competencies": "Technical Competencies",
         "project_experience": "Project Experience",
+        "recommendations": "Recommendations",
     }
     
     def _extract_item_from_question(self, question_text: str, section: str) -> str:
@@ -613,18 +615,26 @@ class ConversationSessionGeneratePaperView(APIView):
             name = session.cv.original_filename.rsplit('.', 1)[0] if session.cv else ""
         
         # Build recommendation from confirmed items
-        all_skill_lines = section_items.get("core_skills", []) + section_items.get("technical_competencies", [])
-        all_project_lines = section_items.get("project_experience", [])
+        # Priority: explicit recommendations section > constructed summary
         rec_parts = []
+        explicit_recs = section_items.get("recommendations", [])
         
-        if all_skill_lines:
-            rec_parts.append(f"The candidate has confirmed core and technical skills such as: {', '.join(all_skill_lines[:5])}.")
-        if all_project_lines:
-            rec_parts.append(f"They have relevant project experience, including: {', '.join(all_project_lines[:3])}.")
-        if additional_notes:
-            rec_parts.append(f"Additional strengths and context from the interview: {', '.join(additional_notes[:5])}.")
-        
-        recommendation = " ".join(rec_parts) if rec_parts else "Based on the interview, the candidate demonstrates relevant skills and experience."
+        if explicit_recs:
+             # Use the explicit recommendations collected from voice input
+             recommendation = " ".join(explicit_recs)
+        else:
+            # Fallback to constructing one from skills/projects
+            all_skill_lines = section_items.get("core_skills", []) + section_items.get("technical_competencies", [])
+            all_project_lines = section_items.get("project_experience", [])
+            
+            if all_skill_lines:
+                rec_parts.append(f"The candidate has confirmed core and technical skills such as: {', '.join(all_skill_lines[:5])}.")
+            if all_project_lines:
+                rec_parts.append(f"They have relevant project experience, including: {', '.join(all_project_lines[:3])}.")
+            if additional_notes:
+                rec_parts.append(f"Additional strengths and context from the interview: {', '.join(additional_notes[:5])}.")
+            
+            recommendation = " ".join(rec_parts) if rec_parts else "Based on the interview, the candidate demonstrates relevant skills and experience."
         
         # Limit recommendation to 550 characters
         if len(recommendation) > 550:
@@ -830,31 +840,46 @@ class ConversationSessionGeneratePaperView(APIView):
         # Build text content.
         lines = []
 
-        # Our Recommendation – simple summary from confirmed/new items.
-        all_skill_lines = section_items.get("core_skills", []) + section_items.get(
-            "technical_competencies", []
-        )
-        all_project_lines = section_items.get("project_experience", [])
-        rec_parts = []
-        if all_skill_lines:
-            rec_parts.append("The candidate has confirmed core and technical skills such as:")
-            rec_parts.append("- " + "; ".join(all_skill_lines[:5]))
-        if all_project_lines:
-            rec_parts.append("They have relevant project experience, including:")
-            rec_parts.append("- " + "; ".join(all_project_lines[:3]))
-        if additional_notes:
-            rec_parts.append("Additional strengths and context from the interview:")
-            rec_parts.append("- " + "; ".join(additional_notes[:5]))
-
-        # Add recommendation section only once
-        if rec_parts:
+        # Our Recommendation – prioritize explicit recommendations from the recruiter
+        explicit_recs = section_items.get("recommendations", [])
+        
+        if explicit_recs:
+            # Use the explicit recommendations collected from voice input
             lines.append("Our Recommendation")
             lines.append("------------------")
-            lines.extend(rec_parts)
+            # Join all recommendation items into a single paragraph
+            recommendation_text = " ".join(explicit_recs)
+            lines.append(recommendation_text)
             lines.append("")
+        else:
+            # Fallback: construct recommendation from confirmed/new items
+            all_skill_lines = section_items.get("core_skills", []) + section_items.get(
+                "technical_competencies", []
+            )
+            all_project_lines = section_items.get("project_experience", [])
+            rec_parts = []
+            if all_skill_lines:
+                rec_parts.append("The candidate has confirmed core and technical skills such as:")
+                rec_parts.append("- " + "; ".join(all_skill_lines[:5]))
+            if all_project_lines:
+                rec_parts.append("They have relevant project experience, including:")
+                rec_parts.append("- " + "; ".join(all_project_lines[:3]))
+            if additional_notes:
+                rec_parts.append("Additional strengths and context from the interview:")
+                rec_parts.append("- " + "; ".join(additional_notes[:5]))
+
+            # Add recommendation section only once
+            if rec_parts:
+                lines.append("Our Recommendation")
+                lines.append("------------------")
+                lines.extend(rec_parts)
+                lines.append("")
 
         # Structured sections in fixed order.
         for key, label in self.SECTION_LABELS.items():
+            # Skip recommendations since it's already handled in "Our Recommendation" section above
+            if key == "recommendations":
+                continue
             items = section_items.get(key) or []
             if not items:
                 continue

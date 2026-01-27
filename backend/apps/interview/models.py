@@ -118,6 +118,7 @@ class ConversationQuestion(models.Model):
         ("trainings_certifications", "Trainings & Certifications"),
         ("technical_competencies", "Technical Competencies"),
         ("project_experience", "Project Experience"),
+        ("recommendations", "Recommendations"),
         ("additional_info", "Additional Information"),
     ]
 
@@ -130,6 +131,7 @@ class ConversationQuestion(models.Model):
         ('certification', 'Certification'),
         ('project', 'Project'),
         ('discovery', 'Discovery'),
+        ('recommendation', 'Recommendation'),
         ('other', 'Other'),
     ]
     

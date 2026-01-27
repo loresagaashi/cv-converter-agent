@@ -55,7 +55,8 @@ STRICT SECTION ORDER:
 6) Trainings & Certifications (slug: trainings_certifications)
 7) Technical Competencies (slug: technical_competencies)
 8) Project Experience (slug: project_experience)
-9) Additional Information (slug: additional_info)
+9) Recommendations (slug: recommendations)
+10) Additional Information (slug: additional_info)
 
 PERSONALITY & SPEAKING STYLE (Human-Like & Varied):
 - **NO ROBOTIC PHRASING:** NEVER read technical underscores aloud. Say "Project Experience", NOT "project_experience".
@@ -91,7 +92,65 @@ JSON OUTPUT ONLY:
 """.strip()
 
 
+def correct_recommendation_grammar(text: str) -> str:
+    """
+    Correct grammar and typos in recommendation text from speech-to-text transcription.
+    Only fixes obvious errors while preserving the original meaning and content.
+    """
+    if not text or not text.strip():
+        return text
+    
+    system_prompt = """
+You are a grammar correction assistant for speech-to-text transcriptions.
+
+Task:
+- Fix obvious typos and grammar mistakes from speech-to-text transcription
+- Add missing articles (a, an, the) and prepositions where needed
+- Fix capitalization and punctuation
+- Correct verb tenses if clearly wrong
+- DO NOT change the meaning or content
+- DO NOT add new information
+- DO NOT remove any key points
+- Keep the recommendation professional and natural
+
+Return ONLY the corrected text, nothing else.
+""".strip()
+    
+    try:
+        resp = requests.post(
+            OPENAI_CHAT_COMPLETIONS_URL,
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENAI_RECRUITER_MODEL,
+                "temperature": 0.1,  # Low temperature for consistent corrections
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Correct this recommendation text:\n\n{text}"},
+                ],
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        corrected = data["choices"][0]["message"]["content"].strip()
+        
+        # Log the correction for debugging
+        if corrected != text:
+            logger.info(f"[GrammarCorrection] Original: {text[:100]}...")
+            logger.info(f"[GrammarCorrection] Corrected: {corrected[:100]}...")
+        
+        return corrected
+    except Exception as e:
+        logger.error(f"Grammar correction failed: {e}")
+        # If correction fails, return original text
+        return text
+
+
 def classify_recruiter_answer(
+
     question_text: str,
     answer_text: str,
     section: str,
@@ -137,6 +196,8 @@ Rules:
 - "new_skill": User provides NEW info not asked in the question.
 - "not_confirmed": User explicitly denies ("No, they don't know that").
 - **CRITICAL:** If the User answers "No" to a question like "Do you have anything else?", this is NOT a denial of skill. It means they are done. Return status: "not_confirmed" but extracted_skills: [].
+- **RECOMMENDATIONS SECTION - CRITICAL:** If the section is 'recommendations', you MUST extract the COMPLETE, FULL TEXT of what the user said. DO NOT SUMMARIZE. DO NOT SHORTEN. DO NOT EXTRACT KEYWORDS. Put the entire answer text verbatim into extracted_skills as a single string. The recommendation should be preserved exactly as spoken by the recruiter.
+  * Example: If user says "I highly recommend this candidate as a detailed oriented software engineer he has consistently delivered high quality full stack Solutions", extract the ENTIRE sentence, not just "detailed oriented software engineer".
 """.strip()
 
     user_payload: Dict[str, Any] = {
@@ -188,6 +249,18 @@ Rules:
         extracted = []
     
     cleaned_skills = [s.strip() for s in extracted if isinstance(s, str) and s.strip()]
+    
+    # CRITICAL: For recommendations section, ALWAYS use the full answer text verbatim
+    # This prevents the AI from summarizing or extracting keywords
+    # Apply grammar correction to fix speech-to-text transcription errors
+    if section_key == "recommendations" and answer.strip():
+        # First, correct grammar and typos from speech-to-text transcription
+        corrected_text = correct_recommendation_grammar(answer.strip())
+        # Override whatever the AI extracted with the corrected full answer text
+        cleaned_skills = [corrected_text]
+        # If the user is providing a recommendation, it's always a new_skill
+        if status not in ["not_confirmed"]:
+            status = "new_skill"
 
     return {
         "status": status,
@@ -287,6 +360,7 @@ def generate_recruiter_next_question(
         "trainings_certifications",
         "technical_competencies",
         "project_experience",
+        "recommendations",
         "additional_info",
     ]
 
