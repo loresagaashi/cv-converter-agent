@@ -76,9 +76,11 @@ export function RecruiterVoiceAssistant({
   const [isGeneratingPaper, setIsGeneratingPaper] = useState(false);
   const [hasGeneratedPaper, setHasGeneratedPaper] = useState(false);
   const [generatedPaperId, setGeneratedPaperId] = useState<number | null>(null);
+  const [lastTranscript, setLastTranscript] = useState<string>("");
 
   const historyRef = useRef<HistoryItem[]>([]);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const cancelledRef = useRef(false);
   const loggedVoiceRef = useRef(false);
   const sessionIdRef = useRef<number | null>(null); // Use ref to always have latest sessionId
@@ -109,14 +111,22 @@ export function RecruiterVoiceAssistant({
     try {
       setStatus("speaking");
       const audio = await playTextToSpeech(text, token);
+      currentAudioRef.current = audio;
 
       return new Promise((resolve, reject) => {
-        audio.onended = () => resolve();
-        audio.onerror = () => reject(new Error("Audio playback error"));
+        audio.onended = () => {
+          currentAudioRef.current = null;
+          resolve();
+        };
+        audio.onerror = () => {
+          currentAudioRef.current = null;
+          reject(new Error("Audio playback error"));
+        };
         audio.play().catch(reject);
       });
     } catch (err) {
       console.error("[speak] TTS error:", err);
+      currentAudioRef.current = null;
       throw err;
     }
   };
@@ -137,26 +147,27 @@ export function RecruiterVoiceAssistant({
       recognition.interimResults = true; // Get interim results to detect ongoing speech
       recognition.maxAlternatives = 1;
 
-      let finalTranscript = "";
-      let interimTranscript = "";
+      recognition.maxAlternatives = 1;
+
+      let latestTranscript = "";
       let finished = false;
       let silenceTimeout: NodeJS.Timeout | null = null;
-      const SILENCE_TIMEOUT_MS = 1500; // Wait 1 second of silence before considering speech complete (optimized for snappier responses)
+      const SILENCE_TIMEOUT_MS = 2500; // Wait 2.5 second of silence before considering speech complete (optimized for snappier responses)
 
       const resetSilenceTimeout = () => {
         if (silenceTimeout) {
           clearTimeout(silenceTimeout);
         }
         silenceTimeout = setTimeout(() => {
-          // If we've had silence for 4 seconds and have some transcript, consider it complete
-          if (finalTranscript || interimTranscript) {
+          // If we've had silence for 2.5 seconds and have some transcript, consider it complete
+          if (latestTranscript) {
             finished = true;
             try {
               recognition.stop();
             } catch {
               // ignore
             }
-            resolve(finalTranscript || interimTranscript);
+            resolve(latestTranscript);
           }
         }, SILENCE_TIMEOUT_MS);
       };
@@ -164,32 +175,23 @@ export function RecruiterVoiceAssistant({
       recognition.onresult = (event: any) => {
         if (!event || !event.results || finished) return;
 
-        let hasNewFinal = false;
-        let hasNewInterim = false;
-
-        for (let i = event.resultIndex || 0; i < event.results.length; i++) {
+        let newTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
           const result = event.results[i];
           if (result && result[0]) {
-            const transcript = String(result[0].transcript || "").trim();
-            if (result.isFinal) {
-              // Append final results to finalTranscript
-              if (transcript) {
-                finalTranscript += (finalTranscript ? " " : "") + transcript;
-                hasNewFinal = true;
-                interimTranscript = ""; // Clear interim when we get final
-              }
-            } else {
-              // Update interim results
-              interimTranscript = transcript;
-              hasNewInterim = true;
+            const text = result[0].transcript.trim();
+            if (text) {
+              newTranscript += (newTranscript ? " " : "") + text;
             }
           }
         }
 
-        // Reset silence timeout whenever we get new results (final or interim)
-        if (hasNewFinal || hasNewInterim) {
-          resetSilenceTimeout();
+        if (newTranscript !== latestTranscript) {
+          latestTranscript = newTranscript;
+          setLastTranscript(latestTranscript);
         }
+
+        resetSilenceTimeout();
       };
 
       recognition.onerror = (event: any) => {
@@ -209,7 +211,7 @@ export function RecruiterVoiceAssistant({
         const errType = (event && event.error) || "";
         // Treat "no-speech", "no-match", or "aborted" as soft errors: just return whatever we have.
         if (errType === "no-speech" || errType === "no-match" || errType === "aborted") {
-          resolve(finalTranscript || interimTranscript);
+          resolve(latestTranscript);
           return;
         }
 
@@ -224,8 +226,8 @@ export function RecruiterVoiceAssistant({
         }
 
         finished = true;
-        // Return whatever we have (final or interim)
-        resolve(finalTranscript || interimTranscript);
+        // Return whatever we have
+        resolve(latestTranscript);
       };
 
       setStatus("listening");
@@ -363,6 +365,7 @@ export function RecruiterVoiceAssistant({
         }
 
         // For normal questions, speak then listen for answer
+        setLastTranscript(""); // Clear previous transcript before asking new question
         await speak(question);
         if (cancelledRef.current) break;
 
@@ -372,6 +375,11 @@ export function RecruiterVoiceAssistant({
           setStatus("listening");
           answer = await startListening();
           console.log(`[Frontend] ✅ Received answer: "${answer}"`);
+
+          // Set transcript to show user's answer
+          if (answer) {
+            setLastTranscript(answer);
+          }
         } catch (err: any) {
           console.error(`[Frontend] ❌ Error listening:`, err);
           setError(err?.message || "Voice input error.");
@@ -615,6 +623,14 @@ export function RecruiterVoiceAssistant({
   const handleEnd = () => {
     cancelledRef.current = true;
     stopListening();
+
+    // Stop any currently playing audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+    }
+
     setStatus("finished");
     onClose();
   };
@@ -753,6 +769,13 @@ export function RecruiterVoiceAssistant({
             {error && (
               <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
                 {error}
+              </div>
+            )}
+
+            {lastTranscript && (
+              <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                <p className="text-xs font-semibold text-emerald-300/80 mb-1">You said:</p>
+                <p className="text-sm text-slate-200 italic">"{lastTranscript}"</p>
               </div>
             )}
 
