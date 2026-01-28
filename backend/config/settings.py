@@ -14,7 +14,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(Path(__file__).resolve().parent.parent, '.env'))
+# Load .env file if it exists (for local development)
+env_path = os.path.join(Path(__file__).resolve().parent.parent, '.env')
+if os.path.exists(env_path):
+    load_dotenv(env_path)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,12 +27,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-3$fku%4hggbn)s+zsfg=uz%^(%2ge*jy%+_d^9qkqqmur)6dun'
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is not set. Please set it in your environment variables.")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,cv-converter-agent.onrender.com').split(',')
+# Get Render service URL from environment or use default
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')
+ALLOWED_HOSTS_ENV = os.environ.get('ALLOWED_HOSTS', '')
+
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS = [RENDER_EXTERNAL_HOSTNAME]
+elif ALLOWED_HOSTS_ENV:
+    ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_ENV.split(',')]
+else:
+    # Default for local development
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'cv-converter-agent.onrender.com']
 
 
 # Application definition
@@ -41,6 +56,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'whitenoise.runserver_nostatic',  # Use whitenoise for static files
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
@@ -53,6 +69,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add whitenoise middleware
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -91,19 +108,31 @@ import dj_database_url
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if DATABASE_URL:
+    # Parse DATABASE_URL and add connection options for Render
+    db_config = dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
+    # Add SSL requirement for cloud databases (Supabase, etc.) if not already set
+    if 'OPTIONS' not in db_config:
+        db_config['OPTIONS'] = {}
+    if 'sslmode' not in db_config['OPTIONS']:
+        db_config['OPTIONS']['sslmode'] = 'require'
     DATABASES = {
-        "default": dj_database_url.parse(DATABASE_URL)
+        "default": db_config
     }
 else:
     # Fallback to individual environment variables
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("POSTGRES_DB"),
-            "USER": os.environ.get("POSTGRES_USER"),
-            "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
+            "NAME": os.environ.get("POSTGRES_DB", "postgres"),
+            "USER": os.environ.get("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
             "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "CONN_MAX_AGE": 600,
         }
     }
 
@@ -142,10 +171,15 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(str(BASE_DIR), 'staticfiles')
+
+# WhiteNoise configuration for serving static files
+# Use CompressedStaticFilesStorage instead of Manifest to avoid issues during deployment
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = os.path.join(str(BASE_DIR), 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

@@ -20,3 +20,6 @@ requests==2.32.3
 
 # Production server
 gunicorn==23.0.0
+
+# Static file serving
+whitenoise==6.8.2
