@@ -17,7 +17,8 @@ fpdf2==2.7.6
 
 # PDF rendering (HTML to PDF)
 jinja2==3.1.4
-weasyprint==62.3
+weasyprint>=67.0
+pydyf>=0.12.0
 
 # HTTP requests
 requests==2.32.3

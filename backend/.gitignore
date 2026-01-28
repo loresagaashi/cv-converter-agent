@@ -34,3 +34,8 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test files
+test.pdf
+test_*.pdf
+*.test.pdf

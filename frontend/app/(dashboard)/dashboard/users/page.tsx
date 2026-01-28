@@ -88,6 +88,7 @@ export default function UsersAdminPage() {
 
     let cancelled = false;
     async function load() {
+      if (!token) return; // Type guard
       setLoading(true);
       setError(null);
       try {
