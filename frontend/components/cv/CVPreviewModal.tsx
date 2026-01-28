@@ -1136,7 +1136,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 isEditing={editingSection === "languages"}
                 onEdit={() => {
                   // When leaving edit mode for Languages, ensure no blank rows.
-                  if (editingSection === "languages" && structuredCV) {
+                  if (editingSection === "languages" && structuredCV && Array.isArray(structuredCV.languages)) {
                     for (let i = 0; i < structuredCV.languages.length; i++) {
                       const lang = structuredCV.languages[i];
                       if (!lang.name.trim() || !lang.level.trim()) {
@@ -1153,14 +1153,14 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
               >
                 {editingSection === "languages" ? (
                   <div className="space-y-2">
-                    {structuredCV.languages.map((lang, idx) => (
+                    {(structuredCV?.languages || []).map((lang, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <input
                           type="text"
                           placeholder="Language"
                           value={lang.name}
                           onChange={(e) => {
-                            const newLangs = [...structuredCV.languages];
+                            const newLangs = [...(structuredCV?.languages || [])];
                             newLangs[idx].name = e.target.value;
                             updateSection("languages", newLangs);
                           }}
@@ -1171,7 +1171,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                           placeholder="Level"
                           value={lang.level}
                           onChange={(e) => {
-                            const newLangs = [...structuredCV.languages];
+                            const newLangs = [...(structuredCV?.languages || [])];
                             newLangs[idx].level = e.target.value;
                             updateSection("languages", newLangs);
                           }}
@@ -1179,7 +1179,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                         />
                         <button
                           onClick={() => {
-                            const newLangs = structuredCV.languages.filter((_, i) => i !== idx);
+                            const newLangs = (structuredCV?.languages || []).filter((_, i) => i !== idx);
                             updateSection("languages", newLangs);
                           }}
                           className="text-red-400 hover:text-red-300 text-sm"
@@ -1191,7 +1191,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                     <button
                       onClick={() =>
                         updateSection("languages", [
-                          ...structuredCV.languages,
+                          ...(structuredCV?.languages || []),
                           { name: "", level: "" },
                         ])
                       }
@@ -1202,7 +1202,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   </div>
                 ) : (
                   <div className="space-y-1 text-sm">
-                    {structuredCV.languages.length > 0 ? (
+                    {Array.isArray(structuredCV?.languages) && structuredCV.languages.length > 0 ? (
                       structuredCV.languages.map((lang, idx) => (
                         <div key={idx} className="text-slate-300">
                           • {lang.name} ({lang.level})
