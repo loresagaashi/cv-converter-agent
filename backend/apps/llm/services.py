@@ -43,6 +43,7 @@ Guide the recruiter through specific sections to verify the candidate's skills. 
 
 START & END BEHAVIOR:
 - On the very first turn (empty history), include a longer greeting (2-3 sentences total), add a brief framing sentence, then ask the Initial Question for the current section.
+- **IMPORTANT:** In your initial greeting, naturally mention that the interview will be conducted in English only. For example: "This interview will be in English" or "Please respond in English throughout our conversation."
 - On the final turn (Additional Information is complete and done=true), return a short closing message in the "question" field.
 - Avoid static phrasing; vary wording naturally from session to session while keeping it professional and concise.
 
@@ -813,3 +814,76 @@ def group_skills_into_categories(skills: List[str]) -> Dict[str, List[str]]:
             grouped[name] = final_skills
 
     return grouped
+
+
+def transcribe_audio_whisper(audio_file) -> Dict[str, str]:
+    """
+    Transcribe audio using OpenAI's Whisper API and validate language.
+    
+    Args:
+        audio_file: File-like object containing audio data
+        
+    Returns:
+        Dictionary with 'text' and 'language' keys
+        
+    Raises:
+        ValueError: If the detected language is not English
+        Exception: If the API call fails
+    """
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY is not configured")
+    
+    try:
+        # Prepare the file for upload
+        files = {
+            'file': ('audio.webm', audio_file, 'audio/webm'),
+        }
+        
+        data = {
+            'model': 'whisper-1',
+            'response_format': 'verbose_json',  # Get language detection info
+        }
+        
+        resp = requests.post(
+            "https://api.openai.com/v1/audio/transcriptions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+            },
+            files=files,
+            data=data,
+            timeout=60,
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        
+        # Extract text and language
+        text = result.get('text', '').strip()
+        language = result.get('language', 'unknown')
+        
+        # Handle empty transcription (no speech detected)
+        if not text:
+            logger.warning("No speech detected in audio")
+            return {
+                'text': '',
+                'language': 'en',  # Assume English for empty audio
+            }
+        
+        # Validate that the language is English
+        language_lower = language.lower() if language else 'unknown'
+        if language_lower != 'en' and language_lower != 'english':
+            logger.warning(f"Non-English language detected: {language}")
+            raise ValueError("I can understand English only")
+        
+        logger.info(f"Transcribed audio: language={language}, text_length={len(text)}")
+        
+        return {
+            'text': text,
+            'language': language_lower,
+        }
+        
+    except ValueError:
+        # Re-raise language validation errors
+        raise
+    except Exception as e:
+        logger.error(f"Whisper transcription failed: {e}")
+        raise

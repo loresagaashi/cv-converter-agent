@@ -4,9 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { createConversationTurn, generateConversationCompetencePaper, startConversationSession, playTextToSpeech } from "@/lib/api";
 
-// Fallback typings for browser speech recognition APIs to satisfy TypeScript
-// in environments where lib.dom.d.ts does not declare them.
-type BrowserSpeechRecognition = any;
+// MediaRecorder and AudioContext types are built-in to TypeScript
 
 type SectionKey =
   | "core_skills"
@@ -82,7 +80,12 @@ export function RecruiterVoiceAssistant({
   const [lastTranscript, setLastTranscript] = useState<string>("");
 
   const historyRef = useRef<HistoryItem[]>([]);
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const volumeCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const cancelledRef = useRef(false);
   const loggedVoiceRef = useRef(false);
@@ -98,14 +101,6 @@ export function RecruiterVoiceAssistant({
     recommendations: 0,
     additional_info: 0,
   });
-
-  const getSpeechRecognition = (): BrowserSpeechRecognition | null => {
-    if (typeof window === "undefined") return null;
-    const AnyWindow = window as any;
-    const SR = AnyWindow.SpeechRecognition || AnyWindow.webkitSpeechRecognition;
-    if (!SR) return null;
-    return new SR();
-  };
 
   const speak = async (text: string): Promise<void> => {
     if (!token) {
@@ -135,121 +130,153 @@ export function RecruiterVoiceAssistant({
     }
   };
 
-
-
   const startListening = (): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const recognition = getSpeechRecognition();
-      if (!recognition) {
-        reject(new Error("Speech recognition not supported in this browser."));
-        return;
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Get user media
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Setup MediaRecorder
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm',
+        });
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        // Setup AudioContext for volume monitoring
+        const audioContext = new AudioContext();
+        audioContextRef.current = audioContext;
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyserRef.current = analyser;
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const SILENCE_THRESHOLD = 0.03; // Volume threshold for silence detection (3% - raised to avoid background noise)
+        const SILENCE_DURATION_MS = 2000; // 2 seconds of silence (reduced from 2.5s for faster response)
+        let lastSoundTime = Date.now();
+
+        // Monitor volume for silence detection
+        const checkVolume = () => {
+          if (!analyserRef.current) return;
+
+          analyser.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+          const volume = average / 255;
+
+          if (volume > SILENCE_THRESHOLD) {
+            lastSoundTime = Date.now();
+          } else {
+            const silenceDuration = Date.now() - lastSoundTime;
+            if (silenceDuration >= SILENCE_DURATION_MS) {
+              // Silence detected - stop recording
+              stopListening();
+            }
+          }
+        };
+
+        volumeCheckIntervalRef.current = setInterval(checkVolume, 100);
+
+        // Collect audio chunks
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        // Handle recording stop
+        mediaRecorder.onstop = async () => {
+          // Clear intervals and contexts
+          if (volumeCheckIntervalRef.current) {
+            clearInterval(volumeCheckIntervalRef.current);
+            volumeCheckIntervalRef.current = null;
+          }
+          if (audioContextRef.current) {
+            audioContextRef.current.close();
+            audioContextRef.current = null;
+          }
+
+          // Stop all tracks
+          stream.getTracks().forEach(track => track.stop());
+
+          // Create blob from chunks
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          audioChunksRef.current = [];
+
+          if (audioBlob.size === 0) {
+            resolve("");
+            return;
+          }
+
+          // Upload to backend for transcription
+          try {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+
+            const response = await fetch(
+              `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/llm/transcribe-audio/`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Token ${token}`,
+                  // Do NOT set Content-Type - let browser set it with boundary
+                },
+                body: formData,
+              }
+            );
+
+            if (response.status === 400) {
+              // Language validation error
+              const errorData = await response.json();
+              const errorMessage = errorData.detail || "I can understand English only";
+              reject(new Error(errorMessage));
+              return;
+            }
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              const errorMessage = errorData.detail || "Failed to transcribe audio";
+              reject(new Error(errorMessage));
+              return;
+            }
+
+            const data = await response.json();
+            const transcribedText = data.text || "";
+            resolve(transcribedText);
+          } catch (err: any) {
+            console.error("[startListening] Transcription error:", err);
+            reject(err);
+          }
+        };
+
+        // Start recording
+        setStatus("listening");
+        mediaRecorder.start();
+      } catch (err: any) {
+        console.error("[startListening] Setup error:", err);
+        reject(new Error("Failed to access microphone"));
       }
-
-      recognitionRef.current = recognition;
-      recognition.lang = "en-US";
-      recognition.continuous = true; // Keep listening continuously
-      recognition.interimResults = true; // Get interim results to detect ongoing speech
-      recognition.maxAlternatives = 1;
-
-      recognition.maxAlternatives = 1;
-
-      let latestTranscript = "";
-      let finished = false;
-      let silenceTimeout: NodeJS.Timeout | null = null;
-      const SILENCE_TIMEOUT_MS = 2500; // Wait 2.5 second of silence before considering speech complete (optimized for snappier responses)
-
-      const resetSilenceTimeout = () => {
-        if (silenceTimeout) {
-          clearTimeout(silenceTimeout);
-        }
-        silenceTimeout = setTimeout(() => {
-          // If we've had silence for 2.5 seconds and have some transcript, consider it complete
-          if (latestTranscript) {
-            finished = true;
-            try {
-              recognition.stop();
-            } catch {
-              // ignore
-            }
-            resolve(latestTranscript);
-          }
-        }, SILENCE_TIMEOUT_MS);
-      };
-
-      recognition.onresult = (event: any) => {
-        if (!event || !event.results || finished) return;
-
-        let newTranscript = "";
-        for (let i = 0; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result && result[0]) {
-            const text = result[0].transcript.trim();
-            if (text) {
-              newTranscript += (newTranscript ? " " : "") + text;
-            }
-          }
-        }
-
-        if (newTranscript !== latestTranscript) {
-          latestTranscript = newTranscript;
-          setLastTranscript(latestTranscript);
-        }
-
-        resetSilenceTimeout();
-      };
-
-      recognition.onerror = (event: any) => {
-        if (finished) return;
-
-        if (silenceTimeout) {
-          clearTimeout(silenceTimeout);
-        }
-
-        finished = true;
-        try {
-          recognition.stop();
-        } catch {
-          // ignore
-        }
-
-        const errType = (event && event.error) || "";
-        // Treat "no-speech", "no-match", or "aborted" as soft errors: just return whatever we have.
-        if (errType === "no-speech" || errType === "no-match" || errType === "aborted") {
-          resolve(latestTranscript);
-          return;
-        }
-
-        reject(new Error(errType || "Speech recognition error"));
-      };
-
-      recognition.onend = () => {
-        if (finished) return;
-
-        if (silenceTimeout) {
-          clearTimeout(silenceTimeout);
-        }
-
-        finished = true;
-        // Return whatever we have
-        resolve(latestTranscript);
-      };
-
-      setStatus("listening");
-      recognition.start();
-
-      // Start the silence timeout
-      resetSilenceTimeout();
     });
   };
 
   const stopListening = () => {
-    if (recognitionRef.current) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
-        recognitionRef.current.stop();
-      } catch {
-        // ignore
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        console.error("[stopListening] Error stopping recorder:", err);
       }
-      recognitionRef.current = null;
+    }
+    if (volumeCheckIntervalRef.current) {
+      clearInterval(volumeCheckIntervalRef.current);
+      volumeCheckIntervalRef.current = null;
+    }
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
     }
   };
 
@@ -374,24 +401,69 @@ export function RecruiterVoiceAssistant({
         if (cancelledRef.current) break;
 
         let answer = "";
-        try {
-          console.log(`[Frontend] 🎤 Starting to listen for answer...`);
-          setStatus("listening");
-          answer = await startListening();
-          console.log(`[Frontend] ✅ Received answer: "${answer}"`);
+        let validAnswer = false;
 
-          // Set transcript to show user's answer
-          if (answer) {
-            setLastTranscript(answer);
+        // Retry loop for language validation errors
+        while (!validAnswer && !cancelledRef.current) {
+          try {
+            console.log(`[Frontend] 🎤 Starting to listen for answer...`);
+            setStatus("listening");
+            answer = await startListening();
+            console.log(`[Frontend] ✅ Received answer: "${answer}"`);
+
+            // Set transcript to show user's answer
+            if (answer) {
+              setLastTranscript(answer);
+            }
+
+            // If we got here, the answer is valid (no language error)
+            validAnswer = true;
+          } catch (err: any) {
+            const errorMessage = err?.message || "Voice input error.";
+
+            // Check if it's a language validation error
+            if (errorMessage.toLowerCase().includes("english")) {
+              console.log(`[Frontend] 🌍 Language validation error detected: "${errorMessage}"`);
+              // DON'T show error on screen - only speak it
+              setLastTranscript(""); // Clear transcript display
+
+              try {
+                // Speak the error out loud
+                console.log(`[Frontend] 🔊 Speaking language error: "${errorMessage}"`);
+                await speak(errorMessage);
+
+                // Wait a moment, then repeat the question
+                await new Promise(resolve => setTimeout(resolve, 500));
+                console.log(`[Frontend] 🔄 Repeating question due to language error...`);
+                await speak(question);
+
+                // Continue the loop to listen again
+                continue;
+              } catch (speakErr) {
+                console.error(`[Frontend] ❌ Error speaking language error:`, speakErr);
+              }
+            } else {
+              // Other errors (microphone access, network, etc.) - don't retry
+              console.error(`[Frontend] ❌ Non-language error:`, err);
+              setError(errorMessage);
+              validAnswer = true; // Exit loop, continue with empty answer
+            }
+          } finally {
+            stopListening();
           }
-        } catch (err: any) {
-          console.error(`[Frontend] ❌ Error listening:`, err);
-          setError(err?.message || "Voice input error.");
-        } finally {
-          stopListening();
         }
 
         if (cancelledRef.current) break;
+
+        // If no answer (empty or silence), repeat the question
+        if (!answer || !answer.trim()) {
+          console.log(`[Frontend] 🔇 No speech detected, repeating question...`);
+          setLastTranscript(""); // Clear display
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await speak(question); // Repeat the question
+          // Don't add to history, just loop back to ask again
+          continue;
+        }
 
         if (answer) {
           historyRef.current.push({ role: "recruiter", content: answer });

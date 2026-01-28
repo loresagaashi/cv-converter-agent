@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from apps.cv.models import CV
 from apps.cv.services import read_cv_file
 from apps.interview.models import CompetencePaper
-from apps.llm.services import generate_recruiter_next_question, generate_ai_voice
+from apps.llm.services import generate_recruiter_next_question, generate_ai_voice, transcribe_audio_whisper
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +57,26 @@ class RecruiterAssistantQuestionView(APIView):
         competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
 
         # Extract plain text for the CV – this is the primary source of truth.
-        file_obj = cv_instance.file
-        content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
-        cv_text = read_cv_file(
-            file_obj,
-            name=cv_instance.original_filename,
-            content_type=content_type,
-        )
+        try:
+            file_obj = cv_instance.file
+            content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
+            cv_text = read_cv_file(
+                file_obj,
+                name=cv_instance.original_filename,
+                content_type=content_type,
+            )
+        except FileNotFoundError:
+            logger.error(f"[RecruiterAssistantQuestionView] ❌ CV file not found: {cv_instance.original_filename}")
+            return Response(
+                {"detail": "CV file not found. Please re-upload your CV."},
+                status=404,
+            )
+        except Exception as e:
+            logger.error(f"[RecruiterAssistantQuestionView] ❌ Error reading CV file: {str(e)}", exc_info=True)
+            return Response(
+                {"detail": f"Error reading CV file: {str(e)}"},
+                status=500,
+            )
 
         competence_text = competence_paper.content or ""
         
@@ -128,3 +141,49 @@ def text_to_speech(request):
             {"detail": f"Failed to generate audio: {str(e)}"},
             status=500,
         )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def transcribe_audio(request):
+    """
+    Transcribe audio using OpenAI's Whisper API with English language validation.
+    
+    Expects multipart/form-data with:
+    - audio: Audio file (webm format)
+    
+    Returns JSON:
+    {
+        "text": "Transcribed text",
+        "language": "en"
+    }
+    
+    Returns 400 if language is not English with error message.
+    """
+    if 'audio' not in request.FILES:
+        return Response(
+            {"detail": "Audio file is required."},
+            status=400,
+        )
+    
+    audio_file = request.FILES['audio']
+    
+    try:
+        result = transcribe_audio_whisper(audio_file)
+        logger.info(f"[transcribe_audio] ✅ Transcription successful: {result['text'][:50]}...")
+        return Response(result, status=200)
+    except ValueError as e:
+        # Language validation error - return 400 with the error message
+        error_msg = str(e)
+        logger.warning(f"[transcribe_audio] ⚠️ Language validation failed: {error_msg}")
+        return Response(
+            {"detail": error_msg},
+            status=400,
+        )
+    except Exception as e:
+        logger.error(f"[transcribe_audio] ❌ Error transcribing audio: {str(e)}", exc_info=True)
+        return Response(
+            {"detail": f"Failed to transcribe audio: {str(e)}"},
+            status=500,
+        )
+
