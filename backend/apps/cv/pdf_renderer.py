@@ -12,11 +12,15 @@ try:
   from jinja2 import Environment, FileSystemLoader  # type: ignore
   from weasyprint import HTML  # type: ignore
   _HTML_RENDER_AVAILABLE = True
+  print("[PDF] ✅ WeasyPrint and Jinja2 are available")
 except Exception as exc:  # pragma: no cover - optional dependency
   _HTML_RENDER_AVAILABLE = False
   Environment = None  # type: ignore
   FileSystemLoader = None  # type: ignore
   HTML = None  # type: ignore
+  print(f"[PDF] ⚠️ WeasyPrint/Jinja2 not available: {exc}")
+  import traceback
+  traceback.print_exc()
 
 
 DEFAULT_SECTION_ORDER: List[str] = [

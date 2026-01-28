@@ -9,10 +9,14 @@ from apps.cv.pdf_renderer import _sanitize_for_pdf
 try:
     from weasyprint import HTML, CSS  # type: ignore
     _HTML_RENDER_AVAILABLE = True
-except Exception:
+    print("[PDF] ✅ WeasyPrint is available for interview papers")
+except Exception as exc:
     _HTML_RENDER_AVAILABLE = False
     HTML = None  # type: ignore
     CSS = None  # type: ignore
+    print(f"[PDF] ⚠️ WeasyPrint not available for interview papers: {exc}")
+    import traceback
+    traceback.print_exc()
 
 
 def render_conversation_paper_to_pdf(
