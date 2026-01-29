@@ -12,18 +12,12 @@ export default function Home() {
             Get AI-powered competence summaries in seconds.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+        <div className="flex items-center justify-center pt-4">
           <a
             href="/login"
             className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 transition-all hover:shadow-xl hover:shadow-emerald-500/50"
           >
             Sign in
-          </a>
-          <a
-            href="/signup"
-            className="inline-flex items-center justify-center rounded-lg border-2 border-slate-700 px-6 py-3 text-sm font-semibold text-slate-100 hover:bg-slate-900/80 hover:border-slate-600 transition-all"
-          >
-            Create account
           </a>
         </div>
         <div className="pt-6 text-xs text-slate-500">
