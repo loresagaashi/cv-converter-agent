@@ -55,8 +55,10 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'cloudinary_storage',  # Must be before staticfiles
     'django.contrib.staticfiles',
     'whitenoise.runserver_nostatic',  # Use whitenoise for static files
+    'cloudinary',  # Add cloudinary app
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
@@ -201,3 +203,16 @@ REST_FRAMEWORK = {
 # Allow the Next.js dev server (and other origins in development) to call the API.
 # For production, this should be tightened to explicit allowed origins.
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Cloudinary Storage Configuration
+# This tells Django to use Cloudinary instead of the local disk
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
+    # Ensure secure URLs (HTTPS)
+    'SECURE': True,
+}
+
+# Use RawMediaCloudinaryStorage for PDFs and DOCX files (not images)
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'

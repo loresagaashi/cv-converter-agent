@@ -336,9 +336,9 @@ export function RecruiterVoiceAssistant({
       }
 
       // Ensure we have a conversation session (Phase 0)
-      console.log(`[Frontend] 🚀 Starting conversation session: cvId=${cvId}, paperId=${paperId}`);
+      // console.log(`[Frontend] 🚀 Starting conversation session: cvId=${cvId}, paperId=${paperId}`);
       const startRes = await startConversationSession(token, cvId, paperId);
-      console.log(`[Frontend] ✅ Session created/retrieved: session_id=${startRes.session_id}, status=${startRes.status}`);
+      // console.log(`[Frontend] ✅ Session created/retrieved: session_id=${startRes.session_id}, status=${startRes.status}`);
       setSessionId(startRes.session_id);
       sessionIdRef.current = startRes.session_id; // Also store in ref for immediate access
 
@@ -350,16 +350,16 @@ export function RecruiterVoiceAssistant({
       // Phase 1: 7 main sections driven by backend question generator
       while (!done && !cancelledRef.current) {
         setStatus("thinking");
-        console.log(`[Frontend] 🔄 Fetching next question for section: ${currentSection}`);
+        // console.log(`[Frontend] 🔄 Fetching next question for section: ${currentSection}`);
         const { question, nextSection, completeSection, done: isDone } = await fetchNextQuestion(currentSection);
 
-        console.log(
-          `[Frontend] 📥 Received from backend: section=${nextSection}, complete_section=${completeSection}, done=${isDone}, question="${question?.substring(0, 50)}..."`
-        );
+        // console.log(
+        //   `[Frontend] 📥 Received from backend: section=${nextSection}, complete_section=${completeSection}, done=${isDone}, question="${question?.substring(0, 50)}..."`
+        // );
 
         // Update section immediately from backend response
         if (nextSection && nextSection !== currentSection) {
-          console.log(`[Frontend] 🔀 Section changed: ${currentSection} → ${nextSection}`);
+          // console.log(`[Frontend] 🔀 Section changed: ${currentSection} → ${nextSection}`);
           currentSection = nextSection as SectionKey;
           setSection(currentSection);
         }
@@ -388,7 +388,7 @@ export function RecruiterVoiceAssistant({
 
         // If this is the final turn (done=true), speak the outro and exit WITHOUT listening
         if (isDone && !isAdditionalInfoFinalPrompt) {
-          console.log(`[Frontend] 🎬 Final outro detected. Speaking and then exiting conversation loop.`);
+          // console.log(`[Frontend] 🎬 Final outro detected. Speaking and then exiting conversation loop.`);
           await speak(question);
           if (cancelledRef.current) break;
           done = true;
@@ -406,10 +406,10 @@ export function RecruiterVoiceAssistant({
         // Retry loop for language validation errors
         while (!validAnswer && !cancelledRef.current) {
           try {
-            console.log(`[Frontend] 🎤 Starting to listen for answer...`);
+            // console.log(`[Frontend] 🎤 Starting to listen for answer...`);
             setStatus("listening");
             answer = await startListening();
-            console.log(`[Frontend] ✅ Received answer: "${answer}"`);
+            // console.log(`[Frontend] ✅ Received answer: "${answer}"`);
 
             // Set transcript to show user's answer
             if (answer) {
@@ -423,18 +423,18 @@ export function RecruiterVoiceAssistant({
 
             // Check if it's a language validation error
             if (errorMessage.toLowerCase().includes("english")) {
-              console.log(`[Frontend] 🌍 Language validation error detected: "${errorMessage}"`);
+              // console.log(`[Frontend] 🌍 Language validation error detected: "${errorMessage}"`);
               // DON'T show error on screen - only speak it
               setLastTranscript(""); // Clear transcript display
 
               try {
                 // Speak the error out loud
-                console.log(`[Frontend] 🔊 Speaking language error: "${errorMessage}"`);
+                // console.log(`[Frontend] 🔊 Speaking language error: "${errorMessage}"`);
                 await speak(errorMessage);
 
                 // Wait a moment, then repeat the question
                 await new Promise(resolve => setTimeout(resolve, 500));
-                console.log(`[Frontend] 🔄 Repeating question due to language error...`);
+                // console.log(`[Frontend] 🔄 Repeating question due to language error...`);
                 await speak(question);
 
                 // Continue the loop to listen again
@@ -457,7 +457,7 @@ export function RecruiterVoiceAssistant({
 
         // If no answer (empty or silence), repeat the question
         if (!answer || !answer.trim()) {
-          console.log(`[Frontend] 🔇 No speech detected, repeating question...`);
+          // console.log(`[Frontend] 🔇 No speech detected, repeating question...`);
           setLastTranscript(""); // Clear display
           await new Promise(resolve => setTimeout(resolve, 500));
           await speak(question); // Repeat the question
@@ -467,7 +467,7 @@ export function RecruiterVoiceAssistant({
 
         if (answer) {
           historyRef.current.push({ role: "recruiter", content: answer });
-          console.log(`[Frontend] 📝 Added answer to history. Total history items: ${historyRef.current.length}`);
+          // console.log(`[Frontend] 📝 Added answer to history. Total history items: ${historyRef.current.length}`);
 
           // Store this turn in backend
           // Phase 1: validation for main sections, Phase 2: discovery for additional_info
@@ -479,7 +479,7 @@ export function RecruiterVoiceAssistant({
             console.error("[Frontend] Attempting to re-create session...");
             try {
               const startRes = await startConversationSession(token, cvId, paperId);
-              console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
+              // console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
               setSessionId(startRes.session_id);
               sessionIdRef.current = startRes.session_id;
 
@@ -492,9 +492,9 @@ export function RecruiterVoiceAssistant({
                 question_text: question,
                 answer_text: answer,
               });
-              console.log(
-                `[Frontend] ✅ Successfully stored after re-creating session: question_id=${result.question_id}, response_id=${result.response_id}`
-              );
+              // console.log(
+              //   `[Frontend] ✅ Successfully stored after re-creating session: question_id=${result.question_id}, response_id=${result.response_id}`
+              // );
             } catch (err: any) {
               console.error("[Frontend] ❌ Failed to re-create session:", err);
               setError("Failed to create conversation session. Please try again.");
@@ -502,11 +502,11 @@ export function RecruiterVoiceAssistant({
           } else {
             try {
               const phase = currentSection === "additional_info" ? "discovery" : "validation";
-              console.log(
-                `[Frontend] 💾 Storing conversation turn: session_id=${currentSessionId}, section=${currentSection}, phase=${phase}`
-              );
-              console.log(`[Frontend] Question: ${question.substring(0, 50)}...`);
-              console.log(`[Frontend] Answer: ${answer.substring(0, 50)}...`);
+              // console.log(
+              //   `[Frontend] 💾 Storing conversation turn: session_id=${currentSessionId}, section=${currentSection}, phase=${phase}`
+              // );
+              // console.log(`[Frontend] Question: ${question.substring(0, 50)}...`);
+              // console.log(`[Frontend] Answer: ${answer.substring(0, 50)}...`);
 
               const result = await createConversationTurn(token, {
                 session_id: currentSessionId,
@@ -516,9 +516,9 @@ export function RecruiterVoiceAssistant({
                 answer_text: answer,
               });
 
-              console.log(
-                `[Frontend] ✅ Successfully stored: question_id=${result.question_id}, response_id=${result.response_id}, status=${result.status}`
-              );
+              // console.log(
+              //   `[Frontend] ✅ Successfully stored: question_id=${result.question_id}, response_id=${result.response_id}, status=${result.status}`
+              // );
             } catch (err: any) {
               // Non-fatal; continue conversation but surface error.
               console.error("[Frontend] ❌ Failed to store conversation turn:", err);
@@ -528,7 +528,7 @@ export function RecruiterVoiceAssistant({
                 console.error("[Frontend] Session not found. Attempting to re-create...");
                 try {
                   const startRes = await startConversationSession(token, cvId, paperId);
-                  console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
+                  // console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
                   setSessionId(startRes.session_id);
                   sessionIdRef.current = startRes.session_id;
                 } catch (recreateErr: any) {
@@ -581,57 +581,57 @@ export function RecruiterVoiceAssistant({
 
         done = effectiveDone;
 
-        console.log(
-          `[Frontend] 📊 Loop state: currentSection=${currentSection}, done=${done}, ` +
-          `completeSection=${effectiveCompleteSection}, allSectionsComplete=${allSectionsComplete}`
-        );
+        // console.log(
+        //   `[Frontend] 📊 Loop state: currentSection=${currentSection}, done=${done}, ` +
+        //   `completeSection=${effectiveCompleteSection}, allSectionsComplete=${allSectionsComplete}`
+        // );
 
         // If done is true, all sections including additional_info are complete
         if (done) {
           allSectionsComplete = true;
-          console.log(`[Frontend] ✅ Conversation complete! All sections done.`);
+          // console.log(`[Frontend] ✅ Conversation complete! All sections done.`);
         }
       }
 
-      console.log(`[Frontend] 🏁 Exited main loop. done=${done}, allSectionsComplete=${allSectionsComplete}`);
+      // console.log(`[Frontend] 🏁 Exited main loop. done=${done}, allSectionsComplete=${allSectionsComplete}`);
 
       // Phase 2 is handled automatically by the backend - it will move to additional_info
       // section after all 7 main sections are complete. The main loop above handles it.
 
       // Phase 3: Generate competence paper (after all phases complete - when done=true)
       const finalSessionId = sessionIdRef.current || sessionId;
-      console.log(
-        `[Frontend] 🔍 Checking generation conditions: cancelled=${cancelledRef.current}, ` +
-        `sessionId=${finalSessionId}, done=${done}, hasGeneratedPaper=${hasGeneratedPaper}`
-      );
+      // console.log(
+      //   `[Frontend] 🔍 Checking generation conditions: cancelled=${cancelledRef.current}, ` +
+      //   `sessionId=${finalSessionId}, done=${done}, hasGeneratedPaper=${hasGeneratedPaper}`
+      // );
 
       if (!cancelledRef.current && finalSessionId && done && !hasGeneratedPaper) {
         try {
-          console.log(`[Frontend] 🚀 Starting competence paper generation...`);
-          console.log(`[Frontend] 📊 Session summary: sessionId=${finalSessionId}, totalQuestions=${historyRef.current.filter(h => h.role === 'assistant').length}`);
-          setStatus("generating");
+          // console.log(`[Frontend] 🚀 Starting competence paper generation...`);
+          // console.log(`[Frontend] 📊 Session summary: sessionId=${finalSessionId}, totalQuestions=${historyRef.current.filter(h => h.role === 'assistant').length}`);
+          // setStatus("generating");
           setIsGeneratingPaper(true);
-          console.log(`[Frontend] 📞 Calling generateConversationCompetencePaper API for session ${finalSessionId}...`);
+          // console.log(`[Frontend] 📞 Calling generateConversationCompetencePaper API for session ${finalSessionId}...`);
           const startTime = Date.now();
           const generatedPaper = await generateConversationCompetencePaper(token, finalSessionId);
           const duration = Date.now() - startTime;
 
-          console.log(`[Frontend] ✅ Paper generated successfully in ${duration}ms:`, generatedPaper);
-          console.log(`[Frontend] 📄 Paper details: id=${generatedPaper.id}, content_length=${generatedPaper.content?.length || 0}, cv_id=${generatedPaper.cv_id}`);
+          // console.log(`[Frontend] ✅ Paper generated successfully in ${duration}ms:`, generatedPaper);
+          // console.log(`[Frontend] 📄 Paper details: id=${generatedPaper.id}, content_length=${generatedPaper.content?.length || 0}, cv_id=${generatedPaper.cv_id}`);
 
           setHasGeneratedPaper(true);
           setGeneratedPaperId(generatedPaper.id);
 
           // Store the paper ID for later editing/exporting
           if (generatedPaper?.id) {
-            console.log(`[Frontend] 💾 Stored paper ID ${generatedPaper.id} for editing/exporting`);
+            // console.log(`[Frontend] 💾 Stored paper ID ${generatedPaper.id} for editing/exporting`);
           }
 
           setStatus("completed");
 
           // Close the bot automatically after a short delay
           setTimeout(() => {
-            console.log(`[Frontend] 🚪 Auto-closing bot after paper generation`);
+            // console.log(`[Frontend] 🚪 Auto-closing bot after paper generation`);
             handleEnd();
           }, 5000); // 5 second delay to let user see the success message
         } catch (err: any) {
@@ -644,13 +644,13 @@ export function RecruiterVoiceAssistant({
         }
       } else {
         if (hasGeneratedPaper) {
-          console.log(`[Frontend] ⏸️ Paper already generated, skipping`);
+          // console.log(`[Frontend] ⏸️ Paper already generated, skipping`);
         } else if (!finalSessionId) {
-          console.log(`[Frontend] ⏸️ No session ID, cannot generate paper`);
+          // console.log(`[Frontend] ⏸️ No session ID, cannot generate paper`);
         } else if (!done) {
-          console.log(`[Frontend] ⏸️ Conversation not done yet, cannot generate paper`);
+          // console.log(`[Frontend] ⏸️ Conversation not done yet, cannot generate paper`);
         } else {
-          console.log(`[Frontend] ⏸️ Skipping generation: cancelled=${cancelledRef.current}`);
+          // console.log(`[Frontend] ⏸️ Skipping generation: cancelled=${cancelledRef.current}`);
         }
       }
 

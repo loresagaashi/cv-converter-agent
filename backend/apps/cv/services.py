@@ -160,6 +160,17 @@ def read_cv_file(file_obj: BinaryIO, *, name: Optional[str] = None, content_type
         cv = CV.objects.first()
         text = read_cv_file(cv.file, name=cv.original_filename, content_type=cv.file.file.content_type)
     """
+    # --- LOGGING: Verify file source (Cloudinary vs local disk) ---
+    try:
+        # Try to get the URL if it exists (Cloudinary/S3 files have this)
+        file_url = getattr(file_obj, 'url', 'No URL attribute')
+        print(f"[FILE LOAD] Reading CV from: {file_url}")
+        print(f"[FILE LOAD] File name: {name}")
+        print(f"[FILE LOAD] File object type: {type(file_obj)}")
+    except Exception as e:
+        print(f"[FILE LOAD] Could not determine URL: {e}")
+    # --------------------------------------------------------------
+    
     file_type = guess_file_type(name=name, content_type=content_type)
 
     if file_type == "pdf":

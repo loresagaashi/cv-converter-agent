@@ -15,6 +15,10 @@ PyPDF2==3.0.1
 python-docx==1.1.2
 fpdf2==2.7.6
 
+# Cloudinary storage
+django-cloudinary-storage==0.3.0
+cloudinary>=1.36.0
+
 # PDF rendering (HTML to PDF)
 jinja2==3.1.4
 weasyprint>=67.0
