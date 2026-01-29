@@ -93,7 +93,7 @@ export default function LoginPage() {
               placeholder="Enter your password"
             />
           </div>
-          <div className="flex items-center justify-between text-xs">
+          <div className="text-xs">
             <label className="inline-flex items-center gap-2 cursor-pointer text-slate-400 hover:text-slate-300">
               <input
                 type="checkbox"
@@ -103,13 +103,6 @@ export default function LoginPage() {
               />
               <span>Remember me</span>
             </label>
-            <button
-              type="button"
-              onClick={() => router.push("/signup")}
-              className="text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
-            >
-              Create account
-            </button>
           </div>
           <button
             type="submit"
