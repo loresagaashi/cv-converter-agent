@@ -220,8 +220,8 @@ def render_structured_cv_to_pdf(
         # Try to infer from work_experience with month-accurate buckets
         work_exp = structured_cv.get("work_experience") or []
         seniority = _calculate_seniority_label(work_exp)
-      # Soft skills: from structured_cv["soft_skills"] or empty, limited to max 5
-      soft_skills = [str(s).strip() for s in (structured_cv.get("soft_skills") or []) if s][:5]
+      # Soft skills: from structured_cv["soft_skills"] or empty, limited to max 3
+      soft_skills = [str(s).strip() for s in (structured_cv.get("soft_skills") or []) if s][:3]
       # Core skills and tech competencies:
       # Use AI-based grouping for tech competencies (max 6 groups), with a simple
       # heuristic fallback if the LLM is unavailable.
@@ -271,16 +271,16 @@ def render_structured_cv_to_pdf(
           limited_skills = skills[:8]
           tech_competencies_flat.append(f"{group}: {', '.join(limited_skills)}")
 
-      # Core skills: top 5 unique across all tech competencies.
+      # Core skills: top 3 unique across all tech competencies.
       seen_core = set()
       for group in tech_competencies.values():
         for s in group:
           if s not in seen_core:
             core_skills.append(s)
             seen_core.add(s)
-          if len(core_skills) >= 5:
+          if len(core_skills) >= 3:
             break
-        if len(core_skills) >= 5:
+        if len(core_skills) >= 3:
           break
       # Languages: join name+level, limit to max 4
       languages = []

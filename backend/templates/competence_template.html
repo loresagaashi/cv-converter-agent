@@ -269,39 +269,42 @@
         <div class="sidebar">
             <h1>JOB TITLE</h1>
 
+            <h2 style="margin-top: 10px; margin-bottom: 2px;">Name:</h2>
+            <p style="margin-bottom: 10px;">{{ name if name else '-' }}</p>
+
             <h2>Seniority:</h2>
             <p>{{ seniority if seniority else '-' }}</p>
 
             <h2>CORE SKILLS:</h2>
             <ul>
                 {% if core_skills %}
-                    {% for skill in core_skills %}
-                    <li>{{ skill }}</li>
-                    {% endfor %}
+                {% for skill in core_skills %}
+                <li>{{ skill }}</li>
+                {% endfor %}
                 {% else %}
-                    <li>-</li>
+                <li>-</li>
                 {% endif %}
             </ul>
 
             <h2>SOFT SKILLS:</h2>
             <ul>
                 {% if soft_skills %}
-                    {% for skill in soft_skills %}
-                    <li>{{ skill }}</li>
-                    {% endfor %}
+                {% for skill in soft_skills %}
+                <li>{{ skill }}</li>
+                {% endfor %}
                 {% else %}
-                    <li>-</li>
+                <li>-</li>
                 {% endif %}
             </ul>
 
             <h2>LANGUAGE:</h2>
             <ul>
                 {% if languages %}
-                    {% for language in languages %}
-                    <li>{{ language }}</li>
-                    {% endfor %}
+                {% for language in languages %}
+                <li>{{ language }}</li>
+                {% endfor %}
                 {% else %}
-                    <li>-</li>
+                <li>-</li>
                 {% endif %}
             </ul>
 
@@ -320,18 +323,18 @@
             <h2>TECH <span>COMPETENCIES</span></h2>
             <ul>
                 {% if tech_competencies_line %}
-                    {% for item in tech_competencies_line.split('|') %}
-                        <li style="padding-left: 22px;">
-                            {% if ':' in item %}
-                                <span style="font-weight:bold;">{{ item.split(':')[0] }}:</span><br>
-                                {{ item.split(':', 1)[1]|trim }}
-                            {% else %}
-                                {{ item|trim }}
-                            {% endif %}
-                        </li>
-                    {% endfor %}
+                {% for item in tech_competencies_line.split('|') %}
+                <li style="padding-left: 22px;">
+                    {% if ':' in item %}
+                    <span style="font-weight:bold;">{{ item.split(':')[0] }}:</span><br>
+                    {{ item.split(':', 1)[1]|trim }}
+                    {% else %}
+                    {{ item|trim }}
+                    {% endif %}
+                </li>
+                {% endfor %}
                 {% else %}
-                    <li>-</li>
+                <li>-</li>
                 {% endif %}
             </ul>
         </div>
@@ -343,25 +346,26 @@
             <h1>PROJECT <span>EXPERIENCE</span></h1>
             <ul>
                 {% if project_experience_line %}
-                    {% for item in project_experience_line.split('|') %}
-                        <li style="padding-left: 22px; margin-bottom: 12px;">
-                            {% if ':' in item %}
-                                <span style="font-weight:bold;">{{ item.split(':')[0] }}:</span><br>
-                                {{ item.split(':', 1)[1]|trim }}
-                            {% else %}
-                                {{ item|trim }}
-                            {% endif %}
-                        </li>
-                    {% endfor %}
+                {% for item in project_experience_line.split('|') %}
+                <li style="padding-left: 22px; margin-bottom: 12px;">
+                    {% if ':' in item %}
+                    <span style="font-weight:bold;">{{ item.split(':')[0] }}:</span><br>
+                    {{ item.split(':', 1)[1]|trim }}
+                    {% else %}
+                    {{ item|trim }}
+                    {% endif %}
+                </li>
+                {% endfor %}
                 {% else %}
-                    <li>-</li>
+                <li>-</li>
                 {% endif %}
             </ul>
         </div>
     </div>
 
     <div class="footer">
-        <img src="{{ footer_logo_url if footer_logo_url else '../../borek-logo/borek.jpeg' }}" alt="Borek Solutions Group" class="footer-logo">
+        <img src="{{ footer_logo_url if footer_logo_url else '../../borek-logo/borek.jpeg' }}"
+            alt="Borek Solutions Group" class="footer-logo">
         <div class="footer-badge">Borek employee</div>
     </div>
 </body>

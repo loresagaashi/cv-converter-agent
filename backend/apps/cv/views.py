@@ -342,8 +342,8 @@ class StructuredCVView(APIView):
             if recommendation:
                 competence_content_parts.append(f"\nRecommendation:\n{recommendation}")
             
-            # Soft skills: LIMITED TO MAX 5 (same as pdf_renderer line 220)
-            soft_skills = [str(s).strip() for s in (structured_cv.get("soft_skills") or []) if s][:5]
+            # Soft skills: LIMITED TO MAX 3 (same as pdf_renderer line 224)
+            soft_skills = [str(s).strip() for s in (structured_cv.get("soft_skills") or []) if s][:3]
             if soft_skills:
                 competence_content_parts.append(f"\nSoft Skills:")
                 for skill in soft_skills:
@@ -383,22 +383,22 @@ class StructuredCVView(APIView):
                         key = "Architecture & Practices"
                     tech_competencies.setdefault(key, []).append(skill)
             
-            # Extract top 5 core skills from tech_competencies (same as pdf_renderer)
+            # Extract top 3 core skills from tech_competencies (same as pdf_renderer)
             seen_core = set()
             for group in tech_competencies.values():
                 for s in group:
                     if s not in seen_core:
                         core_skills.append(s)
                         seen_core.add(s)
-                    if len(core_skills) >= 5:
+                    if len(core_skills) >= 3:
                         break
-                if len(core_skills) >= 5:
+                if len(core_skills) >= 3:
                     break
             
-            # If no core skills from grouped, try to get top 5 from raw skills list
+            # If no core skills from grouped, try to get top 3 from raw skills list
             if not core_skills:
                 raw_skills = [str(s).strip() for s in (structured_cv.get("skills") or []) if str(s).strip()]
-                core_skills = raw_skills[:5]
+                core_skills = raw_skills[:3]
             
             # Store Core Skills
             if core_skills:
