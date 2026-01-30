@@ -214,13 +214,15 @@ CLOUDINARY_STORAGE = {
     'SECURE': True,
 }
 
-# Django 4.2+ uses STORAGES; DEFAULT_FILE_STORAGE is ignored, so set default file storage here.
-# RawMediaCloudinaryStorage stores PDFs/DOCX on Cloudinary and returns https://res.cloudinary.com/... URLs.
-STORAGES = {
-    'default': {
-        'BACKEND': 'cloudinary_storage.storage.RawMediaCloudinaryStorage',
-    },
-    'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
-    },
-}
+# File Storage Configuration
+# Note: Using deprecated settings (DEFAULT_FILE_STORAGE, STATICFILES_STORAGE) instead of
+# the new STORAGES dict because django-cloudinary-storage 0.3.0 doesn't support the new format.
+# This is compatible with Django 5.2 which still supports these deprecated settings.
+
+# Media files (user uploads) - stored on Cloudinary
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
+
+# Static files (CSS, JS) - served by WhiteNoise
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+
+
