@@ -215,19 +215,24 @@ CLOUDINARY_STORAGE = {
 }
 
 # Log Cloudinary configuration status (without exposing secrets)
-cloudinary_configured = all([
-    CLOUDINARY_STORAGE.get('CLOUD_NAME'),
-    CLOUDINARY_STORAGE.get('API_KEY'),
-    CLOUDINARY_STORAGE.get('API_SECRET'),
-])
+has_cloud_name = bool(CLOUDINARY_STORAGE.get('CLOUD_NAME'))
+has_api_key = bool(CLOUDINARY_STORAGE.get('API_KEY'))
+has_api_secret = bool(CLOUDINARY_STORAGE.get('API_SECRET'))
+cloudinary_configured = has_cloud_name and has_api_key and has_api_secret
+
+print(f"[CLOUDINARY] Configuration check:")
+print(f"  CLOUD_NAME: {'✅ ' + CLOUDINARY_STORAGE.get('CLOUD_NAME') if has_cloud_name else '❌ MISSING'}")
+print(f"  API_KEY: {'✅ SET' if has_api_key else '❌ MISSING'}")
+print(f"  API_SECRET: {'✅ SET' if has_api_secret else '❌ MISSING'}")
+
 if cloudinary_configured:
-    print(f"✅ [CLOUDINARY] Credentials loaded - CLOUD_NAME: {CLOUDINARY_STORAGE['CLOUD_NAME']}")
+    print(f"✅ [CLOUDINARY] All credentials loaded - files will be stored on Cloudinary")
 else:
     missing = []
-    if not CLOUDINARY_STORAGE.get('CLOUD_NAME'): missing.append('CLOUDINARY_CLOUD_NAME')
-    if not CLOUDINARY_STORAGE.get('API_KEY'): missing.append('CLOUDINARY_API_KEY')
-    if not CLOUDINARY_STORAGE.get('API_SECRET'): missing.append('CLOUDINARY_API_SECRET')
-    print(f"⚠️  [CLOUDINARY] Missing environment variables: {', '.join(missing)}")
+    if not has_cloud_name: missing.append('CLOUDINARY_CLOUD_NAME')
+    if not has_api_key: missing.append('CLOUDINARY_API_KEY')
+    if not has_api_secret: missing.append('CLOUDINARY_API_SECRET')
+    print(f"⚠️  [CLOUDINARY] Missing: {', '.join(missing)}")
     print(f"⚠️  [CLOUDINARY] Files will fall back to local storage (ephemeral on Render!)")
 
 
