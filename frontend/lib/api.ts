@@ -8,7 +8,17 @@ async function handleResponse<T>(res: Response): Promise<T> {
     let detail = "Request failed";
     try {
       const data = await res.json();
-      detail = (data?.detail as string) || JSON.stringify(data);
+      // Handle Django REST framework error formats
+      if (data?.non_field_errors && Array.isArray(data.non_field_errors)) {
+        detail = data.non_field_errors[0];
+      } else if (data?.detail) {
+        detail = data.detail;
+      } else if (typeof data === 'string') {
+        detail = data;
+      } else {
+        // Fallback: show a generic message instead of raw JSON
+        detail = "An error occurred. Please try again.";
+      }
     } catch {
       // ignore JSON parsing error
     }

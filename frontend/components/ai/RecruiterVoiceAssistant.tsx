@@ -627,13 +627,21 @@ export function RecruiterVoiceAssistant({
             // console.log(`[Frontend] 💾 Stored paper ID ${generatedPaper.id} for editing/exporting`);
           }
 
-          setStatus("completed");
+          // Stage 1: Keep generating state for 3 seconds (buttons disabled)
+          await new Promise(resolve => setTimeout(resolve, 3000));
 
-          // Close the bot automatically after a short delay
-          setTimeout(() => {
-            // console.log(`[Frontend] 🚪 Auto-closing bot after paper generation`);
-            handleEnd();
-          }, 5000); // 5 second delay to let user see the success message
+          // Stage 2: Show loading for 2 seconds (buttons still disabled)
+          setStatus("generating");
+          setIsGeneratingPaper(true);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          // Stage 3: Show finished for 1 second (buttons still disabled)
+          setStatus("finished");
+          setIsGeneratingPaper(false);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Stage 4: Auto-close the modal
+          handleEnd();
         } catch (err: any) {
           console.error(`[Frontend] ❌ Failed to generate competence paper:`, err);
           console.error(`[Frontend] Error details:`, err?.message, err?.response);
@@ -785,7 +793,8 @@ export function RecruiterVoiceAssistant({
           </div>
           <button
             onClick={handleEnd}
-            className="rounded-lg bg-red-500/90 hover:bg-red-600 text-xs font-semibold text-white px-3 py-2 shadow-lg shadow-red-500/30 transition-colors"
+            disabled={isGeneratingPaper}
+            className="rounded-lg bg-red-500/90 hover:bg-red-600 text-xs font-semibold text-white px-3 py-2 shadow-lg shadow-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             End Session
           </button>
@@ -891,7 +900,8 @@ export function RecruiterVoiceAssistant({
         <div className="mt-6 flex justify-end gap-2 border-t border-slate-800/60 pt-4">
           <button
             onClick={handleEnd}
-            className="rounded-lg border border-slate-700/70 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-900/70 hover:border-slate-600 transition-colors"
+            disabled={isGeneratingPaper}
+            className="rounded-lg border border-slate-700/70 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-900/70 hover:border-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Close
           </button>

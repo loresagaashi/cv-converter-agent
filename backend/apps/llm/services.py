@@ -567,6 +567,7 @@ def generate_competence_cv(cv_text: str) -> Dict[str, object]:
 # ---------------------------------------------------------------------------
 
 _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
+    "name": "Candidate Full Name",
     "profile": "Short professional summary...",
     "work_experience": [
         {
@@ -622,6 +623,7 @@ You are an AI CV formatter.
 
 TASK:
 - Read the raw CV text carefully and extract ALL information.
+- Extract the candidate's full name from the CV and place it in the "name" field.
 - Build a profile that merges the "About me"/header statement with key personal info (name, location/country if present) in **2-3 sentences max**.
 - Extract ALL work experience entries (jobs, internships, contracts). If descriptions/bullets exist in the original CV, you MUST REWRITE and SUMMARIZE them into concise bullets - rephrase the content in your own words, do NOT copy sentences directly from the source. Create **2-3 sentences total** with bullets that are **1 line each**. If no descriptions exist, include only the basic info (title, company, dates, location) with an empty bullets array. NEVER create or generate descriptions when the source has none.
 - Extract ALL certifications as their own list (1 line each entry) and place them after work_experience.
@@ -680,6 +682,7 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "certifications": [],
         }
 
+    name = str(data.get("name") or "").strip()
     profile = str(data.get("profile") or "").strip()
     languages = data.get("languages") or []
     skills = data.get("skills") or []
@@ -714,6 +717,7 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
     skills_grouped: Dict[str, List[str]] = {}
 
     return {
+        "name": name,
         "profile": profile,
         "languages": languages,
         "skills": normalized_skills,

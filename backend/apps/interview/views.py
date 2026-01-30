@@ -611,8 +611,12 @@ class ConversationSessionGeneratePaperView(APIView):
         name = ""
         seniority = ""
         
-        # Try to extract from original content
-        if original_content:
+        # Try to get name from structured CV first (most reliable)
+        if session.cv and session.cv.structured_cv:
+            name = session.cv.structured_cv.get("name") or session.cv.structured_cv.get("full_name") or ""
+        
+        # If not in structured CV, try to extract from original content (fallback)
+        if not name and original_content:
             name_match = re.search(r'Name:\s*([^\n]+)', original_content, re.IGNORECASE)
             if name_match:
                 name = name_match.group(1).strip()
@@ -667,8 +671,8 @@ class ConversationSessionGeneratePaperView(APIView):
         return {
             "name": name,
             "seniority": seniority or "-",
-            "core_skills": section_items.get("core_skills", [])[:5],  # Limit to 5
-            "soft_skills": section_items.get("soft_skills", [])[:5],  # Limit to 5
+            "core_skills": section_items.get("core_skills", [])[:3],  # Limit to 3
+            "soft_skills": section_items.get("soft_skills", [])[:3],  # Limit to 3
             "languages": section_items.get("languages", [])[:4],  # Limit to 4
             "education": self._format_education(section_items.get("education", [])) or "-",
             "trainings": "\n".join(section_items.get("trainings_certifications", [])) or "-",
@@ -1142,8 +1146,8 @@ class ConversationCompetencePaperPDFView(APIView):
         structured_data = {
             "name": name,
             "seniority": seniority or "-",
-            "core_skills": section_items.get("core_skills", [])[:5],
-            "soft_skills": section_items.get("soft_skills", [])[:5],
+            "core_skills": section_items.get("core_skills", [])[:3],
+            "soft_skills": section_items.get("soft_skills", [])[:3],
             "languages": section_items.get("languages", [])[:4],
             "education": view_instance._format_education(section_items.get("education", [])) or "-",
             "trainings": "\n".join(section_items.get("trainings_certifications", [])) or "-",
