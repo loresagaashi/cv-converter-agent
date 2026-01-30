@@ -1,5 +1,6 @@
 import json
 import logging
+import tempfile
 import time
 from pathlib import Path
 
@@ -29,13 +30,42 @@ class CVUploadView(generics.ListCreateAPIView):
     parser_classes = (MultiPartParser, FormParser)
 
     def get_queryset(self):
-        return CV.objects.filter(user=self.request.user)
+        # Admins can see all CVs; regular users only see their own
+        if getattr(self.request.user, 'is_staff', False):
+            return CV.objects.all().select_related('user').order_by('-uploaded_at')
+        return CV.objects.filter(user=self.request.user).order_by('-uploaded_at')
 
     def create(self, request, *args, **kwargs):
         req_start = time.monotonic()
+
+        # Log storage backend and Django version (visible in backend console; useful when you can't see Render logs)
+        import django
+        from django.core.files.storage import default_storage
+        storage_backend = f"{type(default_storage).__module__}.{type(default_storage).__name__}"
+        django_version = django.__version__
+        print(f"[STORAGE] Before upload - Django {django_version}, default_storage: {storage_backend}")
+        logger.info("[STORAGE] Before upload", extra={"django_version": django_version, "storage_backend": storage_backend})
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         cv_instance = serializer.save()
+
+        # Log where file was stored (visible in backend console)
+        file_name = cv_instance.file.name
+        file_url = getattr(cv_instance.file, "url", "N/A")
+        # Human-readable storage type for _debug and console (Cloudinary vs local media)
+        if "cloudinary" in storage_backend.lower():
+            storage_type = "cloudinary"
+            storage_description = "Stored on Cloudinary (cloud CDN). File is served via https://res.cloudinary.com/..."
+        elif "filesystem" in storage_backend.lower() or "FileSystemStorage" in storage_backend:
+            storage_type = "local_media"
+            storage_description = "Stored in local media folder (MEDIA_ROOT). On Render this is ephemeral and lost on redeploy."
+        else:
+            storage_type = "other"
+            storage_description = f"Stored via backend: {storage_backend}"
+
+        print(f"[STORAGE] After upload - stored_in: {storage_type}, file.name: {file_name}, file.url: {file_url}")
+        logger.info("[STORAGE] After upload", extra={"storage_type": storage_type, "file_name": file_name, "file_url": file_url})
 
         # Do not call LLM on upload; just persist the file and return metadata.
         competence_summary = ""
@@ -47,6 +77,18 @@ class CVUploadView(generics.ListCreateAPIView):
             "competence_summary": competence_summary,
             "skills": skills,
         }
+        # Include debug info in response when DEBUG=True so frontend can console.log it (e.g. when calling Render and you can't see backend logs)
+        if getattr(settings, "DEBUG", False):
+            response_data["_debug"] = {
+                "django_version": django_version,
+                "storage_backend": storage_backend,
+                "storage_type": storage_type,
+                "storage_description": storage_description,
+                "file_name": file_name,
+                "file_url": file_url,
+                "message": f"Upload stored in: {storage_type.replace('_', ' ').title()}",
+            }
+
         total_elapsed = time.monotonic() - req_start
         logger.info(
             "cv_upload_completed",
@@ -65,6 +107,9 @@ class CVDetailView(generics.DestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # Admins can delete any CV; regular users can only delete their own
+        if getattr(self.request.user, 'is_staff', False):
+            return CV.objects.all()
         return CV.objects.filter(user=self.request.user)
 
 
@@ -80,7 +125,11 @@ class CVTextView(APIView):
 
     def get(self, request, pk):
         try:
-            cv_instance = CV.objects.get(pk=pk, user=request.user)
+            # Admins can access any CV; regular users only their own
+            if getattr(request.user, 'is_staff', False):
+                cv_instance = CV.objects.get(pk=pk)
+            else:
+                cv_instance = CV.objects.get(pk=pk, user=request.user)
         except CV.DoesNotExist:
             return Response(
                 {"detail": "Not found."},
@@ -122,7 +171,11 @@ class FormattedCVView(APIView):
 
     def get(self, request, pk):
         req_start = time.monotonic()
-        cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
+        # Admins can access any CV; regular users only their own
+        if getattr(request.user, 'is_staff', False):
+            cv_instance = get_object_or_404(CV, pk=pk)
+        else:
+            cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
 
         # Extract text from the stored CV file.
         file_obj = cv_instance.file
@@ -144,23 +197,20 @@ class FormattedCVView(APIView):
         )
         print(f"[LLM] structured done cv_id={cv_instance.id} seconds={llm_elapsed:.3f}")
 
-        # Render PDF using a deterministic template.
-        output_dir = Path(settings.MEDIA_ROOT) / "formatted_cvs"
+        # Render PDF to a temp file (no local media storage; Cloudinary only for uploads).
         safe_name = cv_instance.original_filename.replace("/", "_").replace("\\", "_")
-        output_path = output_dir / f"cv_{cv_instance.id}_{safe_name}"
-        if not output_path.suffix.lower().endswith(".pdf"):
-            output_path = output_path.with_suffix(".pdf")
-
-        # Prefer the Ajlla HTML template when available; fallback stays FPDF.
-        template_path = Path(settings.BASE_DIR).parent / "Ajlla_Product Owner.html"
-        pdf_path = render_structured_cv_to_pdf(
-            structured_cv,
-            output_path=output_path,
-            html_template_path=template_path,
-        )
-
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / f"cv_{cv_instance.id}_{safe_name}"
+            if not output_path.suffix.lower().endswith(".pdf"):
+                output_path = output_path.with_suffix(".pdf")
+            template_path = Path(settings.BASE_DIR).parent / "Ajlla_Product Owner.html"
+            pdf_path = render_structured_cv_to_pdf(
+                structured_cv,
+                output_path=output_path,
+                html_template_path=template_path,
+            )
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
 
         response = HttpResponse(
             pdf_bytes,
@@ -189,7 +239,11 @@ class StructuredCVView(APIView):
 
     def get(self, request, pk):
         req_start = time.monotonic()
-        cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
+        # Admins can access any CV; regular users only their own
+        if getattr(request.user, 'is_staff', False):
+            cv_instance = get_object_or_404(CV, pk=pk)
+        else:
+            cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
 
         # Extract text from the stored CV file.
         file_obj = cv_instance.file
@@ -225,7 +279,11 @@ class StructuredCVView(APIView):
         Now supports a 'type' parameter: 'cv' (default) or 'competence'.
         """
         req_start = time.monotonic()
-        cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
+        # Admins can access any CV; regular users only their own
+        if getattr(request.user, 'is_staff', False):
+            cv_instance = get_object_or_404(CV, pk=pk)
+        else:
+            cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
 
         try:
             structured_cv = request.data.get("structured_cv", {})
@@ -237,14 +295,8 @@ class StructuredCVView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Render PDF using the edited structured CV.
-        output_dir = Path(settings.MEDIA_ROOT) / "formatted_cvs"
+        # Render PDF to a temp file (no local media storage).
         safe_name = cv_instance.original_filename.replace("/", "_").replace("\\", "_")
-        output_path = output_dir / f"cv_{cv_instance.id}_{safe_name}"
-        if not output_path.suffix.lower().endswith(".pdf"):
-            output_path = output_path.with_suffix(".pdf")
-
-        # Choose template based on export_type
         if export_type == "competence":
             template_path = Path(settings.BASE_DIR) / "templates" / "competence_template.html"
             download_name = f'{cv_instance.original_filename.rsplit(".", 1)[0]}_competence_letter.pdf'
@@ -252,12 +304,18 @@ class StructuredCVView(APIView):
             template_path = Path(settings.BASE_DIR).parent / "Ajlla_Product Owner.html"
             download_name = f'{cv_instance.original_filename.rsplit(".", 1)[0]}_edited.pdf'
 
-        pdf_path = render_structured_cv_to_pdf(
-            structured_cv,
-            output_path=output_path,
-            html_template_path=template_path,
-            section_order=section_order,
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / f"cv_{cv_instance.id}_{safe_name}"
+            if not output_path.suffix.lower().endswith(".pdf"):
+                output_path = output_path.with_suffix(".pdf")
+            pdf_path = render_structured_cv_to_pdf(
+                structured_cv,
+                output_path=output_path,
+                html_template_path=template_path,
+                section_order=section_order,
+            )
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
 
         # Store competence paper in DB when exporting competence type
         # IMPORTANT: Store only what was actually exported in the PDF (with same restrictions)
@@ -442,9 +500,6 @@ class StructuredCVView(APIView):
                     original_competence_paper=competence_paper,
                     status="pending",
                 )
-
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
 
         response = HttpResponse(
             pdf_bytes,

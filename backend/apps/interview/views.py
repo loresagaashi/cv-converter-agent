@@ -1,5 +1,6 @@
 import logging
 import re
+import tempfile
 from pathlib import Path
 
 from django.conf import settings
@@ -45,7 +46,11 @@ class CompetencePaperListView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request, cv_id):
-        cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
+        # Admins can access any CV; regular users only their own
+        if getattr(request.user, 'is_staff', False):
+            cv_instance = get_object_or_404(CV, pk=cv_id)
+        else:
+            cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
         
         # Get all original competence papers for this CV
         competence_papers = CompetencePaper.objects.filter(
@@ -217,8 +222,14 @@ class ConversationSessionStartView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
+
+        # Admins can access any CV; regular users only their own
+        if getattr(request.user, 'is_staff', False):
+            cv_instance = get_object_or_404(CV, pk=cv_id)
+        else:
+            cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
         competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
+
 
         session = (
             ConversationSession.objects.filter(
@@ -1160,21 +1171,19 @@ class ConversationCompetencePaperPDFView(APIView):
             logger.warning(f"[PDFExport] ⚠️ Template not found, using text format")
             html_content = text_content
 
-        output_dir = Path(settings.MEDIA_ROOT) / "conversation_papers"
+        # Render PDF to a temp file (no local media storage).
         safe_name = cv_instance.original_filename.replace("/", "_").replace("\\", "_")
-        output_path = output_dir / f"conversation_paper_{conversation_paper.id}_{safe_name}"
-        if not output_path.suffix.lower().endswith(".pdf"):
-            output_path = output_path.with_suffix(".pdf")
-
-        # Render HTML to PDF
-        pdf_path = render_conversation_paper_to_pdf(
-            html_content,
-            output_path=output_path,
-            title="Conversation Competence Paper",
-        )
-
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / f"conversation_paper_{conversation_paper.id}_{safe_name}"
+            if not output_path.suffix.lower().endswith(".pdf"):
+                output_path = output_path.with_suffix(".pdf")
+            pdf_path = render_conversation_paper_to_pdf(
+                html_content,
+                output_path=output_path,
+                title="Conversation Competence Paper",
+            )
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
 
         response = HttpResponse(
             pdf_bytes,
@@ -1184,4 +1193,3 @@ class ConversationCompetencePaperPDFView(APIView):
             f'attachment; filename="{cv_instance.original_filename.rsplit(".", 1)[0]}_conversation_paper.pdf"'
         )
         return response
-

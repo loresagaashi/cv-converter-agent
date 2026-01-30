@@ -52,8 +52,11 @@ class RecruiterAssistantQuestionView(APIView):
                 status=400,
             )
 
-        # Ensure the CV and competence paper belong to the authenticated user.
-        cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
+        # Admins can access any CV; regular users only their own
+        if getattr(request.user, 'is_staff', False):
+            cv_instance = get_object_or_404(CV, pk=cv_id)
+        else:
+            cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
         competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
 
         # Extract plain text for the CV – this is the primary source of truth.

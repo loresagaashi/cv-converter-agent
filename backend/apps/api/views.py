@@ -37,7 +37,11 @@ class ConvertCVView(APIView):
         original_filename = None
 
         if cv_id:
-            cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
+            # Admins can access any CV; regular users only their own
+            if getattr(request.user, 'is_staff', False):
+                cv_instance = get_object_or_404(CV, pk=cv_id)
+            else:
+                cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
             file_obj = cv_instance.file
             original_filename = cv_instance.original_filename
             # For stored files, extension is usually enough for type detection.

@@ -176,12 +176,12 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(str(BASE_DIR), 'staticfiles')
 
-# WhiteNoise configuration for serving static files
-# Use CompressedStaticFilesStorage instead of Manifest to avoid issues during deployment
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# WhiteNoise for static files is configured in STORAGES['staticfiles'] below.
 
-MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(str(BASE_DIR), 'media')
+# When using Cloudinary, MEDIA_URL is overridden by the storage backend (HTTPS Cloudinary URLs).
+# Keep a fallback for local dev if Cloudinary is not configured.
+MEDIA_URL = '/media/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -214,5 +214,13 @@ CLOUDINARY_STORAGE = {
     'SECURE': True,
 }
 
-# Use RawMediaCloudinaryStorage for PDFs and DOCX files (not images)
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
+# Django 4.2+ uses STORAGES; DEFAULT_FILE_STORAGE is ignored, so set default file storage here.
+# RawMediaCloudinaryStorage stores PDFs/DOCX on Cloudinary and returns https://res.cloudinary.com/... URLs.
+STORAGES = {
+    'default': {
+        'BACKEND': 'cloudinary_storage.storage.RawMediaCloudinaryStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+    },
+}
