@@ -214,6 +214,23 @@ CLOUDINARY_STORAGE = {
     'SECURE': True,
 }
 
+# Log Cloudinary configuration status (without exposing secrets)
+cloudinary_configured = all([
+    CLOUDINARY_STORAGE.get('CLOUD_NAME'),
+    CLOUDINARY_STORAGE.get('API_KEY'),
+    CLOUDINARY_STORAGE.get('API_SECRET'),
+])
+if cloudinary_configured:
+    print(f"✅ [CLOUDINARY] Credentials loaded - CLOUD_NAME: {CLOUDINARY_STORAGE['CLOUD_NAME']}")
+else:
+    missing = []
+    if not CLOUDINARY_STORAGE.get('CLOUD_NAME'): missing.append('CLOUDINARY_CLOUD_NAME')
+    if not CLOUDINARY_STORAGE.get('API_KEY'): missing.append('CLOUDINARY_API_KEY')
+    if not CLOUDINARY_STORAGE.get('API_SECRET'): missing.append('CLOUDINARY_API_SECRET')
+    print(f"⚠️  [CLOUDINARY] Missing environment variables: {', '.join(missing)}")
+    print(f"⚠️  [CLOUDINARY] Files will fall back to local storage (ephemeral on Render!)")
+
+
 # File Storage Configuration
 # Note: Using deprecated settings (DEFAULT_FILE_STORAGE, STATICFILES_STORAGE) instead of
 # the new STORAGES dict because django-cloudinary-storage 0.3.0 doesn't support the new format.
