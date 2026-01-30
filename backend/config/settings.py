@@ -55,7 +55,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'cloudinary_storage',  # Must be before staticfiles
+    # 'cloudinary_storage',  # Removed to prevent collectstatic crash with Django 5 STORAGES dict
     'django.contrib.staticfiles',
     'whitenoise.runserver_nostatic',  # Use whitenoise for static files
     'cloudinary',  # Add cloudinary app
@@ -237,14 +237,16 @@ else:
 
 
 # File Storage Configuration
-# Note: Using deprecated settings (DEFAULT_FILE_STORAGE, STATICFILES_STORAGE) instead of
-# the new STORAGES dict because django-cloudinary-storage 0.3.0 doesn't support the new format.
-# This is compatible with Django 5.2 which still supports these deprecated settings.
+# ✅ DJANGO 5.x STORAGES CONFIGURATION
+# This explicitly tells Django to use Cloudinary for user uploads and WhiteNoise for static files.
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.RawMediaCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
-# Media files (user uploads) - stored on Cloudinary
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.RawMediaCloudinaryStorage'
-
-# Static files (CSS, JS) - served by WhiteNoise
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 
