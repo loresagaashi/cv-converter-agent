@@ -706,13 +706,45 @@ export function RecruiterVoiceAssistant({
 
   const handleEnd = () => {
     cancelledRef.current = true;
-    stopListening();
 
-    // Stop any currently playing audio
+    // Stop any currently playing audio IMMEDIATELY
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current.currentTime = 0;
       currentAudioRef.current = null;
+    }
+
+    // Stop listening/recording
+    stopListening();
+
+    // Force stop MediaRecorder if still active
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current = null;
+      } catch (err) {
+        console.error("[handleEnd] Error stopping MediaRecorder:", err);
+      }
+    }
+
+    // Close AudioContext if active
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      } catch (err) {
+        console.error("[handleEnd] Error closing AudioContext:", err);
+      }
+    }
+
+    // Clear all intervals and timeouts
+    if (volumeCheckIntervalRef.current) {
+      clearInterval(volumeCheckIntervalRef.current);
+      volumeCheckIntervalRef.current = null;
+    }
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
     }
 
     setStatus("finished");
