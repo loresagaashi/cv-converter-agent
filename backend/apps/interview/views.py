@@ -1155,6 +1155,7 @@ class ConversationCompetencePaperPDFView(APIView):
             "tech_competencies_line": view_instance._format_tech_competencies_grouped(section_items.get("technical_competencies", [])),
             "project_experience_line": "|".join(view_instance._format_project_experience(section_items.get("project_experience", []))),
             "footer_logo_url": view_instance._get_footer_logo_url(),
+            "is_assessment": True,  # Flag to indicate this is a Conversation Competence Paper (CCP)
         }
         
         # Generate HTML from template for PDF export

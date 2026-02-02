@@ -897,7 +897,7 @@ export function RecruiterVoiceAssistant({
           </div>
         )}
 
-        <div className="mt-6 flex justify-end gap-2 border-t border-slate-800/60 pt-4">
+        {/* <div className="mt-6 flex justify-end gap-2 border-t border-slate-800/60 pt-4">
           <button
             onClick={handleEnd}
             disabled={isGeneratingPaper}
@@ -905,7 +905,7 @@ export function RecruiterVoiceAssistant({
           >
             Close
           </button>
-        </div>
+        </div> */}
       </div>
     </div>
   );
