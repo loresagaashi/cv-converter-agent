@@ -242,13 +242,17 @@
         }
 
         .footer-badge {
-            height: 30px;
+            min-height: 30px;
             background: #1a2b5c;
             color: white;
             margin-right: 0;
             padding: 6px 50px;
             font-size: 10pt;
             font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
         }
 
         .superscript {
@@ -270,7 +274,7 @@
             <h1>JOB TITLE</h1>
 
             <h2 style="margin-top: 10px; margin-bottom: 2px;">Name:</h2>
-            <p style="margin-bottom: 10px;">{{ name if name else '-' }}</p>
+            <p style="margin-bottom: 10px;">{{ name.split(' ')[0] if name else '-' }}</p>
 
             <h2>Seniority:</h2>
             <p>{{ seniority if seniority else '-' }}</p>
@@ -366,7 +370,12 @@
     <div class="footer">
         <img src="{{ footer_logo_url if footer_logo_url else '../../borek-logo/borek.jpeg' }}"
             alt="Borek Solutions Group" class="footer-logo">
-        <div class="footer-badge">Borek employee</div>
+        <div class="footer-badges" style="display: flex; gap: 10px; align-items: center;">
+            {% if is_assessment %}
+            <div class="footer-badge" style="background-color: #1a2b5c;">Borek assessed</div>
+            {% endif %}
+            <div class="footer-badge">Borek employee</div>
+        </div>
     </div>
 </body>
 
