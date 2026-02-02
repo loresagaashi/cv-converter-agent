@@ -108,13 +108,25 @@ export function RecruiterVoiceAssistant({
     }
 
     try {
-      setStatus("speaking");
+      // FAST WAY: Show "thinking" while audio is downloading
+      const downloadStart = performance.now();
+      setStatus("thinking");
+      console.log(`[TIMING] TTS download started`);
       const audio = await playTextToSpeech(text, token);
+      const downloadEnd = performance.now();
       currentAudioRef.current = audio;
+      console.log(`[TIMING] TTS download completed: ${(downloadEnd - downloadStart).toFixed(0)}ms`);
 
       return new Promise((resolve, reject) => {
+        // Set status to "speaking" right when audio starts playing
+        const playStart = performance.now();
+        setStatus("speaking");
+        console.log(`[TIMING] Audio playback started`);
+        
         audio.onended = () => {
+          const playEnd = performance.now();
           currentAudioRef.current = null;
+          console.log(`[TIMING] Audio playback ended - Duration: ${(playEnd - playStart).toFixed(0)}ms`);
           resolve();
         };
         audio.onerror = () => {
@@ -469,7 +481,7 @@ export function RecruiterVoiceAssistant({
           historyRef.current.push({ role: "recruiter", content: answer });
           // console.log(`[Frontend] 📝 Added answer to history. Total history items: ${historyRef.current.length}`);
 
-          // Store this turn in backend
+          // FAST WAY: Save to database NON-BLOCKING (fire and forget)
           // Phase 1: validation for main sections, Phase 2: discovery for additional_info
           // Use ref to get the latest sessionId (React state updates are async)
           const currentSessionId = sessionIdRef.current || sessionId;
@@ -477,66 +489,73 @@ export function RecruiterVoiceAssistant({
           if (!currentSessionId) {
             console.error("[Frontend] ❌ Cannot store conversation turn: sessionId is null");
             console.error("[Frontend] Attempting to re-create session...");
-            try {
-              const startRes = await startConversationSession(token, cvId, paperId);
+            startConversationSession(token, cvId, paperId).then((startRes) => {
               // console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
               setSessionId(startRes.session_id);
               sessionIdRef.current = startRes.session_id;
 
-              // Retry storing the turn with the new session
+              // Retry storing the turn with the new session (non-blocking)
               const phase = currentSection === "additional_info" ? "discovery" : "validation";
-              const result = await createConversationTurn(token, {
+              const dbSaveStart = performance.now();
+              console.log(`[TIMING] DB save started (recreated session)`);
+              
+              createConversationTurn(token, {
                 session_id: startRes.session_id,
                 section: currentSection,
                 phase: phase,
                 question_text: question,
                 answer_text: answer,
+              }).then(() => {
+                const dbSaveEnd = performance.now();
+                console.log(`[TIMING] DB save completed: ${(dbSaveEnd - dbSaveStart).toFixed(0)}ms`);
+              }).catch((err: any) => {
+                const dbSaveEnd = performance.now();
+                console.error(`[TIMING] DB save failed after ${(dbSaveEnd - dbSaveStart).toFixed(0)}ms:`, err);
               });
-              // console.log(
-              //   `[Frontend] ✅ Successfully stored after re-creating session: question_id=${result.question_id}, response_id=${result.response_id}`
-              // );
-            } catch (err: any) {
+            }).catch((err: any) => {
               console.error("[Frontend] ❌ Failed to re-create session:", err);
               setError("Failed to create conversation session. Please try again.");
-            }
+            });
           } else {
-            try {
-              const phase = currentSection === "additional_info" ? "discovery" : "validation";
-              // console.log(
-              //   `[Frontend] 💾 Storing conversation turn: session_id=${currentSessionId}, section=${currentSection}, phase=${phase}`
-              // );
-              // console.log(`[Frontend] Question: ${question.substring(0, 50)}...`);
-              // console.log(`[Frontend] Answer: ${answer.substring(0, 50)}...`);
+            const phase = currentSection === "additional_info" ? "discovery" : "validation";
+            // console.log(
+            //   `[Frontend] 💾 Storing conversation turn: session_id=${currentSessionId}, section=${currentSection}, phase=${phase}`
+            // );
+            // console.log(`[Frontend] Question: ${question.substring(0, 50)}...`);
+            // console.log(`[Frontend] Answer: ${answer.substring(0, 50)}...`);
 
-              const result = await createConversationTurn(token, {
-                session_id: currentSessionId,
-                section: currentSection, // Use current section from backend
-                phase: phase,
-                question_text: question,
-                answer_text: answer,
-              });
-
-              // console.log(
-              //   `[Frontend] ✅ Successfully stored: question_id=${result.question_id}, response_id=${result.response_id}, status=${result.status}`
-              // );
-            } catch (err: any) {
+            // FAST WAY: Non-blocking database save - starts in background
+            const dbSaveStart = performance.now();
+            console.log(`[TIMING] DB save started (session ready)`);
+            
+            createConversationTurn(token, {
+              session_id: currentSessionId,
+              section: currentSection, // Use current section from backend
+              phase: phase,
+              question_text: question,
+              answer_text: answer,
+            }).then(() => {
+              const dbSaveEnd = performance.now();
+              console.log(`[TIMING] DB save completed: ${(dbSaveEnd - dbSaveStart).toFixed(0)}ms`);
+            }).catch((err: any) => {
               // Non-fatal; continue conversation but surface error.
+              const dbSaveEnd = performance.now();
+              console.error(`[TIMING] DB save failed after ${(dbSaveEnd - dbSaveStart).toFixed(0)}ms`);
               console.error("[Frontend] ❌ Failed to store conversation turn:", err);
               console.error("[Frontend] Error details:", err?.message, err?.response);
               // Try to get more details from the error
               if (err?.status === 404) {
                 console.error("[Frontend] Session not found. Attempting to re-create...");
-                try {
-                  const startRes = await startConversationSession(token, cvId, paperId);
+                startConversationSession(token, cvId, paperId).then((startRes) => {
                   // console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
                   setSessionId(startRes.session_id);
                   sessionIdRef.current = startRes.session_id;
-                } catch (recreateErr: any) {
+                }).catch((recreateErr: any) => {
                   console.error("[Frontend] ❌ Failed to re-create session:", recreateErr);
-                }
+                });
               }
               setError(err?.message || "Failed to store conversation turn.");
-            }
+            });
           }
         }
 

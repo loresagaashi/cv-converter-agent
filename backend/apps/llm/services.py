@@ -80,7 +80,8 @@ LOGIC FLOW (Per Section):
    - *Good:* "Got that. Is there anything else regarding their soft skills?"
    - *Good:* "Understood. Any other soft skills worth mentioning?"
 4. **Completion:** If they say "No", "That's all", or "Skip", set `"complete_section": true`.
-5. **Output Rules:** When you ask a question (contains a '?'), set `"complete_section": false` and `"done": false`.  
+5. **CRITICAL FOR RECOMMENDATIONS:** When entering the "recommendations" section, you MUST ask a direct question like "Would you like to add a recommendation or reference for this candidate?" Do not skip this section, even if the CV has no references.
+6. **Output Rules:** When you ask a question (contains a '?'), set `"complete_section": false` and `"done": false`.  
    Only set `"done": true` when you're ending the conversation with a short closing statement (no question).
 
 JSON OUTPUT ONLY:
@@ -292,6 +293,29 @@ def generate_recruiter_next_question(
         if role not in ("assistant", "recruiter") or not content:
             continue
         safe_history.append({"role": role, "content": content})
+    
+    # Track which sections have been asked about to prevent skipping
+    sections_asked = set()
+    for msg in safe_history:
+        if msg.get("role") == "assistant":
+            # Detect section mentions in assistant questions
+            content_lower = msg.get("content", "").lower()
+            if "recommendation" in content_lower:
+                sections_asked.add("recommendations")
+            elif "project" in content_lower and "experience" in content_lower:
+                sections_asked.add("project_experience")
+            elif "technical" in content_lower and "competenc" in content_lower:
+                sections_asked.add("technical_competencies")
+            elif "training" in content_lower or "certification" in content_lower:
+                sections_asked.add("trainings_certifications")
+            elif "education" in content_lower:
+                sections_asked.add("education")
+            elif "language" in content_lower:
+                sections_asked.add("languages")
+            elif "soft skill" in content_lower:
+                sections_asked.add("soft_skills")
+            elif "core skill" in content_lower:
+                sections_asked.add("core_skills")
 
     user_payload: Dict[str, Any] = {
         "cv_text": cv_text or "",
@@ -376,8 +400,15 @@ def generate_recruiter_next_question(
             
         if idx < len(section_order) - 1:
             next_section = section_order[idx + 1]
+            
+            # CRITICAL FIX: Force recommendations section if not asked yet
+            if next_section == "additional_info" and "recommendations" not in sections_asked:
+                next_section = "recommendations"
+                question = "Great. Now, what can you tell me about their recommendations or references?"
+                complete_section = False
+                logger.info("[generate_recruiter_next_question] 🔒 FORCED recommendations section")
             # Ensure the AI provided a transition question. If not, generate a safe natural fallback.
-            if not question:
+            elif not question:
                  human_readable_next = next_section.replace('_', ' ').title()
                  if next_section == "additional_info":
                      question = "Is there anything else not in the CV that you would like to mention?"
@@ -387,6 +418,15 @@ def generate_recruiter_next_question(
             next_section = "additional_info"
             if section == "additional_info":
                  done = True
+
+    # If we are in recommendations, ensure the prompt explicitly asks for recommendations.
+    if (next_section or section) == "recommendations":
+        question_lower = (question or "").lower()
+        if not any(term in question_lower for term in ("recommendation", "reference")):
+            question = "Great. Now, what can you tell me about their recommendations or references?"
+            complete_section = False
+            done = False
+            logger.info("[generate_recruiter_next_question] 🔒 NORMALIZED recommendations prompt")
 
     if next_section != "additional_info" and section != "additional_info":
         done = False
