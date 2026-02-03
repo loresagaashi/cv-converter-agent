@@ -200,9 +200,9 @@ class ConversationCompetencePaperDeleteView(APIView):
 
 class ConversationSessionStartView(APIView):
     """
-    Ensure there is a ConversationSession for the given CV + original competence paper.
+    Start a new ConversationSession for the given CV + original competence paper.
 
-    Returns an existing pending/in-progress session or creates a new one.
+    Always creates a new session when "Talk to AI" is opened (no reuse of old in-progress sessions).
     """
 
     permission_classes = [IsAuthenticated]
@@ -222,7 +222,6 @@ class ConversationSessionStartView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-
         # Admins can access any CV; regular users only their own
         if getattr(request.user, 'is_staff', False):
             cv_instance = get_object_or_404(CV, pk=cv_id)
@@ -230,30 +229,13 @@ class ConversationSessionStartView(APIView):
             cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
         competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
 
-
-        session = (
-            ConversationSession.objects.filter(
-                cv=cv_instance,
-                original_competence_paper=competence_paper,
-            )
-            .exclude(status="completed")
-            .order_by("-created_at")
-            .first()
+        # Always create a new session when opening Talk to AI
+        session = ConversationSession.objects.create(
+            cv=cv_instance,
+            original_competence_paper=competence_paper,
+            status="in_progress",
         )
-
-        if session is None:
-            session = ConversationSession.objects.create(
-                cv=cv_instance,
-                original_competence_paper=competence_paper,
-                status="in_progress",
-            )
-            logger.info(f"[ConversationSessionStartView] ✅ Created new session: id={session.id}")
-        else:
-            if session.status != "in_progress":
-                session.status = "in_progress"
-                session.completed_at = None
-                session.save(update_fields=["status", "completed_at"])
-            logger.info(f"[ConversationSessionStartView] ✅ Using existing session: id={session.id}, status={session.status}")
+        logger.info(f"[ConversationSessionStartView] ✅ Created new session: id={session.id}")
 
         return Response(
             {
