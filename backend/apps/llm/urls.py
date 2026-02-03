@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import RecruiterAssistantQuestionView, text_to_speech, transcribe_audio
+from .views import RecruiterAssistantQuestionView, text_to_speech, transcribe_audio, voice_to_question
 
 app_name = "llm"
 
@@ -20,6 +20,10 @@ urlpatterns = [
         transcribe_audio,
         name="transcribe-audio",
     ),
+    path(
+        "voice-to-question/",
+        voice_to_question,
+        name="voice-to-question",
+    ),
 ]
-
 

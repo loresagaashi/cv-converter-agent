@@ -190,3 +190,101 @@ def transcribe_audio(request):
             status=500,
         )
 
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def voice_to_question(request):
+    """
+    🚀 SUPER ENDPOINT: Transcribe audio AND generate next question in ONE request.
+    This eliminates network round-trip latency between transcription and question generation.
+    
+    Expects multipart/form-data with:
+    - audio: Audio file (webm format)
+    - cv_id: CV ID (integer)
+    - paper_id: Competence Paper ID (integer)
+    - history: JSON string of conversation history
+    - section: Current section (string)
+    
+    Returns JSON:
+    {
+        "transcription": "User's spoken text",
+        "question_data": {
+            "question": "AI's next question",
+            "section": "current_section",
+            "complete_section": false,
+            "done": false
+        }
+    }
+    """
+    import json
+    
+    if 'audio' not in request.FILES:
+        return Response({"detail": "Audio file is required."}, status=400)
+    
+    cv_id = request.data.get("cv_id")
+    paper_id = request.data.get("paper_id")
+    history_str = request.data.get("history", "[]")
+    section = request.data.get("section", "core_skills")
+    
+    # Parse history
+    try:
+        history = json.loads(history_str) if isinstance(history_str, str) else history_str
+    except:
+        history = []
+    
+    # Validate IDs
+    try:
+        cv_id = int(cv_id)
+        paper_id = int(paper_id)
+    except (ValueError, TypeError):
+        return Response({"detail": "cv_id and paper_id must be integers."}, status=400)
+    
+    # Step 1: Transcribe audio
+    audio_file = request.FILES['audio']
+    try:
+        transcription_result = transcribe_audio_whisper(audio_file)
+        transcribed_text = transcription_result.get('text', '').strip()
+    except ValueError as e:
+        # Language validation error
+        return Response({"detail": str(e)}, status=400)
+    except Exception as e:
+        logger.error(f"[voice_to_question] Transcription failed: {e}")
+        return Response({"detail": "Transcription failed"}, status=500)
+    
+    # If transcription is empty, return early
+    if not transcribed_text:
+        return Response({"transcription": "", "question_data": None}, status=200)
+    
+    # Step 2: Load CV/Paper and generate question
+    if getattr(request.user, 'is_staff', False):
+        cv_instance = get_object_or_404(CV, pk=cv_id)
+    else:
+        cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
+    competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
+    
+    try:
+        file_obj = cv_instance.file
+        content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
+        cv_text = read_cv_file(file_obj, name=cv_instance.original_filename, content_type=content_type)
+        competence_text = competence_paper.content or ""
+        
+        # Add user's answer to history
+        updated_history = list(history)
+        updated_history.append({"role": "recruiter", "content": transcribed_text})
+        
+        # Generate next question
+        question_result = generate_recruiter_next_question(
+            cv_text=cv_text,
+            competence_text=competence_text,
+            history=updated_history,
+            section=section
+        )
+        
+        return Response({
+            "transcription": transcribed_text,
+            "question_data": question_result
+        }, status=200)
+        
+    except Exception as e:
+        logger.error(f"[voice_to_question] Error: {e}", exc_info=True)
+        return Response({"detail": str(e)}, status=500)

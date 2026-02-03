@@ -58,7 +58,7 @@ const MAX_QUESTIONS_PER_SECTION: Record<SectionKey, number> = {
 /**
  * Voice-only recruiter assistant UI.
  *
- * - No text transcript of the conversation is shown.
+   * - Shows the latest live transcription ("You said:") on screen.
  * - Uses browser speech synthesis / recognition for audio I/O.
  * - Uses backend /api/llm/recruiter-assistant/question/ (gpt-4o-mini) for reasoning.
  */
@@ -111,22 +111,22 @@ export function RecruiterVoiceAssistant({
       // FAST WAY: Show "thinking" while audio is downloading
       const downloadStart = performance.now();
       setStatus("thinking");
-      console.log(`[TIMING] TTS download started`);
+      //console.log(`[TIMING] TTS download started`);
       const audio = await playTextToSpeech(text, token);
       const downloadEnd = performance.now();
       currentAudioRef.current = audio;
-      console.log(`[TIMING] TTS download completed: ${(downloadEnd - downloadStart).toFixed(0)}ms`);
+      //console.log(`[TIMING] TTS download completed: ${(downloadEnd - downloadStart).toFixed(0)}ms`);
 
       return new Promise((resolve, reject) => {
         // Set status to "speaking" right when audio starts playing
         const playStart = performance.now();
         setStatus("speaking");
-        console.log(`[TIMING] Audio playback started`);
-        
+        //console.log(`[TIMING] Audio playback started`);
+
         audio.onended = () => {
           const playEnd = performance.now();
           currentAudioRef.current = null;
-          console.log(`[TIMING] Audio playback ended - Duration: ${(playEnd - playStart).toFixed(0)}ms`);
+          //console.log(`[TIMING] Audio playback ended - Duration: ${(playEnd - playStart).toFixed(0)}ms`);
           resolve();
         };
         audio.onerror = () => {
@@ -206,10 +206,14 @@ export function RecruiterVoiceAssistant({
             clearInterval(volumeCheckIntervalRef.current);
             volumeCheckIntervalRef.current = null;
           }
-          if (audioContextRef.current) {
-            audioContextRef.current.close();
-            audioContextRef.current = null;
+          if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+            try {
+              audioContextRef.current.close();
+            } catch (err) {
+              console.error("[startListening] Error closing AudioContext:", err);
+            }
           }
+          audioContextRef.current = null;
 
           // Stop all tracks
           stream.getTracks().forEach(track => track.stop());
@@ -273,6 +277,111 @@ export function RecruiterVoiceAssistant({
       }
     });
   };
+
+  // 🚀 COMBINED ENDPOINT: Records audio AND gets next question in ONE request
+  const startListeningAndProcessing = (
+    cvId: number,
+    paperId: number,
+    history: any[],
+    currentSection: string
+  ): Promise<{ transcription: string; question_data: any }> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        const audioContext = new AudioContext();
+        audioContextRef.current = audioContext;
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyserRef.current = analyser;
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        const SILENCE_THRESHOLD = 0.03;
+        const SILENCE_DURATION_MS = 2000;
+        let lastSoundTime = Date.now();
+
+        const checkVolume = () => {
+          if (!analyserRef.current) return;
+          analyser.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+          const volume = average / 255;
+          if (volume > SILENCE_THRESHOLD) {
+            lastSoundTime = Date.now();
+          } else if (Date.now() - lastSoundTime >= SILENCE_DURATION_MS) {
+            setStatus("thinking"); // Show "thinking" immediately when silence detected
+            stopListening();
+          }
+        };
+
+        volumeCheckIntervalRef.current = setInterval(checkVolume, 100);
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) audioChunksRef.current.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          if (volumeCheckIntervalRef.current) clearInterval(volumeCheckIntervalRef.current);
+
+          // Fix: Check if AudioContext is already closed before trying to close it
+          if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+            try {
+              audioContextRef.current.close();
+            } catch (err) {
+              console.error("[startListeningAndProcessing] Error closing AudioContext:", err);
+            }
+          }
+          audioContextRef.current = null;
+
+          stream.getTracks().forEach(track => track.stop());
+
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          if (audioBlob.size === 0) {
+            resolve({ transcription: "", question_data: null });
+            return;
+          }
+
+          try {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+            formData.append('cv_id', String(cvId));
+            formData.append('paper_id', String(paperId));
+            formData.append('history', JSON.stringify(history));
+            formData.append('section', currentSection);
+
+            const response = await fetch(
+              `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/llm/voice-to-question/`,
+              {
+                method: 'POST',
+                headers: { Authorization: `Token ${token}` },
+                body: formData,
+              }
+            );
+
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              throw new Error(errData.detail || "Processing failed");
+            }
+
+            resolve(await response.json());
+          } catch (err: any) {
+            reject(err);
+          }
+        };
+
+        setStatus("listening");
+        mediaRecorder.start();
+      } catch (err: any) {
+        reject(new Error("Failed to access microphone"));
+      }
+    });
+  };
+
 
   const stopListening = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -348,348 +457,171 @@ export function RecruiterVoiceAssistant({
       }
 
       // Ensure we have a conversation session (Phase 0)
-      // console.log(`[Frontend] 🚀 Starting conversation session: cvId=${cvId}, paperId=${paperId}`);
       const startRes = await startConversationSession(token, cvId, paperId);
-      // console.log(`[Frontend] ✅ Session created/retrieved: session_id=${startRes.session_id}, status=${startRes.status}`);
       setSessionId(startRes.session_id);
-      sessionIdRef.current = startRes.session_id; // Also store in ref for immediate access
+      sessionIdRef.current = startRes.session_id;
 
       let currentSection: SectionKey = "core_skills";
-      setSection(currentSection); // Set initial section
+      setSection(currentSection);
       let done = false;
-      let allSectionsComplete = false;
 
-      // Phase 1: 7 main sections driven by backend question generator
+      // Phase 1: Get initial question
+      setStatus("thinking");
+      const { question: initialQuestion, nextSection: initialNextSection, done: initialDone } = await fetchNextQuestion(currentSection);
+
+      if (initialNextSection && initialNextSection !== currentSection) {
+        currentSection = initialNextSection as SectionKey;
+        setSection(currentSection);
+      }
+
+      if (!initialQuestion || initialDone) {
+        done = true;
+      }
+
+      let question = initialQuestion;
+
+      // Phase 2: Main loop using SUPER ENDPOINT (transcription + question in ONE request)
       while (!done && !cancelledRef.current) {
-        setStatus("thinking");
-        // console.log(`[Frontend] 🔄 Fetching next question for section: ${currentSection}`);
-        const { question, nextSection, completeSection, done: isDone } = await fetchNextQuestion(currentSection);
+        let result;
 
-        // console.log(
-        //   `[Frontend] 📥 Received from backend: section=${nextSection}, complete_section=${completeSection}, done=${isDone}, question="${question?.substring(0, 50)}..."`
-        // );
+        try {
+          // Speak the question first
+          historyRef.current.push({ role: "assistant", content: question });
+          await speak(question);
+          if (cancelledRef.current) break;
 
-        // Update section immediately from backend response
+          // 🚀 Combined transcription + question generation
+          // Clear previous transcript right when we start listening again (so the last answer
+          // remains visible during "Speaking" / "Thinking" states).
+          setLastTranscript("");
+          result = await startListeningAndProcessing(cvId, paperId, historyRef.current, currentSection);
+
+          //console.log("[DEBUG] Result from combined endpoint:", result);
+          //console.log("[DEBUG] Transcription:", result?.transcription);
+
+          // Show transcription immediately when we get the response
+          if (result?.transcription) {
+            //console.log("[DEBUG] Setting transcript to:", result.transcription);
+            setLastTranscript(result.transcription);
+          } else {
+            //console.log("[DEBUG] No transcription in result!");
+          }
+        } catch (err: any) {
+          const errorMessage = err?.message || "Voice input error.";
+
+          // ✅ If user clicked "End Session", exit gracefully without error
+          if (errorMessage.includes("Session ended by user")) {
+            break;
+          }
+
+          if (errorMessage.toLowerCase().includes("english")) {
+            await speak(errorMessage);
+            await new Promise(r => setTimeout(r, 500));
+            await speak(question); // Repeat last question
+            continue;
+          }
+          setError(errorMessage);
+          break;
+        }
+
+        const { transcription: answer, question_data: nextQData } = result;
+
+        if (!answer || !answer.trim()) {
+          await new Promise(r => setTimeout(r, 500));
+          await speak(question); // Repeat last question
+          continue;
+        }
+
+        historyRef.current.push({ role: "recruiter", content: answer });
+
+        // Save to database asynchronously (non-blocking)
+        const currentSessionId = sessionIdRef.current || sessionId;
+        if (currentSessionId) {
+          const phase = currentSection === "additional_info" ? "discovery" : "validation";
+          createConversationTurn(token, {
+            session_id: currentSessionId,
+            section: currentSection,
+            phase: phase,
+            question_text: question,
+            answer_text: answer,
+          }).catch((err: any) => {
+            console.error("[Frontend] ❌ Failed to store conversation turn:", err);
+          });
+        }
+
+        // Process next question data
+        if (!nextQData) {
+          done = true;
+          break;
+        }
+
+        const nextQuestion = nextQData.question || "";
+        const nextSection = nextQData.section || currentSection;
+        const isDone = nextQData.done || false;
+
+        // Update section if changed
         if (nextSection && nextSection !== currentSection) {
-          // console.log(`[Frontend] 🔀 Section changed: ${currentSection} → ${nextSection}`);
           currentSection = nextSection as SectionKey;
           setSection(currentSection);
         }
 
-        if (!question) {
-          done = true;
-          break;
-        }
-
-        // Track how many questions we have asked in this section.
-        sectionQuestionCountRef.current[currentSection] =
-          (sectionQuestionCountRef.current[currentSection] || 0) + 1;
-
-        historyRef.current.push({ role: "assistant", content: question });
-
-        // Check if the question actually contains a question mark
-        const hasQuestionMark = (question || "").includes("?");
-
-        // If done=true and there's no question mark, it's definitely a closing statement
-        // The regex check should only apply when there's actually a question mark
+        // Check if this is the final turn
+        const hasQuestionMark = nextQuestion.includes("?");
         const isAdditionalInfoFinalPrompt =
           currentSection === "additional_info" &&
           isDone &&
           hasQuestionMark &&
-          /\b(anything else|add anything|add more|else we haven't covered)\b/i.test(question || "");
+          /\b(anything else|add anything|add more|else we haven't covered)\b/i.test(nextQuestion);
 
-        // If this is the final turn (done=true), speak the outro and exit WITHOUT listening
         if (isDone && !isAdditionalInfoFinalPrompt) {
-          // console.log(`[Frontend] 🎬 Final outro detected. Speaking and then exiting conversation loop.`);
-          await speak(question);
-          if (cancelledRef.current) break;
+          // Final outro - speak and exit
+          if (nextQuestion) {
+            historyRef.current.push({ role: "assistant", content: nextQuestion });
+            await speak(nextQuestion);
+          }
           done = true;
           break;
         }
 
-        // For normal questions, speak then listen for answer
-        setLastTranscript(""); // Clear previous transcript before asking new question
-        await speak(question);
-        if (cancelledRef.current) break;
-
-        let answer = "";
-        let validAnswer = false;
-
-        // Retry loop for language validation errors
-        while (!validAnswer && !cancelledRef.current) {
-          try {
-            // console.log(`[Frontend] 🎤 Starting to listen for answer...`);
-            setStatus("listening");
-            answer = await startListening();
-            // console.log(`[Frontend] ✅ Received answer: "${answer}"`);
-
-            // Set transcript to show user's answer
-            if (answer) {
-              setLastTranscript(answer);
-            }
-
-            // If we got here, the answer is valid (no language error)
-            validAnswer = true;
-          } catch (err: any) {
-            const errorMessage = err?.message || "Voice input error.";
-
-            // Check if it's a language validation error
-            if (errorMessage.toLowerCase().includes("english")) {
-              // console.log(`[Frontend] 🌍 Language validation error detected: "${errorMessage}"`);
-              // DON'T show error on screen - only speak it
-              setLastTranscript(""); // Clear transcript display
-
-              try {
-                // Speak the error out loud
-                // console.log(`[Frontend] 🔊 Speaking language error: "${errorMessage}"`);
-                await speak(errorMessage);
-
-                // Wait a moment, then repeat the question
-                await new Promise(resolve => setTimeout(resolve, 500));
-                // console.log(`[Frontend] 🔄 Repeating question due to language error...`);
-                await speak(question);
-
-                // Continue the loop to listen again
-                continue;
-              } catch (speakErr) {
-                console.error(`[Frontend] ❌ Error speaking language error:`, speakErr);
-              }
-            } else {
-              // Other errors (microphone access, network, etc.) - don't retry
-              console.error(`[Frontend] ❌ Non-language error:`, err);
-              setError(errorMessage);
-              validAnswer = true; // Exit loop, continue with empty answer
-            }
-          } finally {
-            stopListening();
-          }
-        }
-
-        if (cancelledRef.current) break;
-
-        // If no answer (empty or silence), repeat the question
-        if (!answer || !answer.trim()) {
-          // console.log(`[Frontend] 🔇 No speech detected, repeating question...`);
-          setLastTranscript(""); // Clear display
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await speak(question); // Repeat the question
-          // Don't add to history, just loop back to ask again
-          continue;
-        }
-
-        if (answer) {
-          historyRef.current.push({ role: "recruiter", content: answer });
-          // console.log(`[Frontend] 📝 Added answer to history. Total history items: ${historyRef.current.length}`);
-
-          // FAST WAY: Save to database NON-BLOCKING (fire and forget)
-          // Phase 1: validation for main sections, Phase 2: discovery for additional_info
-          // Use ref to get the latest sessionId (React state updates are async)
-          const currentSessionId = sessionIdRef.current || sessionId;
-
-          if (!currentSessionId) {
-            console.error("[Frontend] ❌ Cannot store conversation turn: sessionId is null");
-            console.error("[Frontend] Attempting to re-create session...");
-            startConversationSession(token, cvId, paperId).then((startRes) => {
-              // console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
-              setSessionId(startRes.session_id);
-              sessionIdRef.current = startRes.session_id;
-
-              // Retry storing the turn with the new session (non-blocking)
-              const phase = currentSection === "additional_info" ? "discovery" : "validation";
-              const dbSaveStart = performance.now();
-              console.log(`[TIMING] DB save started (recreated session)`);
-              
-              createConversationTurn(token, {
-                session_id: startRes.session_id,
-                section: currentSection,
-                phase: phase,
-                question_text: question,
-                answer_text: answer,
-              }).then(() => {
-                const dbSaveEnd = performance.now();
-                console.log(`[TIMING] DB save completed: ${(dbSaveEnd - dbSaveStart).toFixed(0)}ms`);
-              }).catch((err: any) => {
-                const dbSaveEnd = performance.now();
-                console.error(`[TIMING] DB save failed after ${(dbSaveEnd - dbSaveStart).toFixed(0)}ms:`, err);
-              });
-            }).catch((err: any) => {
-              console.error("[Frontend] ❌ Failed to re-create session:", err);
-              setError("Failed to create conversation session. Please try again.");
-            });
-          } else {
-            const phase = currentSection === "additional_info" ? "discovery" : "validation";
-            // console.log(
-            //   `[Frontend] 💾 Storing conversation turn: session_id=${currentSessionId}, section=${currentSection}, phase=${phase}`
-            // );
-            // console.log(`[Frontend] Question: ${question.substring(0, 50)}...`);
-            // console.log(`[Frontend] Answer: ${answer.substring(0, 50)}...`);
-
-            // FAST WAY: Non-blocking database save - starts in background
-            const dbSaveStart = performance.now();
-            console.log(`[TIMING] DB save started (session ready)`);
-            
-            createConversationTurn(token, {
-              session_id: currentSessionId,
-              section: currentSection, // Use current section from backend
-              phase: phase,
-              question_text: question,
-              answer_text: answer,
-            }).then(() => {
-              const dbSaveEnd = performance.now();
-              console.log(`[TIMING] DB save completed: ${(dbSaveEnd - dbSaveStart).toFixed(0)}ms`);
-            }).catch((err: any) => {
-              // Non-fatal; continue conversation but surface error.
-              const dbSaveEnd = performance.now();
-              console.error(`[TIMING] DB save failed after ${(dbSaveEnd - dbSaveStart).toFixed(0)}ms`);
-              console.error("[Frontend] ❌ Failed to store conversation turn:", err);
-              console.error("[Frontend] Error details:", err?.message, err?.response);
-              // Try to get more details from the error
-              if (err?.status === 404) {
-                console.error("[Frontend] Session not found. Attempting to re-create...");
-                startConversationSession(token, cvId, paperId).then((startRes) => {
-                  // console.log(`[Frontend] ✅ Re-created session: session_id=${startRes.session_id}`);
-                  setSessionId(startRes.session_id);
-                  sessionIdRef.current = startRes.session_id;
-                }).catch((recreateErr: any) => {
-                  console.error("[Frontend] ❌ Failed to re-create session:", recreateErr);
-                });
-              }
-              setError(err?.message || "Failed to store conversation turn.");
-            });
-          }
-        }
-
-        // Apply frontend guard-rails to avoid loops in a section:
-        // if the model does not mark the section complete but we have already
-        // asked our configured maximum number of questions, force completion
-        // and move to the next section in the fixed order.
-        let effectiveCompleteSection = completeSection;
-        let effectiveNextSection = nextSection as SectionKey;
-        let effectiveDone = isDone;
-
-        if (isAdditionalInfoFinalPrompt) {
-          // Backend sometimes marks additional_info as done too early.
-          effectiveCompleteSection = false;
-          effectiveDone = false;
-        }
-
-        if (
-          !completeSection &&
-          sectionQuestionCountRef.current[currentSection] >= MAX_QUESTIONS_PER_SECTION[currentSection]
-        ) {
-          effectiveCompleteSection = true;
-
-          const idx = SECTION_ORDER.indexOf(currentSection);
-          if (idx >= 0 && idx < SECTION_ORDER.length - 1) {
-            effectiveNextSection = SECTION_ORDER[idx + 1] as SectionKey;
-          } else {
-            effectiveNextSection = currentSection;
-          }
-        }
-
-        if (effectiveCompleteSection) {
-          currentSection = effectiveNextSection;
-          setSection(effectiveNextSection);
-
-          // Check if all 7 main sections are complete (before additional_info)
-          const mainSections = SECTION_ORDER.slice(0, 7); // First 7 sections
-          if (effectiveNextSection === "additional_info") {
-            allSectionsComplete = true;
-          }
-        }
-
-        done = effectiveDone;
-
-        // console.log(
-        //   `[Frontend] 📊 Loop state: currentSection=${currentSection}, done=${done}, ` +
-        //   `completeSection=${effectiveCompleteSection}, allSectionsComplete=${allSectionsComplete}`
-        // );
-
-        // If done is true, all sections including additional_info are complete
-        if (done) {
-          allSectionsComplete = true;
-          // console.log(`[Frontend] ✅ Conversation complete! All sections done.`);
-        }
+        // Continue with next question
+        question = nextQuestion;
       }
 
-      // console.log(`[Frontend] 🏁 Exited main loop. done=${done}, allSectionsComplete=${allSectionsComplete}`);
-
-      // Phase 2 is handled automatically by the backend - it will move to additional_info
-      // section after all 7 main sections are complete. The main loop above handles it.
-
-      // Phase 3: Generate competence paper (after all phases complete - when done=true)
-      const finalSessionId = sessionIdRef.current || sessionId;
-      // console.log(
-      //   `[Frontend] 🔍 Checking generation conditions: cancelled=${cancelledRef.current}, ` +
-      //   `sessionId=${finalSessionId}, done=${done}, hasGeneratedPaper=${hasGeneratedPaper}`
-      // );
-
-      if (!cancelledRef.current && finalSessionId && done && !hasGeneratedPaper) {
+      // Generate final competence paper: show "Generating" for at least 2s, then final screen
+      if (!cancelledRef.current) {
+        setIsGeneratingPaper(true);
+        setStatus("generating");
+        const generatingStart = Date.now();
         try {
-          // console.log(`[Frontend] 🚀 Starting competence paper generation...`);
-          // console.log(`[Frontend] 📊 Session summary: sessionId=${finalSessionId}, totalQuestions=${historyRef.current.filter(h => h.role === 'assistant').length}`);
-          // setStatus("generating");
-          setIsGeneratingPaper(true);
-          // console.log(`[Frontend] 📞 Calling generateConversationCompetencePaper API for session ${finalSessionId}...`);
-          const startTime = Date.now();
-          const generatedPaper = await generateConversationCompetencePaper(token, finalSessionId);
-          const duration = Date.now() - startTime;
-
-          // console.log(`[Frontend] ✅ Paper generated successfully in ${duration}ms:`, generatedPaper);
-          // console.log(`[Frontend] 📄 Paper details: id=${generatedPaper.id}, content_length=${generatedPaper.content?.length || 0}, cv_id=${generatedPaper.cv_id}`);
-
-          setHasGeneratedPaper(true);
-          setGeneratedPaperId(generatedPaper.id);
-
-          // Store the paper ID for later editing/exporting
-          if (generatedPaper?.id) {
-            // console.log(`[Frontend] 💾 Stored paper ID ${generatedPaper.id} for editing/exporting`);
+          const finalSessionId = sessionIdRef.current || sessionId;
+          if (finalSessionId) {
+            const paperResult = await generateConversationCompetencePaper(token, finalSessionId);
+            setHasGeneratedPaper(true);
+            setGeneratedPaperId(paperResult?.id ?? null);
           }
-
-          // Stage 1: Keep generating state for 3 seconds (buttons disabled)
-          await new Promise(resolve => setTimeout(resolve, 3000));
-
-          // Stage 2: Show loading for 2 seconds (buttons still disabled)
-          setStatus("generating");
-          setIsGeneratingPaper(true);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-
-          // Stage 3: Show finished for 1 second (buttons still disabled)
+          const elapsed = Date.now() - generatingStart;
+          if (elapsed < 2000) {
+            await new Promise((r) => setTimeout(r, 2000 - elapsed));
+          }
           setStatus("finished");
-          setIsGeneratingPaper(false);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          // Stage 4: Auto-close the modal
-          handleEnd();
         } catch (err: any) {
-          console.error(`[Frontend] ❌ Failed to generate competence paper:`, err);
-          console.error(`[Frontend] Error details:`, err?.message, err?.response);
-          setError(err?.message || "Failed to generate conversation competence paper.");
-          setStatus("error");
+          console.error("[Frontend] ❌ Failed to generate competence paper:", err);
+          setError("Failed to generate competence paper.");
+          const elapsed = Date.now() - generatingStart;
+          if (elapsed < 2000) {
+            await new Promise((r) => setTimeout(r, 2000 - elapsed));
+          }
+          setStatus("finished");
         } finally {
           setIsGeneratingPaper(false);
         }
-      } else {
-        if (hasGeneratedPaper) {
-          // console.log(`[Frontend] ⏸️ Paper already generated, skipping`);
-        } else if (!finalSessionId) {
-          // console.log(`[Frontend] ⏸️ No session ID, cannot generate paper`);
-        } else if (!done) {
-          // console.log(`[Frontend] ⏸️ Conversation not done yet, cannot generate paper`);
-        } else {
-          // console.log(`[Frontend] ⏸️ Skipping generation: cancelled=${cancelledRef.current}`);
-        }
-      }
-
-      if (!cancelledRef.current) {
-        setStatus("finished");
-        // No static outro; rely on backend-generated prompts only.
       }
     } catch (err: any) {
-      setStatus("error");
-      setError(err?.message || "Unexpected error during conversation.");
-    } finally {
-      stopListening();
+      console.error("[Frontend] ❌ Conversation error:", err);
+      if (!cancelledRef.current) {
+        setError(err?.message || "An error occurred during the conversation.");
+        setStatus("finished");
+      }
     }
   };
 
@@ -810,7 +742,7 @@ export function RecruiterVoiceAssistant({
       case "completed":
         return "Completed";
       case "finished":
-        return "Finished";
+        return "Done";
       case "error":
         return "Error";
       default:
@@ -834,7 +766,7 @@ export function RecruiterVoiceAssistant({
               <h2 className="text-lg font-semibold text-slate-100">Interview Verification</h2>
               <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
                 <span className="rounded-full bg-slate-800/70 px-2 py-0.5 text-slate-300">
-                  Section: {sectionLabel}
+                  {status === "finished" ? "Section: Complete" : `Section: ${sectionLabel}`}
                 </span>
                 <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
                   {statusLabel}
@@ -842,35 +774,62 @@ export function RecruiterVoiceAssistant({
               </div>
             </div>
           </div>
-          <button
-            onClick={handleEnd}
-            disabled={isGeneratingPaper}
-            className="rounded-lg bg-red-500/90 hover:bg-red-600 text-xs font-semibold text-white px-3 py-2 shadow-lg shadow-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            End Session
-          </button>
+          {status !== "finished" && (
+            <button
+              onClick={handleEnd}
+              disabled={isGeneratingPaper}
+              className="rounded-lg bg-red-500/90 hover:bg-red-600 text-xs font-semibold text-white px-3 py-2 shadow-lg shadow-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              End Session
+            </button>
+          )}
         </div>
 
-        {/* Show completion screen when finished */}
-        {status === "finished" && !isGeneratingPaper && !hasGeneratedPaper ? (
-          <div className="mt-6 rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 p-8 text-center">
+        {/* 1. Generating: professional screen (min 2s), then final screen */}
+        {(status === "generating" || isGeneratingPaper) && (
+          <div className="mt-6 rounded-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-8 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-400/20 px-3 py-1.5 mb-4">
+              <span className="text-xs font-medium text-emerald-300">Preparing your report</span>
+            </div>
+            <div className="mx-auto h-16 w-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400/40 flex items-center justify-center mb-4">
+              <div className="h-8 w-8 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-100 mb-2">Generating competence paper</h3>
+            <p className="text-sm text-slate-400 max-w-md mx-auto">
+              Your answers are being processed. This will only take a moment.
+            </p>
+          </div>
+        )}
+
+        {/* 2. Finished: single final screen — section completed, only Open paper (to conversation-competence-summaries) */}
+        {status === "finished" && (
+          <div className="mt-6 rounded-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-8 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-400/20 px-3 py-1.5 mb-4">
+              <span className="text-xs font-medium text-emerald-300">All sections completed</span>
+            </div>
             <div className="mx-auto h-16 w-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400/40 flex items-center justify-center mb-4">
               <svg className="w-8 h-8 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-emerald-200 mb-2">Interview Complete!</h3>
-            <p className="text-sm text-slate-300 mb-6 max-w-md mx-auto">
-              Thank you for completing the verification interview. All information has been collected successfully.
+            <h3 className="text-xl font-bold text-slate-100 mb-2">Interview complete</h3>
+            <p className="text-sm text-slate-400 mb-6 max-w-md mx-auto">
+              Verification interview finished. Your answers have been recorded and the competence paper has been generated.
             </p>
-            <button
-              onClick={handleEnd}
-              className="rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-sm font-semibold text-slate-950 px-6 py-3 shadow-lg shadow-emerald-500/30 transition-all hover:scale-105"
+            {error && (
+              <p className="text-sm text-red-300 mb-4">{error}</p>
+            )}
+            <a
+              href="/dashboard/conversation-competence-summaries"
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-sm font-semibold text-slate-950 px-6 py-3 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
             >
-              Close Interview
-            </button>
+              Open paper
+            </a>
           </div>
-        ) : (
+        )}
+
+        {/* 3. Live session: listening, speaking, thinking */}
+        {status !== "finished" && status !== "generating" && !isGeneratingPaper && (
           <div className="mt-6 rounded-xl border border-slate-800/60 bg-slate-950/60 p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -880,9 +839,6 @@ export function RecruiterVoiceAssistant({
                   </div>
                   {(status === "speaking" || status === "listening") && (
                     <span className="absolute -inset-1 rounded-full border border-emerald-400/30 animate-ping" />
-                  )}
-                  {(status === "generating" || isGeneratingPaper) && (
-                    <span className="absolute -inset-1 rounded-full border border-emerald-400/30 animate-pulse" />
                   )}
                 </div>
                 <div>
@@ -914,35 +870,6 @@ export function RecruiterVoiceAssistant({
               <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
                 <p className="text-xs font-semibold text-emerald-300/80 mb-1">You said:</p>
                 <p className="text-sm text-slate-200 italic">"{lastTranscript}"</p>
-              </div>
-            )}
-
-            {(status === "generating" || isGeneratingPaper) && (
-              <div className="mt-5 flex items-center gap-3">
-                <div className="h-5 w-5 border-2 border-emerald-400/40 border-t-emerald-400 rounded-full animate-spin"></div>
-                <div>
-                  <p className="text-xs text-emerald-300 font-medium">Generating competence paper</p>
-                  <p className="text-xs text-slate-400">Processing your answers in the background.</p>
-                </div>
-              </div>
-            )}
-
-            {status === "completed" && hasGeneratedPaper && (
-              <div className="mt-5 flex items-center justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                <div>
-                  <p className="text-xs text-emerald-200 font-semibold">Competence paper ready</p>
-                  <p className="text-xs text-emerald-200/70">Open to review or export.</p>
-                </div>
-                {generatedPaperId && (
-                  <button
-                    onClick={() => {
-                      window.location.href = `/dashboard/cv?paperId=${generatedPaperId}`;
-                    }}
-                    className="rounded-md bg-emerald-400/90 hover:bg-emerald-400 text-xs font-semibold text-slate-950 px-3 py-1.5"
-                  >
-                    Open
-                  </button>
-                )}
               </div>
             )}
           </div>
