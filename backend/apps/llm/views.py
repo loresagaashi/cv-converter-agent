@@ -1,7 +1,9 @@
 import logging
 from typing import Any, Dict, List
 
-from django.http import HttpResponse
+import json
+
+from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -11,7 +13,12 @@ from rest_framework.views import APIView
 from apps.cv.models import CV
 from apps.cv.services import read_cv_file
 from apps.interview.models import CompetencePaper
-from apps.llm.services import generate_recruiter_next_question, generate_ai_voice, transcribe_audio_whisper
+from apps.llm.services import (
+    generate_ai_voice,
+    generate_recruiter_next_question,
+    stream_voice_to_question,
+    transcribe_audio_whisper,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -216,8 +223,6 @@ def voice_to_question(request):
         }
     }
     """
-    import json
-    
     if 'audio' not in request.FILES:
         return Response({"detail": "Audio file is required."}, status=400)
     
@@ -288,3 +293,80 @@ def voice_to_question(request):
     except Exception as e:
         logger.error(f"[voice_to_question] Error: {e}", exc_info=True)
         return Response({"detail": str(e)}, status=500)
+
+
+def _stream_voice_to_question_sse(audio_file, cv_text, competence_text, history, section):
+    """
+    Generator that yields SSE-formatted chunks from stream_voice_to_question.
+    Yields "data: {json}\n\n" for each chunk.
+    """
+    for chunk in stream_voice_to_question(
+        audio_file=audio_file,
+        cv_text=cv_text or "",
+        competence_text=competence_text or "",
+        history=history,
+        section=section,
+    ):
+        yield f"data: {json.dumps(chunk)}\n\n"
+
+
+class VoiceToQuestionStreamView(APIView):
+    """
+    SSE streaming: transcribe audio then generate next question.
+    Yields transcription first (so UI can show it and "Thinking" immediately), then question_data.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        if "audio" not in request.FILES:
+            return Response({"detail": "Audio file is required."}, status=400)
+
+        try:
+            cv_id = int(request.data.get("cv_id"))
+            paper_id = int(request.data.get("paper_id"))
+        except (ValueError, TypeError):
+            return Response({"detail": "cv_id and paper_id must be integers."}, status=400)
+
+        history_str = request.data.get("history", "[]")
+        section = request.data.get("section", "core_skills")
+        try:
+            history = json.loads(history_str) if isinstance(history_str, str) else history_str
+        except Exception:
+            history = []
+
+        if getattr(request.user, "is_staff", False):
+            cv_instance = get_object_or_404(CV, pk=cv_id)
+        else:
+            cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
+        competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
+
+        try:
+            file_obj = cv_instance.file
+            content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
+            cv_text = read_cv_file(
+                file_obj,
+                name=cv_instance.original_filename,
+                content_type=content_type,
+            )
+        except FileNotFoundError:
+            return Response(
+                {"detail": "CV file not found. Please re-upload your CV."},
+                status=404,
+            )
+        except Exception as e:
+            logger.error(f"[VoiceToQuestionStreamView] Error reading CV: {e}", exc_info=True)
+            return Response({"detail": str(e)}, status=500)
+
+        competence_text = competence_paper.content or ""
+
+        return StreamingHttpResponse(
+            _stream_voice_to_question_sse(
+                request.FILES["audio"],
+                cv_text,
+                competence_text,
+                history,
+                section,
+            ),
+            content_type="text/event-stream",
+        )

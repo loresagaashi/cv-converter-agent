@@ -168,7 +168,7 @@ export function RecruiterVoiceAssistant({
         const dataArray = new Uint8Array(bufferLength);
 
         const SILENCE_THRESHOLD = 0.03; // Volume threshold for silence detection (3% - raised to avoid background noise)
-        const SILENCE_DURATION_MS = 2000; // 2 seconds of silence (reduced from 2.5s for faster response)
+        const SILENCE_DURATION_MS = 1500; // 1.5 seconds of silence (reduced from 2s for faster response)
         let lastSoundTime = Date.now();
 
         // Monitor volume for silence detection
@@ -303,7 +303,7 @@ export function RecruiterVoiceAssistant({
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
         const SILENCE_THRESHOLD = 0.03;
-        const SILENCE_DURATION_MS = 2000;
+        const SILENCE_DURATION_MS = 1500;
         let lastSoundTime = Date.now();
 
         const checkVolume = () => {
@@ -326,6 +326,8 @@ export function RecruiterVoiceAssistant({
         };
 
         mediaRecorder.onstop = async () => {
+          const startTime = performance.now();
+
           if (volumeCheckIntervalRef.current) clearInterval(volumeCheckIntervalRef.current);
 
           // Fix: Check if AudioContext is already closed before trying to close it
@@ -355,7 +357,7 @@ export function RecruiterVoiceAssistant({
             formData.append('section', currentSection);
 
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/llm/voice-to-question/`,
+              `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/llm/voice-to-question-stream/`,
               {
                 method: 'POST',
                 headers: { Authorization: `Token ${token}` },
@@ -368,7 +370,66 @@ export function RecruiterVoiceAssistant({
               throw new Error(errData.detail || "Processing failed");
             }
 
-            resolve(await response.json());
+            const reader = response.body?.getReader();
+            if (!reader) {
+              throw new Error("No response body");
+            }
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let lastTranscriptFromStream = "";
+            let backendTranscriptionMs: number | null = null;
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n\n");
+              buffer = lines.pop() ?? "";
+              for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.type === "transcription") {
+                    lastTranscriptFromStream = data.transcription ?? "";
+                    setLastTranscript(lastTranscriptFromStream);
+                    setStatus("thinking");
+                    if (typeof data.backend_transcription_ms === "number") {
+                      backendTranscriptionMs = data.backend_transcription_ms;
+                    }
+                    const timeToTranscription = Math.round(performance.now() - startTime);
+                    console.log(`[PERF] Time to Transcription: ${timeToTranscription}ms`);
+                    if (backendTranscriptionMs != null) {
+                      console.log(`[PERF] Backend transcription (server): ${backendTranscriptionMs}ms`);
+                    }
+                  } else if (data.type === "question_data") {
+                    const totalThinkingTime = Math.round(performance.now() - startTime);
+                    console.log(`[PERF] Total Thinking Time: ${totalThinkingTime}ms`);
+                    const backendThinkingMs = data.backend_thinking_ms;
+                    if (typeof backendThinkingMs === "number") {
+                      console.log(`[PERF] Backend thinking (server): ${backendThinkingMs}ms`);
+                    }
+                    if (backendTranscriptionMs != null && typeof backendThinkingMs === "number") {
+                      const networkOverhead = totalThinkingTime - backendTranscriptionMs - backendThinkingMs;
+                      console.log(`[PERF] Approx. network/overhead: ${networkOverhead}ms`);
+                    }
+                    resolve({
+                      transcription: lastTranscriptFromStream,
+                      question_data: data.question_data ?? null,
+                    });
+                    return;
+                  } else if (data.type === "error") {
+                    reject(new Error(data.detail ?? "Processing failed"));
+                    return;
+                  }
+                } catch (_) {
+                  /* ignore parse errors for incomplete chunks */
+                }
+              }
+            }
+            resolve({
+              transcription: lastTranscriptFromStream,
+              question_data: null,
+            });
           } catch (err: any) {
             reject(err);
           }
