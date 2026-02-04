@@ -113,7 +113,7 @@ if DATABASE_URL:
     # Parse DATABASE_URL and add connection options for Render
     db_config = dj_database_url.parse(
         DATABASE_URL,
-        conn_max_age=600,
+        conn_max_age=0,  # Close connections immediately after use to prevent pool exhaustion in Session mode
         conn_health_checks=True,
     )
     # Add SSL requirement for cloud databases (Supabase, etc.) if not already set

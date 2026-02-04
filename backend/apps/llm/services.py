@@ -30,6 +30,17 @@ OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_AUDIO_SPEECH_URL = "https://api.openai.com/v1/audio/speech"
 OPENAI_RECRUITER_MODEL = os.environ.get("OPENAI_RECRUITER_MODEL", "gpt-4o-mini")
 
+# ---------------------------------------------------------------------------
+# BLOCKING GPT RESPONSE: The API that returns the GPT reply and blocks the flow
+# is OpenAI Chat Completions (OPENAI_CHAT_COMPLETIONS_URL), called inside
+# generate_recruiter_next_question() below. That call uses a single requests.post()
+# with no stream=True, so we wait for the FULL JSON response before continuing.
+# It is only invoked AFTER transcribe_audio_whisper() returns, so Whisper blocks
+# first, then this call blocks until the full next-question JSON is ready.
+# To "not block": use streaming (stream=True) and/or move to Realtime API
+# (audio in + response in one WebSocket flow, no separate Whisper call).
+# ---------------------------------------------------------------------------
+
 
 # ---------------------------------------------------------------------------
 # Recruiter voice assistant prompt (Human-Like & Varied)
@@ -325,6 +336,9 @@ def generate_recruiter_next_question(
     }
     
     try:
+        # BLOCKING: This is the API that returns the GPT response. We wait for the full
+        # response (no streaming) before returning; called from stream_voice_to_question
+        # only after Whisper has already returned.
         resp = requests.post(
             OPENAI_CHAT_COMPLETIONS_URL,
             headers={
@@ -858,6 +872,72 @@ def group_skills_into_categories(skills: List[str]) -> Dict[str, List[str]]:
             grouped[name] = final_skills
 
     return grouped
+
+
+def stream_voice_to_question(
+    audio_file,
+    cv_text: str,
+    competence_text: str,
+    history: List[Dict[str, str]],
+    section: str,
+):
+    """
+    Generator for SSE: first yields transcription as JSON, then question_data.
+    Caller should format each chunk as SSE (e.g. "data: {json}\\n\\n").
+    """
+    start_time = time.perf_counter()
+    transcription_text = ""
+    transcription_ms = 0.0
+
+    try:
+        t0 = time.perf_counter()
+        result = transcribe_audio_whisper(audio_file)
+        transcription_ms = (time.perf_counter() - t0) * 1000
+        transcription_text = (result.get("text") or "").strip()
+        logger.info(f"[stream_voice_to_question] transcribe_audio_whisper took {transcription_ms:.1f}ms")
+    except ValueError as e:
+        yield {"type": "error", "detail": str(e)}
+        return
+    except Exception as e:
+        logger.error(f"[stream_voice_to_question] Transcription failed: {e}")
+        yield {"type": "error", "detail": "Transcription failed"}
+        return
+
+    yield {
+        "type": "transcription",
+        "transcription": transcription_text,
+        "backend_transcription_ms": round(transcription_ms, 1),
+    }
+
+    if not transcription_text:
+        total_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(f"[stream_voice_to_question] total backend (transcription only) {total_ms:.1f}ms")
+        yield {"type": "question_data", "question_data": None, "backend_thinking_ms": 0}
+        return
+
+    updated_history = list(history or [])
+    updated_history.append({"role": "recruiter", "content": transcription_text})
+
+    try:
+        t1 = time.perf_counter()
+        question_result = generate_recruiter_next_question(
+            cv_text=cv_text or "",
+            competence_text=competence_text or "",
+            history=updated_history,
+            section=section or "core_skills",
+        )
+        thinking_ms = (time.perf_counter() - t1) * 1000
+        logger.info(f"[stream_voice_to_question] generate_recruiter_next_question took {thinking_ms:.1f}ms")
+        total_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(f"[stream_voice_to_question] total backend processing {total_ms:.1f}ms")
+        yield {
+            "type": "question_data",
+            "question_data": question_result,
+            "backend_thinking_ms": round(thinking_ms, 1),
+        }
+    except Exception as e:
+        logger.error(f"[stream_voice_to_question] Question generation failed: {e}")
+        yield {"type": "error", "detail": "Failed to generate next question"}
 
 
 def transcribe_audio_whisper(audio_file) -> Dict[str, str]:
