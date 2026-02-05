@@ -519,6 +519,167 @@ class ConversationSessionGeneratePaperView(APIView):
                 formatted.append(item)
         return formatted
     
+    def _group_project_experience_items(self, items: list) -> list:
+        """
+        Group project experience items into structured entries.
+        
+        The AI collects three pieces for each project:
+        1. Position title (e.g., "AI Developer at Borek Solutions")
+        2. Description (e.g., "They worked on a CV converter agent...")
+        3. Duration (e.g., "3 months", "2 years")
+        
+        This function groups these three pieces into single formatted entries.
+        """
+        if not items:
+            return []
+        
+        grouped = []
+        current_position = None
+        current_description = None
+        current_duration = None
+        
+        # Patterns to detect each type
+        duration_patterns = [
+            r'\d+\s*(year|month|week)s?',  # "3 months", "2 years"
+            r'one and a half (year|month)',  # "one and a half month"
+            r'half a (year|month)',  # "half a year"
+            r'\d{4}\s*to\s*\d{4}',  # "2024 to 2025"
+            r'from\s*\d{4}\s*to\s*\d{4}',  # "from 2024 to 2025"
+            r'\d{4}-\d{4}',  # "2024-2025"
+            r'\d{4}-\d{2}\s*to\s*(present|\d{4}-\d{2})',  # "2025-01 to Present"
+            r'(january|february|march|april|may|june|july|august|september|october|november|december)\s*\d{4}',  # "January 2024"
+        ]
+        
+        position_indicators = [' at ', ' in ', ' - ']  # Indicates a position title
+        
+        for item in items:
+            item_str = str(item).strip()
+            if not item_str:
+                continue
+            
+            item_lower = item_str.lower()
+            
+            # Skip "I don't know" type responses
+            unknown_phrases = ["i don't know", "i do not know", "don't know", "not sure", "no idea", "unknown"]
+            if any(phrase in item_lower for phrase in unknown_phrases):
+                continue
+            
+            # NEW: Check for tags first (ROLE:, DESC:, TIME:)
+            if item_str.startswith("ROLE: "):
+                if current_position:
+                    grouped.append(self._format_single_project(
+                        current_position, current_description, current_duration
+                    ))
+                current_position = item_str[6:]  # Remove "ROLE: " prefix
+                current_description = None
+                current_duration = None
+                logger.info(f"[_group_project_experience_items] Found ROLE tag: {current_position}")
+                continue
+                
+            elif item_str.startswith("DESC: "):
+                desc_text = item_str[6:]  # Remove "DESC: " prefix
+                if current_description:
+                    current_description += " " + desc_text
+                else:
+                    current_description = desc_text
+                logger.info(f"[_group_project_experience_items] Found DESC tag: {desc_text[:50]}...")
+                continue
+                
+            elif item_str.startswith("TIME: "):
+                time_text = item_str[6:]  # Remove "TIME: " prefix
+                if current_duration:
+                    current_duration += ", " + time_text
+                else:
+                    current_duration = time_text
+                logger.info(f"[_group_project_experience_items] Found TIME tag: {time_text}")
+                continue
+            
+            # LEGACY FALLBACK: No tag found, use regex
+            logger.warning(f"[_group_project_experience_items] No tag found, using legacy detection")
+            
+            # Check if this is a duration
+            is_duration = any(re.search(pattern, item_lower) for pattern in duration_patterns)
+            
+            # Check if this is a position (has company/organization indicators)
+            is_position = any(indicator in item_lower for indicator in position_indicators)
+            
+            # Check if this is a description (longer text, no position indicators, not a duration)
+            is_description = not is_position and not is_duration and len(item_str) > 30
+            
+            if is_position:
+                # If we have a complete previous entry, save it
+                if current_position:
+                    grouped.append(self._format_single_project(
+                        current_position, current_description, current_duration
+                    ))
+                # Start new entry
+                current_position = item_str
+                current_description = None
+                current_duration = None
+            elif is_description:
+                current_description = item_str
+            elif is_duration:
+                # If we already have a duration, concatenate them (user might provide both year range and duration)
+                if current_duration:
+                    current_duration = f"{current_duration}, {item_str}"
+                else:
+                    current_duration = item_str
+            else:
+                # Ambiguous item - if we have a position, treat as description, otherwise as position
+                if current_position and not current_description:
+                    current_description = item_str
+                elif not current_position:
+                    current_position = item_str
+        
+        # Don't forget the last entry
+        if current_position:
+            grouped.append(self._format_single_project(
+                current_position, current_description, current_duration
+            ))
+        
+        logger.info(f"[_group_project_experience_items] Final grouped count: {len(grouped)}")
+        return grouped
+    
+    def _format_single_project(self, position: str, description: str = None, duration: str = None) -> str:
+        """
+        Format a single project entry with position, description, and duration.
+        
+        Output format:
+        "Position Title (Duration): Description"
+        or
+        "Position Title: Description"
+        """
+        if not position:
+            return ""
+        
+        # Capitalize first letter of position
+        position = position.strip()
+        if position:
+            position = position[0].upper() + position[1:]
+        
+        # Build the formatted string
+        result = position
+        
+        # Add duration if available (always show it)
+        if duration:
+            duration = duration.strip()
+            # Capitalize first letter of duration
+            if duration:
+                duration = duration[0].upper() + duration[1:]
+            # If position doesn't already have duration in parentheses, add it
+            if '(' not in result:
+                result = f"{result} ({duration})"
+        
+        # Add description if available (preserve full text, no summarization)
+        if description:
+            description = description.strip()
+            # Capitalize first letter of description
+            if description:
+                description = description[0].upper() + description[1:]
+            result = f"{result}: {description}"
+        
+        return result
+    
     def _get_footer_logo_url(self) -> str:
         """Get the footer logo URL for the template."""
         try:
@@ -833,6 +994,15 @@ class ConversationSessionGeneratePaperView(APIView):
             f"[GeneratePaper] Processing results: {confirmed_count} confirmed, {new_skill_count} new_skill, "
             f"{not_confirmed_count} not_confirmed"
         )
+
+        # Post-process project experience to group position + description + duration
+        if section_items.get("project_experience"):
+            section_items["project_experience"] = self._group_project_experience_items(
+                section_items["project_experience"]
+            )
+            logger.info(
+                f"[GeneratePaper] Grouped project experience into {len(section_items['project_experience'])} entries"
+            )
 
         # Build text content.
         lines = []

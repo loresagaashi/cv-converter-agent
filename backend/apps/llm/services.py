@@ -92,7 +92,27 @@ LOGIC FLOW (Per Section):
    - *Good:* "Understood. Any other soft skills worth mentioning?"
 4. **Completion:** If they say "No", "That's all", or "Skip", set `"complete_section": true`.
 5. **CRITICAL FOR RECOMMENDATIONS:** When entering the "recommendations" section, you MUST ask a direct question like "Would you like to add a recommendation or reference for this candidate?" Do not skip this section, even if the CV has no references.
-6. **Output Rules:** When you ask a question (contains a '?'), set `"complete_section": false` and `"done": false`.  
+6. **CRITICAL FOR PROJECT EXPERIENCE:** Use a 2-step loop for each project:
+   
+   **Flow for each project/position:**
+   a) **Step 1 - Ask for Position/Role:**
+      "What project or position would you like to add?" or "Tell me about a project they worked on"
+      - User provides: "Senior Developer at Google" or "AI Engineer at Borek Solutions"
+   
+   b) **Step 2 - Ask for Description AND Duration together:**
+      "What did they do there and how long did they stay?"
+      - User provides BOTH in one answer: "Built the backend API for 2 years" or "Developed AI models, worked from 2024 to 2025"
+      - This gets both description and duration in ONE response
+   
+   c) **Step 3 - Ask if more projects:**
+      "Are there any other projects or positions to add?"
+   
+   **IMPORTANT:** 
+   - Only 2 questions per project (not 3)
+   - Step 2 gets BOTH description AND duration together
+   - This is faster and more natural for the user
+   - Do NOT ask separate questions for description and duration
+7. **Output Rules:** When you ask a question (contains a '?'), set `"complete_section": false` and `"done": false`.  
    Only set `"done": true` when you're ending the conversation with a short closing statement (no question).
 
 JSON OUTPUT ONLY:
@@ -204,6 +224,34 @@ Rules:
   * Example: Extract "AI Developer at Borek Solutions" instead of just "AI Developer"
   * Example: Extract "Bachelor's in Computer Science from MIT" instead of just "Bachelor's in Computer Science"
   * Example: Extract "AWS Certification from Amazon" instead of just "AWS Certification"
+- **PROJECT EXPERIENCE - CRITICAL TAGGING RULES:** If the section is 'project_experience', you MUST prefix each extracted item with a tag:
+  
+  **TAGGING SYSTEM (REQUIRED FOR GROUPING):**
+  * When the question asks about POSITION/TITLE/ROLE:
+    - Prefix with "ROLE: "
+    - Example: Extract "ROLE: AI Developer at Borek Solutions Group"
+    - Example: Extract "ROLE: Senior Developer at Google"
+  
+  * When the question asks about DESCRIPTION/RESPONSIBILITIES or "what did they do":
+    - Prefix with "DESC: "
+    - Extract the COMPLETE, FULL TEXT of what the user said. DO NOT SUMMARIZE.
+    - Example: Extract "DESC: Built the backend API and integrated payment systems"
+    - Example: Extract "DESC: Developed AI models using Python and TensorFlow"
+  
+  * When the question asks about DURATION/TIME/YEARS or "how long":
+    - Prefix with "TIME: "
+    - Extract ANY time-related information from the answer
+    - Year ranges: "TIME: 2024 to 2025", "TIME: from 2023 to 2024"
+    - Relative durations: "TIME: 6 months", "TIME: 2 years"
+    - Specific dates: "TIME: January 2024 to Present"
+    - Extract EXACTLY what the user said, don't convert or change the format
+  
+  **IMPORTANT:**
+  * If the user provides BOTH description AND duration in one answer (e.g., "Built APIs for 2 years"):
+    - Extract TWO separate items: "DESC: Built APIs" AND "TIME: 2 years"
+  * ALWAYS use the tags (ROLE:, DESC:, TIME:) - this is how the system groups them correctly
+  * NEVER treat a description or duration as a new position
+  * The tags are REQUIRED for the PDF generation to work correctly
 - For Languages, include proficiency level if mentioned (e.g., "English - C1", "Spanish - Native").
 - "confirmed": User agrees or confirms existing skills.
 - "new_skill": User provides NEW info not asked in the question.
@@ -433,14 +481,14 @@ def generate_recruiter_next_question(
             if section == "additional_info":
                  done = True
 
-    # If we are in recommendations, ensure the prompt explicitly asks for recommendations.
-    if (next_section or section) == "recommendations":
-        question_lower = (question or "").lower()
-        if not any(term in question_lower for term in ("recommendation", "reference")):
-            question = "Great. Now, what can you tell me about their recommendations or references?"
-            complete_section = False
-            done = False
-            logger.info("[generate_recruiter_next_question] 🔒 NORMALIZED recommendations prompt")
+    # # If we are in recommendations, ensure the prompt explicitly asks for recommendations.
+    # if (next_section or section) == "recommendations":
+    #     question_lower = (question or "").lower()
+    #     if not any(term in question_lower for term in ("recommendation", "reference")):
+    #         question = "Great. Now, what can you tell me about their recommendations or references?"
+    #         complete_section = False
+    #         done = False
+    #         logger.info("[generate_recruiter_next_question] 🔒 NORMALIZED recommendations prompt")
 
     if next_section != "additional_info" and section != "additional_info":
         done = False
