@@ -282,7 +282,7 @@ def render_structured_cv_to_pdf(
             break
         if len(core_skills) >= 3:
           break
-      # Languages: join name+level, limit to max 4
+      # Languages: join name+level, limit to max 3
       languages = []
       for lang in structured_cv.get("languages") or []:
         if isinstance(lang, dict):
@@ -290,7 +290,7 @@ def render_structured_cv_to_pdf(
           level_ = str(lang.get("level") or "").strip()
           if name_:
             languages.append(f"{name_} ({level_})" if level_ else name_)
-          if len(languages) >= 4:
+          if len(languages) >= 3:
             break
       # Education: show latest 3 entries fully (no truncation)
       education_items = []
@@ -318,9 +318,9 @@ def render_structured_cv_to_pdf(
       trainings = ", ".join(all_trainings[:3])
       # Recommendation: use profile/summary directly (frontend enforces 700 char limit)
       recommendation = structured_cv.get("profile") or structured_cv.get("summary") or ""
-      # Project experience: include company name like in CV
+      # Project experience: include company name like in CV (latest 3 positions only)
       project_experience_flat = []
-      for job in structured_cv.get("work_experience") or []:
+      for job in (structured_cv.get("work_experience") or [])[:3]:
         if isinstance(job, dict):
           title = job.get("title") or "Position"
           company = job.get("company") or ""
