@@ -440,7 +440,7 @@ class StructuredCVView(APIView):
                             for bullet in bullets:
                                 competence_content_parts.append(f"  - {bullet}")
             
-            # Languages: MAX 4 (same as pdf_renderer lines 281-290)
+            # Languages: MAX 3 (same as pdf_renderer lines 281-290)
             languages = []
             for lang in structured_cv.get("languages") or []:
                 if isinstance(lang, dict):
@@ -448,7 +448,7 @@ class StructuredCVView(APIView):
                     level_ = str(lang.get("level") or "").strip()
                     if name_:
                         languages.append(f"{name_} ({level_})" if level_ else name_)
-                    if len(languages) >= 4:
+                    if len(languages) >= 3:
                         break
             if languages:
                 competence_content_parts.append(f"\nLanguages:")

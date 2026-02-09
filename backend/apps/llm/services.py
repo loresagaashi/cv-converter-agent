@@ -796,6 +796,9 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
 
     if not isinstance(languages, list):
         languages = []
+    else:
+        # Limit to max 3 languages
+        languages = languages[:3]
     if not isinstance(skills, list):
         skills = []
     if not isinstance(work_experience, list):

@@ -816,12 +816,12 @@ class ConversationSessionGeneratePaperView(APIView):
             "seniority": seniority or "-",
             "core_skills": section_items.get("core_skills", [])[:3],  # Limit to 3
             "soft_skills": section_items.get("soft_skills", [])[:3],  # Limit to 3
-            "languages": section_items.get("languages", [])[:4],  # Limit to 4
+            "languages": section_items.get("languages", [])[:3],  # Limit to 3 (same as CP)
             "education": self._format_education(section_items.get("education", [])) or "-",
-            "trainings": "\n".join(section_items.get("trainings_certifications", [])) or "-",
+            "trainings": "\n".join(section_items.get("trainings_certifications", [])[:3]) or "-",  # Limit to 3 (same as CP)
             "recommendation": recommendation,
             "tech_competencies_line": self._format_tech_competencies_grouped(section_items.get("technical_competencies", [])),
-            "project_experience_line": "|".join(self._format_project_experience(section_items.get("project_experience", []))),
+            "project_experience_line": "|".join(self._format_project_experience(section_items.get("project_experience", [])[:3])),  # Limit to latest 3 (same as CP)
             "footer_logo_url": self._get_footer_logo_url(),
         }
 
@@ -1300,12 +1300,12 @@ class ConversationCompetencePaperPDFView(APIView):
             "seniority": seniority or "-",
             "core_skills": section_items.get("core_skills", [])[:3],
             "soft_skills": section_items.get("soft_skills", [])[:3],
-            "languages": section_items.get("languages", [])[:4],
+            "languages": section_items.get("languages", [])[:3],  # Limit to 3 (same as CP)
             "education": view_instance._format_education(section_items.get("education", [])) or "-",
-            "trainings": "\n".join(section_items.get("trainings_certifications", [])) or "-",
+            "trainings": "\n".join(section_items.get("trainings_certifications", [])[:3]) or "-",  # Limit to 3 (same as CP)
             "recommendation": recommendation or "Based on the interview, the candidate demonstrates relevant skills and experience.",
             "tech_competencies_line": view_instance._format_tech_competencies_grouped(section_items.get("technical_competencies", [])),
-            "project_experience_line": "|".join(view_instance._format_project_experience(section_items.get("project_experience", []))),
+            "project_experience_line": "|".join(view_instance._format_project_experience(section_items.get("project_experience", [])[:3])),  # Limit to latest 3 (same as CP)
             "footer_logo_url": view_instance._get_footer_logo_url(),
             "is_assessment": True,  # Flag to indicate this is a Conversation Competence Paper (CCP)
         }
