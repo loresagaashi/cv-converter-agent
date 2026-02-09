@@ -1018,7 +1018,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   Exporting...
                 </>
               ) : (
-                "Generate PDF"
+                "Generate CV"
               )}
             </button>
           </div>
