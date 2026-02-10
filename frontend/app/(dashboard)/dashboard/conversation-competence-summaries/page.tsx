@@ -502,19 +502,19 @@ export default function ConversationCompetenceSummariesPage() {
                           strokeWidth="4"
                         />
                       </svg>
-                      PDF...
+                      Exporting...
                     </>
                   ) : (
                     <>
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      {/* <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={1.8}
                           d="M12 4v12m0 0l-4-4m4 4l4-4M4 18h16"
                         />
-                      </svg>
-                      Download PDF
+                      </svg> */}
+                      Generate Competence Paper
                     </>
                   )}
                 </button>
@@ -525,12 +525,12 @@ export default function ConversationCompetenceSummariesPage() {
                 >
                   {savingEdit ? "Saving..." : "Save Changes"}
                 </button>
-                <button
+                {/* <button
                   onClick={() => setViewModalOpen(false)}
                   className="rounded-lg border border-slate-700/60 px-4 py-2 text-xs sm:text-sm font-medium text-slate-300 hover:bg-slate-900/70 hover:border-slate-600 transition-all"
                 >
                   Close
-                </button>
+                </button> */}
               </div>
             </div>
           </div>

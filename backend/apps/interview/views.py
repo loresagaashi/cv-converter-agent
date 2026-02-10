@@ -683,7 +683,7 @@ class ConversationSessionGeneratePaperView(APIView):
     def _get_footer_logo_url(self) -> str:
         """Get the footer logo URL for the template."""
         try:
-            footer_logo_path = (Path(settings.BASE_DIR).parent / "borek-logo" / "borek.jpeg").resolve()
+            footer_logo_path = (Path(settings.BASE_DIR) / "borek-logo" / "borek.jpeg").resolve()
             if footer_logo_path.exists():
                 return footer_logo_path.as_uri()
         except Exception:

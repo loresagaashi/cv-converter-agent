@@ -203,7 +203,7 @@ class FormattedCVView(APIView):
             output_path = Path(tmpdir) / f"cv_{cv_instance.id}_{safe_name}"
             if not output_path.suffix.lower().endswith(".pdf"):
                 output_path = output_path.with_suffix(".pdf")
-            template_path = Path(settings.BASE_DIR).parent / "Ajlla_Product Owner.html"
+            template_path = Path(settings.BASE_DIR) / "templates" / "cv_template.html"
             pdf_path = render_structured_cv_to_pdf(
                 structured_cv,
                 output_path=output_path,
@@ -301,7 +301,7 @@ class StructuredCVView(APIView):
             template_path = Path(settings.BASE_DIR) / "templates" / "competence_template.html"
             download_name = f'{cv_instance.original_filename.rsplit(".", 1)[0]}_competence_letter.pdf'
         else:
-            template_path = Path(settings.BASE_DIR).parent / "Ajlla_Product Owner.html"
+            template_path = Path(settings.BASE_DIR) / "templates" / "cv_template.html"
             download_name = f'{cv_instance.original_filename.rsplit(".", 1)[0]}_edited.pdf'
 
         with tempfile.TemporaryDirectory() as tmpdir:

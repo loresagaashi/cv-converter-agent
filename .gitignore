@@ -1,18 +1,88 @@
 # Global ignores for the repository
 
-# Python bytecode and cache directories (backend)
+# ============================================
+# Python / Django (Backend)
+# ============================================
+# Python bytecode and cache
 __pycache__/
 *.py[cod]
+*$py.class
 *.pyc
+*.so
 
-# Node / frontend build artifacts
-frontend/.next/
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Django specific
+*.log
+backend/db.sqlite3
+backend/db.sqlite3-journal
+backend/media/
+backend/staticfiles/
+
+# Environment variables
+.env
+.env.local
+
+# Test files
+test.pdf
+test_*.pdf
+*.test.pdf
+
+# ============================================
+# Node.js / Next.js (Frontend)
+# ============================================
+# Dependencies
 frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.*
+frontend/.yarn/*
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
 
-# OS / editor noise
-.DS_Store
-Thumbs.db
+# Testing
+frontend/coverage/
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# Production
+frontend/build/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment files
+frontend/.env*
+
+# Vercel
+frontend/.vercel
+
+# TypeScript
+*.tsbuildinfo
+frontend/next-env.d.ts
+
+# ============================================
+# IDE / Editor
+# ============================================
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-
+# ============================================
+# OS
+# ============================================
+.DS_Store
+Thumbs.db
+*.pem

@@ -337,7 +337,7 @@ def render_structured_cv_to_pdf(
           else:
             project_experience_flat.append(header)
       # Footer logo absolute path (ensure visible in PDF)
-      footer_logo_path = (Path(settings.BASE_DIR).parent / "borek-logo" / "borek.jpeg").resolve()
+      footer_logo_path = (Path(settings.BASE_DIR) / "borek-logo" / "borek.jpeg").resolve()
       footer_logo_url = footer_logo_path.as_uri() if footer_logo_path.exists() else ""
 
       # Compose context for template
@@ -459,7 +459,8 @@ def render_structured_cv_to_pdf(
         for c in structured_cv.get("certifications") or []
         if isinstance(c, str) and str(c).strip()
       ]
-      logo_path = html_template_path.parent / "borek-logo" / "borek.png"
+      # Logo is now in backend/borek-logo (same level as templates)
+      logo_path = html_template_path.parent.parent / "borek-logo" / "borek.png"
       logo_src = logo_path.as_uri() if logo_path.exists() else None
       context = {
         "profile": {"summary": profile_summary},
