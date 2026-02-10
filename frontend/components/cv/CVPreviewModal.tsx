@@ -974,12 +974,12 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
 
         {/* Footer */}
         <div className="mt-4 border-t border-slate-800/60 pt-4 flex flex-col sm:flex-row justify-end gap-2.5">
-          <button
+          {/* <button
             onClick={onClose}
             className="rounded-lg border border-slate-700/60 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:border-slate-600/80 transition-all duration-200"
           >
             Cancel
-          </button>
+          </button> */}
           <div className="flex gap-2.5">
             <button
               onClick={() => handleExport("competence")}
@@ -998,7 +998,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   Exporting...
                 </>
               ) : (
-                "Competence Paper"
+                "Generate Competence Paper"
               )}
             </button>
             <button

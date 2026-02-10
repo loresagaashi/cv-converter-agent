@@ -233,7 +233,7 @@ export function RecruiterVoiceAssistant({
             formData.append('audio', audioBlob, 'recording.webm');
 
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/llm/transcribe-audio/`,
+              `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.FRONTEND_URL_LOCAL}/api/llm/transcribe-audio/`,
               {
                 method: 'POST',
                 headers: {
@@ -357,7 +357,7 @@ export function RecruiterVoiceAssistant({
             formData.append('section', currentSection);
 
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/llm/voice-to-question-stream/`,
+              `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.FRONTEND_URL_LOCAL}/api/llm/voice-to-question-stream/`,
               {
                 method: 'POST',
                 headers: { Authorization: `Token ${token}` },
@@ -470,7 +470,7 @@ export function RecruiterVoiceAssistant({
     }
 
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}/api/llm/recruiter-assistant/question/`,
+      `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.FRONTEND_URL_LOCAL}/api/llm/recruiter-assistant/question/`,
       {
         method: "POST",
         headers: {
