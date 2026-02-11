@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
@@ -40,6 +41,8 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
+        user.last_login = timezone.now()
+        user.save(update_fields=["last_login"])
         token, _ = Token.objects.get_or_create(user=user)
         data = UserSerializer(user, context={"request": request}).data
         data["token"] = token.key

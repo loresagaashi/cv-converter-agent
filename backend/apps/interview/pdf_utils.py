@@ -14,7 +14,7 @@ except Exception as exc:
     _HTML_RENDER_AVAILABLE = False
     HTML = None  # type: ignore
     CSS = None  # type: ignore
-    print(f"[PDF] ⚠️ WeasyPrint not available for interview papers: {exc}")
+    print(f"[PDF] WARNING: WeasyPrint not available for interview papers: {exc}")
     import traceback
     traceback.print_exc()
 

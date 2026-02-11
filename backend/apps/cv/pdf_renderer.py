@@ -18,7 +18,7 @@ except Exception as exc:  # pragma: no cover - optional dependency
   Environment = None  # type: ignore
   FileSystemLoader = None  # type: ignore
   HTML = None  # type: ignore
-  print(f"[PDF] ⚠️ WeasyPrint/Jinja2 not available: {exc}")
+  print(f"[PDF] WARNING: WeasyPrint/Jinja2 not available: {exc}")
   import traceback
   traceback.print_exc()
 
