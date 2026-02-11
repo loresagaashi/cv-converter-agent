@@ -303,7 +303,7 @@ def render_structured_cv_to_pdf(
           edu_str = f"{degree} {institution}".strip()
           if edu_str:
             education_items.append(edu_str)
-      education = ", ".join(education_items)
+      education = "\n".join(education_items)
       # Trainings: show latest 3 items fully (no truncation)
       training_items = []
       # Combine certifications and courses
@@ -315,7 +315,7 @@ def render_structured_cv_to_pdf(
         if c:
           all_trainings.append(str(c).strip())
       # Take latest 3 entries fully
-      trainings = ", ".join(all_trainings[:3])
+      trainings = "\n".join(all_trainings[:3])
       # Recommendation: use profile/summary directly (frontend enforces 700 char limit)
       recommendation = structured_cv.get("profile") or structured_cv.get("summary") or ""
       # Project experience: include company name like in CV (latest 3 positions only)
@@ -333,7 +333,8 @@ def render_structured_cv_to_pdf(
             header += f" ({period})"
           bullets = [str(b) for b in job.get("bullets") or [] if b]
           if bullets:
-            project_experience_flat.append(f"{header}: {'; '.join(bullets)}")
+            bullets_text = "<br>".join(bullets)
+            project_experience_flat.append(f"{header}: {bullets_text}")
           else:
             project_experience_flat.append(header)
       # Footer logo absolute path (ensure visible in PDF)
