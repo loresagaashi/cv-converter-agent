@@ -232,8 +232,8 @@ else:
     if not has_cloud_name: missing.append('CLOUDINARY_CLOUD_NAME')
     if not has_api_key: missing.append('CLOUDINARY_API_KEY')
     if not has_api_secret: missing.append('CLOUDINARY_API_SECRET')
-    print(f"⚠️  [CLOUDINARY] Missing: {', '.join(missing)}")
-    print(f"⚠️  [CLOUDINARY] Files will fall back to local storage (ephemeral on Render!)")
+    print(f"WARNING: [CLOUDINARY] Missing: {', '.join(missing)}")
+    print(f"WARNING: [CLOUDINARY] Files will fall back to local storage (ephemeral on Render!)")
 
 
 # File Storage Configuration

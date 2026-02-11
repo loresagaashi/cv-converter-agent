@@ -82,15 +82,6 @@ class ConversationSession(models.Model):
         choices=STATUS_CHOICES,
         default='pending',
     )
-    comparison_results = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text='Stores confirmed/unconfirmed/partial/new items with full HR responses',
-    )
-    hr_recommendation = models.TextField(
-        blank=True,
-        help_text='HR\'s full recommendation text',
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     
@@ -209,11 +200,6 @@ class ConversationResponse(models.Model):
     )
     answer_text = models.TextField(
         help_text='Full transcribed answer from HR',
-    )
-    answer_audio_url = models.URLField(
-        blank=True,
-        null=True,
-        help_text='Optional audio file storage',
     )
     status = models.CharField(
         max_length=20,
