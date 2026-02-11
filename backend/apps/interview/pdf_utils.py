@@ -9,7 +9,7 @@ from apps.cv.pdf_renderer import _sanitize_for_pdf
 try:
     from weasyprint import HTML, CSS  # type: ignore
     _HTML_RENDER_AVAILABLE = True
-    print("[PDF] ✅ WeasyPrint is available for interview papers")
+    # print("[PDF] ✅ WeasyPrint is available for interview papers")
 except Exception as exc:
     _HTML_RENDER_AVAILABLE = False
     HTML = None  # type: ignore

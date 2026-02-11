@@ -1,7 +1,7 @@
 import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV } from "./types";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || process.env.FRONTEND_URL_LOCAL;
+  process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL;
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
