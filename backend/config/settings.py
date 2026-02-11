@@ -220,13 +220,13 @@ has_api_key = bool(CLOUDINARY_STORAGE.get('API_KEY'))
 has_api_secret = bool(CLOUDINARY_STORAGE.get('API_SECRET'))
 cloudinary_configured = has_cloud_name and has_api_key and has_api_secret
 
-print(f"[CLOUDINARY] Configuration check:")
-print(f"  CLOUD_NAME: {'✅ ' + CLOUDINARY_STORAGE.get('CLOUD_NAME') if has_cloud_name else '❌ MISSING'}")
-print(f"  API_KEY: {'✅ SET' if has_api_key else '❌ MISSING'}")
-print(f"  API_SECRET: {'✅ SET' if has_api_secret else '❌ MISSING'}")
+# print(f"[CLOUDINARY] Configuration check:")
+# print(f"  CLOUD_NAME: {'✅ ' + CLOUDINARY_STORAGE.get('CLOUD_NAME') if has_cloud_name else '❌ MISSING'}")
+# print(f"  API_KEY: {'✅ SET' if has_api_key else '❌ MISSING'}")
+# print(f"  API_SECRET: {'✅ SET' if has_api_secret else '❌ MISSING'}")
 
 if cloudinary_configured:
-    print(f"✅ [CLOUDINARY] All credentials loaded - files will be stored on Cloudinary")
+    pass  # All credentials loaded - files will be stored on Cloudinary
 else:
     missing = []
     if not has_cloud_name: missing.append('CLOUDINARY_CLOUD_NAME')
