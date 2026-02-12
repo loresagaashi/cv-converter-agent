@@ -387,17 +387,14 @@ def render_structured_cv_to_pdf(
           else:
             project_experience_items.append(header)
       
-      # Dynamic limiting: if total text > 600 chars, reduce to 2; if > 500, reduce to 1
+      # Dynamic limiting: if total text > 1000 chars, reduce to 2; else show 3
       proj_total = sum(len(p) for p in project_experience_items)
       print(f"[DEBUG] Project Experience - Total chars: {proj_total}, Items: {len(project_experience_items)}")
-      if proj_total > 600:
-        print(f"[DEBUG] Reducing to 2 projects (total > 600)")
+      if proj_total > 1000:
+        print(f"[DEBUG] Reducing to 2 projects (total > 1000)")
         project_experience_flat = project_experience_items[:2]
-      elif proj_total > 500:
-        print(f"[DEBUG] Reducing to 1 project (total > 500)")
-        project_experience_flat = project_experience_items[:1]
       else:
-        print(f"[DEBUG] Keeping all {len(project_experience_items)} projects (total <= 600)")
+        print(f"[DEBUG] Keeping all {len(project_experience_items)} projects (total <= 1000)")
         project_experience_flat = project_experience_items
       # Footer logo absolute path (ensure visible in PDF)
       footer_logo_path = (Path(settings.BASE_DIR) / "borek-logo" / "borek.jpeg").resolve()
