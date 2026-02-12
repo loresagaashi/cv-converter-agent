@@ -406,7 +406,7 @@ class StructuredCVView(APIView):
                 for skill in core_skills:
                     competence_content_parts.append(f"• {skill}")
             
-            # Tech Competencies: max 6 categories, max 8 skills per category (same as pdf_renderer)
+            # Tech Competencies: max 6 categories, max 5 skills per category (same as pdf_renderer)
             # Always include tech competencies if we have any grouped skills
             if tech_competencies:
                 sorted_groups = sorted(tech_competencies.items(), key=lambda x: (x[0] == "Other", x[0]))
@@ -416,7 +416,7 @@ class StructuredCVView(APIView):
                     competence_content_parts.append(f"\nTech Competencies:")
                     for group, skills in tech_competencies_list:
                         if skills:
-                            limited_skills = skills[:8]  # Max 8 skills per category
+                            limited_skills = skills[:5]  # Max 5 skills per category
                             # Format: Category name as header, then skills as comma-separated list
                             competence_content_parts.append(f"• {group}: {', '.join(limited_skills)}")
             

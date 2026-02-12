@@ -794,21 +794,21 @@ class ConversationSessionGeneratePaperView(APIView):
             
             recommendation = " ".join(rec_parts) if rec_parts else "Based on the interview, the candidate demonstrates relevant skills and experience."
         
-        # Limit recommendation to 550 characters
-        if len(recommendation) > 550:
+        # Limit recommendation to 500 characters
+        if len(recommendation) > 500:
             # Try to cut at sentence boundaries
             import re
             sentences = re.split(r'(?<=[.!?])\s+', recommendation)
             recommendation = ''
             for sentence in sentences:
-                if len(recommendation + sentence) <= 550:
+                if len(recommendation + sentence) <= 500:
                     recommendation += sentence + ' '
                 else:
                     break
             recommendation = recommendation.strip()
             # If still too long, hard cut
-            if len(recommendation) > 550:
-                recommendation = recommendation[:547] + "..."
+            if len(recommendation) > 500:
+                recommendation = recommendation[:497] + "..."
         
         # Format data for template
         return {
