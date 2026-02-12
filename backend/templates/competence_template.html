@@ -12,9 +12,15 @@
             box-sizing: border-box;
         }
 
+        @page {
+            margin-bottom: 60px;
+            margin-left: 35px;
+            margin-right: 35px;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-size: 7pt;
+            font-size: 9pt;
             line-height: 1.4;
             color: #000;
             overflow-x: hidden;
@@ -67,7 +73,7 @@
         }
 
         .sidebar p {
-            font-size: 7pt;
+            font-size: 9pt;
             margin-bottom: 8px;
             line-height: 1.5;
         }
@@ -82,7 +88,7 @@
             padding-left: 15px;
             margin-bottom: 5px;
             position: relative;
-            font-size: 7pt;
+            font-size: 9pt;
         }
 
         .sidebar ul li::before {
@@ -142,7 +148,7 @@
 
         .main-content p,
         .right-content p {
-            font-size: 7pt;
+            font-size: 9pt;
             line-height: 1.6;
             margin-bottom: 20px;
         }
@@ -162,7 +168,7 @@
         }
 
         .main-content h3 {
-            font-size: 7pt;
+            font-size: 9pt;
             font-weight: 700;
             color: #1a2b5c;
             margin-top: 10px;
@@ -182,7 +188,7 @@
             padding-left: 18px;
             margin-bottom: 8px;
             position: relative;
-            font-size: 7pt;
+            font-size: 9pt;
             line-height: 1.5;
         }
 
@@ -230,7 +236,7 @@
             justify-content: space-between;
             align-items: center;
             background: white;
-            height: 60px;
+            height: 50px;
             position: fixed;
             bottom: 0;
             left: 0;
@@ -302,6 +308,8 @@
                 {% endfor %}
                 {% else %}
                 <li>-</li>
+                <li>-</li>
+                <li>-</li>
                 {% endif %}
             </ul>
 
@@ -357,8 +365,14 @@
                 {% for item in project_experience_line.split('|') %}
                 <li style="padding-left: 22px; margin-bottom: 12px;">
                     {% if ':' in item %}
-                    <span style="font-weight:bold;">{{ item.split(':')[0] }}:</span><br>
-                    {{ item.split(':', 1)[1]|trim }}
+                    <span style="font-weight:bold;">{{ item.split(':')[0] }}:</span>
+                    <ul class="sub-bullets" style="margin-top: 5px; margin-bottom: 0;">
+                        {% for bullet in item.split(':', 1)[1].split('<br>') %}
+                        {% if bullet.strip() %}
+                        <li style="padding-left: 18px; margin-bottom: 5px;">{{ bullet.strip() }}</li>
+                        {% endif %}
+                        {% endfor %}
+                    </ul>
                     {% else %}
                     {{ item|trim }}
                     {% endif %}

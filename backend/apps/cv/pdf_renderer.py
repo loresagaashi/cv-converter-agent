@@ -262,14 +262,36 @@ def render_structured_cv_to_pdf(
             key = "Architecture & Practices"
           tech_competencies.setdefault(key, []).append(skill)
 
-      # Flatten for template: list of "Group: skill1, skill2" (max 8 items per group)
-      # Sort to put "Other" last, then limit to max 6 categories
+      # Flatten for template: list of "Group: skill1, skill2"
+      # Dynamic limiting based on total character count to prevent overflow
       sorted_groups = sorted(tech_competencies.items(), key=lambda x: (x[0] == "Other", x[0]))
-      for group, skills in sorted_groups[:6]:  # Max 6 categories
+      
+      # Build initial list with max 6 categories, 5 skills each
+      tech_competencies_items = []
+      for group, skills in sorted_groups[:6]:
         if skills:
-          # Limit to max 8 skills per category
-          limited_skills = skills[:8]
-          tech_competencies_flat.append(f"{group}: {', '.join(limited_skills)}")
+          limited_skills = skills[:5]
+          tech_competencies_items.append(f"{group}: {', '.join(limited_skills)}")
+      
+      # Dynamic limiting: if total text > 400 chars, reduce to 4 categories with 4 skills each
+      # if > 300 chars, reduce to 3 categories with 3 skills each
+      tech_total = sum(len(item) for item in tech_competencies_items)
+      if tech_total > 400:
+        # Reduce to 4 categories, 4 skills each
+        tech_competencies_flat = []
+        for group, skills in sorted_groups[:4]:
+          if skills:
+            limited_skills = skills[:4]
+            tech_competencies_flat.append(f"{group}: {', '.join(limited_skills)}")
+      elif tech_total > 300:
+        # Reduce to 5 categories, 4 skills each
+        tech_competencies_flat = []
+        for group, skills in sorted_groups[:5]:
+          if skills:
+            limited_skills = skills[:4]
+            tech_competencies_flat.append(f"{group}: {', '.join(limited_skills)}")
+      else:
+        tech_competencies_flat = tech_competencies_items
 
       # Core skills: top 3 unique across all tech competencies.
       seen_core = set()
@@ -292,10 +314,9 @@ def render_structured_cv_to_pdf(
             languages.append(f"{name_} ({level_})" if level_ else name_)
           if len(languages) >= 3:
             break
-      # Education: show latest 3 entries fully (no truncation)
+      # Education: show up to 3 entries, reduce if text is too long
       education_items = []
       education_list = structured_cv.get("education") or []
-      # Take latest 3 entries
       for e in education_list[:3]:
         if isinstance(e, dict):
           degree = str(e.get('degree', '')).strip()
@@ -303,10 +324,15 @@ def render_structured_cv_to_pdf(
           edu_str = f"{degree} {institution}".strip()
           if edu_str:
             education_items.append(edu_str)
+      # Dynamic limiting: if total text > 200 chars, reduce to 2; if > 150, reduce to 1
+      edu_total = sum(len(e) for e in education_items)
+      if edu_total > 200:
+        education_items = education_items[:1]
+      elif edu_total > 150:
+        education_items = education_items[:2]
       education = "\n".join(education_items)
-      # Trainings: show latest 3 items fully (no truncation)
-      training_items = []
-      # Combine certifications and courses
+
+      # Trainings: show up to 3 entries, reduce if text is too long
       all_trainings = []
       for c in (structured_cv.get("certifications") or []):
         if c:
@@ -314,12 +340,35 @@ def render_structured_cv_to_pdf(
       for c in (structured_cv.get("courses") or []):
         if c:
           all_trainings.append(str(c).strip())
-      # Take latest 3 entries fully
-      trainings = "\n".join(all_trainings[:3])
-      # Recommendation: use profile/summary directly (frontend enforces 700 char limit)
-      recommendation = structured_cv.get("profile") or structured_cv.get("summary") or ""
+      training_items = all_trainings[:3]
+      # Dynamic limiting: if total text > 200 chars, reduce to 2; if > 150, reduce to 1
+      train_total = sum(len(t) for t in training_items)
+      if train_total > 200:
+        training_items = training_items[:1]
+      elif train_total > 150:
+        training_items = training_items[:2]
+      trainings = "\n".join(training_items)
+      # Recommendation: limit to 500 chars to prevent overflow
+      recommendation_raw = structured_cv.get("profile") or structured_cv.get("summary") or ""
+      if len(recommendation_raw) > 500:
+        # Cut at last complete sentence within 500 chars
+        import re
+        sentences = re.split(r'(?<=[.!?])\s+', recommendation_raw)
+        recommendation = ''
+        for sentence in sentences:
+          if len(recommendation + sentence) <= 500:
+            recommendation += sentence + ' '
+          else:
+            break
+        recommendation = recommendation.strip()
+        # If still too long (single long sentence), hard cut at 497 + "..."
+        if len(recommendation) > 500:
+          recommendation = recommendation[:497] + "..."
+      else:
+        recommendation = recommendation_raw
       # Project experience: include company name like in CV (latest 3 positions only)
-      project_experience_flat = []
+      # Dynamic limiting: reduce entries if text is too long
+      project_experience_items = []
       for job in (structured_cv.get("work_experience") or [])[:3]:
         if isinstance(job, dict):
           title = job.get("title") or "Position"
@@ -331,12 +380,21 @@ def render_structured_cv_to_pdf(
             header += f" - {company}"
           if period:
             header += f" ({period})"
-          bullets = [str(b) for b in job.get("bullets") or [] if b]
+          bullets = [str(b) for b in job.get("bullets") or [] if b][:2]
           if bullets:
             bullets_text = "<br>".join(bullets)
-            project_experience_flat.append(f"{header}: {bullets_text}")
+            project_experience_items.append(f"{header}: {bullets_text}")
           else:
-            project_experience_flat.append(header)
+            project_experience_items.append(header)
+      
+      # Dynamic limiting: if total text > 400 chars, reduce to 2; if > 300, reduce to 1
+      proj_total = sum(len(p) for p in project_experience_items)
+      if proj_total > 400:
+        project_experience_flat = project_experience_items[:2]
+      elif proj_total > 300:
+        project_experience_flat = project_experience_items[:1]
+      else:
+        project_experience_flat = project_experience_items
       # Footer logo absolute path (ensure visible in PDF)
       footer_logo_path = (Path(settings.BASE_DIR) / "borek-logo" / "borek.jpeg").resolve()
       footer_logo_url = footer_logo_path.as_uri() if footer_logo_path.exists() else ""
