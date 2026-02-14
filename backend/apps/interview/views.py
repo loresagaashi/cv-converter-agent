@@ -230,10 +230,12 @@ class ConversationSessionStartView(APIView):
         competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
 
         # Always create a new session when opening Talk to AI
+        # Store the competence paper content on the session to avoid re-reading CV files later.
         session = ConversationSession.objects.create(
             cv=cv_instance,
             original_competence_paper=competence_paper,
             status="in_progress",
+            cv_extracted_text=competence_paper.content or "",
         )
         logger.info(f"[ConversationSessionStartView] ✅ Created new session: id={session.id}")
 
@@ -1116,6 +1118,39 @@ class ConversationSessionGeneratePaperView(APIView):
         serializer = ConversationCompetencePaperSerializer(conversation_paper)
         logger.info(f"[GeneratePaper] ✅ Paper generation complete. Returning paper data to client.")
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ConversationSessionEndView(APIView):
+    """
+    End a conversation session early (user manually stops the interview).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, session_id):
+        session = get_object_or_404(ConversationSession, pk=session_id)
+
+        if session.cv.user != request.user and not getattr(request.user, "is_staff", False):
+            return Response(
+                {"detail": "You don't have permission to modify this conversation session."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if session.status == "completed":
+            return Response(
+                {"detail": "Conversation session already completed.", "status": session.status},
+                status=status.HTTP_200_OK,
+            )
+
+        if session.status != "canceled":
+            session.status = "canceled"
+            session.completed_at = timezone.now()
+            session.save(update_fields=["status", "completed_at"])
+
+        return Response(
+            {"detail": "Conversation session ended.", "status": session.status},
+            status=status.HTTP_200_OK,
+        )
 
 
 class ConversationCompetencePaperUpdateView(APIView):

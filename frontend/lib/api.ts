@@ -453,7 +453,7 @@ export async function exportEditedCV(
 
 export interface ConversationSessionStartResponse {
   session_id: number;
-  status: "pending" | "in_progress" | "completed";
+  status: "pending" | "in_progress" | "completed" | "canceled";
 }
 
 export async function startConversationSession(
@@ -575,7 +575,11 @@ export async function downloadConversationCompetencePaperPdf(
 // Text-to-Speech (OpenAI Emotional TTS)
 // ---------------------------------------------------------------------------
 
-export async function playTextToSpeech(text: string, token: string): Promise<HTMLAudioElement> {
+export async function playTextToSpeech(
+  text: string,
+  token: string,
+  signal?: AbortSignal
+): Promise<HTMLAudioElement> {
   const res = await fetch(`${API_BASE_URL}/api/llm/tts/`, {
     method: "POST",
     headers: {
@@ -583,6 +587,7 @@ export async function playTextToSpeech(text: string, token: string): Promise<HTM
       Authorization: `Token ${token}`,
     },
     body: JSON.stringify({ text }),
+    signal,
   });
 
   if (!res.ok) {
@@ -603,5 +608,22 @@ export async function playTextToSpeech(text: string, token: string): Promise<HTM
   const audio = new Audio(audioUrl);
 
   return audio;
+}
+
+export async function endConversationSession(
+  token: string,
+  sessionId: number
+): Promise<{ detail: string; status: string }> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/interview/conversation-session/${sessionId}/end/`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${token}`,
+      },
+    }
+  );
+
+  return handleResponse<{ detail: string; status: string }>(res);
 }
 

@@ -10,6 +10,7 @@ from .views import (
     ConversationCompetencePaperDetailView,
     ConversationCompetencePaperPDFView,
     ConversationCompetencePaperUpdateView,
+    ConversationSessionEndView,
     ConversationSessionGeneratePaperView,
     ConversationSessionStartView,
     ConversationTurnView,
@@ -77,6 +78,11 @@ urlpatterns = [
         "conversation-session/<int:session_id>/generate-paper/",
         ConversationSessionGeneratePaperView.as_view(),
         name="conversation-session-generate-paper",
+    ),
+    path(
+        "conversation-session/<int:session_id>/end/",
+        ConversationSessionEndView.as_view(),
+        name="conversation-session-end",
     ),
 ]
 

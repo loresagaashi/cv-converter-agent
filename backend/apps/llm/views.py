@@ -10,9 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.cv.models import CV
-from apps.cv.services import read_cv_file
-from apps.interview.models import CompetencePaper
+from apps.interview.models import ConversationSession
 from apps.llm.services import (
     generate_ai_voice,
     generate_recruiter_next_question,
@@ -28,10 +26,10 @@ class RecruiterAssistantQuestionView(APIView):
     Generate the next spoken verification question for the recruiter assistant.
 
     This view:
-    - Loads the CV text and competence paper content for the given IDs.
+    - Loads stored session text and competence paper content for the given session.
     - Uses gpt-4o-mini (via generate_recruiter_next_question) to decide
       the next question in a structured verification flow.
-    - Enforces that questions are strictly based on CV/competence content.
+    - Enforces that questions are strictly based on stored session content.
 
     The frontend (voice agent) handles speech-to-text / text-to-speech and
     passes the conversation history as plain text.
@@ -42,53 +40,45 @@ class RecruiterAssistantQuestionView(APIView):
     def post(self, request, *args, **kwargs):
         data: Dict[str, Any] = request.data or {}
 
-        cv_id = data.get("cv_id")
-        paper_id = data.get("paper_id")
+        session_id = data.get("session_id")
         history: List[Dict[str, str]] = data.get("history") or []
         section = data.get("section") or "core_skills"
 
         logger.info(
-            f"[RecruiterAssistantQuestionView] 📥 Request: cv_id={cv_id}, paper_id={paper_id}, "
-            f"section={section}, history_length={len(history)}"
+            f"[RecruiterAssistantQuestionView] 📥 Request: session_id={session_id}, section={section}, "
+            f"history_length={len(history)}"
         )
 
-        if not isinstance(cv_id, int) or not isinstance(paper_id, int):
-            logger.warning(f"[RecruiterAssistantQuestionView] ❌ Invalid request: cv_id={cv_id}, paper_id={paper_id}")
+        if not isinstance(session_id, int):
+            logger.warning(
+                f"[RecruiterAssistantQuestionView] ❌ Invalid request: session_id={session_id}"
+            )
             return Response(
-                {"detail": "cv_id (int) and paper_id (int) are required."},
+                {"detail": "session_id (int) is required."},
                 status=400,
             )
 
-        # Admins can access any CV; regular users only their own
-        if getattr(request.user, 'is_staff', False):
-            cv_instance = get_object_or_404(CV, pk=cv_id)
-        else:
-            cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
-        competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
-
-        # Extract plain text for the CV – this is the primary source of truth.
-        try:
-            file_obj = cv_instance.file
-            content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
-            cv_text = read_cv_file(
-                file_obj,
-                name=cv_instance.original_filename,
-                content_type=content_type,
-            )
-        except FileNotFoundError:
-            logger.error(f"[RecruiterAssistantQuestionView] ❌ CV file not found: {cv_instance.original_filename}")
+        session = get_object_or_404(ConversationSession, pk=session_id)
+        if session.cv.user != request.user and not getattr(request.user, "is_staff", False):
             return Response(
-                {"detail": "CV file not found. Please re-upload your CV."},
-                status=404,
+                {"detail": "You don't have permission to access this conversation session."},
+                status=403,
             )
-        except Exception as e:
-            logger.error(f"[RecruiterAssistantQuestionView] ❌ Error reading CV file: {str(e)}", exc_info=True)
+        if session.status != "in_progress":
             return Response(
-                {"detail": f"Error reading CV file: {str(e)}"},
-                status=500,
+                {"detail": "Conversation session is not active."},
+                status=409,
             )
 
-        competence_text = competence_paper.content or ""
+        cv_text = (session.cv_extracted_text or "").strip()
+        if not cv_text:
+            return Response(
+                {"detail": "Conversation session has no stored text. Please restart the session."},
+                status=400,
+            )
+
+        competence_paper = session.original_competence_paper
+        competence_text = competence_paper.content or "" if competence_paper else ""
         
         # Log last exchange for debugging
         if history:
@@ -207,8 +197,7 @@ def voice_to_question(request):
     
     Expects multipart/form-data with:
     - audio: Audio file (webm format)
-    - cv_id: CV ID (integer)
-    - paper_id: Competence Paper ID (integer)
+    - session_id: Conversation session ID (integer)
     - history: JSON string of conversation history
     - section: Current section (string)
     
@@ -226,8 +215,7 @@ def voice_to_question(request):
     if 'audio' not in request.FILES:
         return Response({"detail": "Audio file is required."}, status=400)
     
-    cv_id = request.data.get("cv_id")
-    paper_id = request.data.get("paper_id")
+    session_id = request.data.get("session_id")
     history_str = request.data.get("history", "[]")
     section = request.data.get("section", "core_skills")
     
@@ -237,12 +225,10 @@ def voice_to_question(request):
     except:
         history = []
     
-    # Validate IDs
     try:
-        cv_id = int(cv_id)
-        paper_id = int(paper_id)
+        session_id = int(session_id)
     except (ValueError, TypeError):
-        return Response({"detail": "cv_id and paper_id must be integers."}, status=400)
+        return Response({"detail": "session_id must be an integer."}, status=400)
     
     # Step 1: Transcribe audio
     audio_file = request.FILES['audio']
@@ -260,18 +246,27 @@ def voice_to_question(request):
     if not transcribed_text:
         return Response({"transcription": "", "question_data": None}, status=200)
     
-    # Step 2: Load CV/Paper and generate question
-    if getattr(request.user, 'is_staff', False):
-        cv_instance = get_object_or_404(CV, pk=cv_id)
-    else:
-        cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
-    competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
-    
+    # Step 2: Load stored session content and generate question
     try:
-        file_obj = cv_instance.file
-        content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
-        cv_text = read_cv_file(file_obj, name=cv_instance.original_filename, content_type=content_type)
-        competence_text = competence_paper.content or ""
+        session = get_object_or_404(ConversationSession, pk=session_id)
+        if session.cv.user != request.user and not getattr(request.user, "is_staff", False):
+            return Response(
+                {"detail": "You don't have permission to access this conversation session."},
+                status=403,
+            )
+        if session.status != "in_progress":
+            return Response(
+                {"detail": "Conversation session is not active."},
+                status=409,
+            )
+        cv_text = (session.cv_extracted_text or "").strip()
+        if not cv_text:
+            return Response(
+                {"detail": "Conversation session has no stored text. Please restart the session."},
+                status=400,
+            )
+        competence_paper = session.original_competence_paper
+        competence_text = competence_paper.content or "" if competence_paper else ""
         
         # Add user's answer to history
         updated_history = list(history)
@@ -323,10 +318,9 @@ class VoiceToQuestionStreamView(APIView):
             return Response({"detail": "Audio file is required."}, status=400)
 
         try:
-            cv_id = int(request.data.get("cv_id"))
-            paper_id = int(request.data.get("paper_id"))
+            session_id = int(request.data.get("session_id"))
         except (ValueError, TypeError):
-            return Response({"detail": "cv_id and paper_id must be integers."}, status=400)
+            return Response({"detail": "session_id must be an integer."}, status=400)
 
         history_str = request.data.get("history", "[]")
         section = request.data.get("section", "core_skills")
@@ -335,30 +329,25 @@ class VoiceToQuestionStreamView(APIView):
         except Exception:
             history = []
 
-        if getattr(request.user, "is_staff", False):
-            cv_instance = get_object_or_404(CV, pk=cv_id)
-        else:
-            cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
-        competence_paper = get_object_or_404(CompetencePaper, pk=paper_id, cv=cv_instance)
-
-        try:
-            file_obj = cv_instance.file
-            content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
-            cv_text = read_cv_file(
-                file_obj,
-                name=cv_instance.original_filename,
-                content_type=content_type,
-            )
-        except FileNotFoundError:
+        session = get_object_or_404(ConversationSession, pk=session_id)
+        if session.cv.user != request.user and not getattr(request.user, "is_staff", False):
             return Response(
-                {"detail": "CV file not found. Please re-upload your CV."},
-                status=404,
+                {"detail": "You don't have permission to access this conversation session."},
+                status=403,
             )
-        except Exception as e:
-            logger.error(f"[VoiceToQuestionStreamView] Error reading CV: {e}", exc_info=True)
-            return Response({"detail": str(e)}, status=500)
-
-        competence_text = competence_paper.content or ""
+        if session.status != "in_progress":
+            return Response(
+                {"detail": "Conversation session is not active."},
+                status=409,
+            )
+        cv_text = (session.cv_extracted_text or "").strip()
+        if not cv_text:
+            return Response(
+                {"detail": "Conversation session has no stored text. Please restart the session."},
+                status=400,
+            )
+        competence_paper = session.original_competence_paper
+        competence_text = competence_paper.content or "" if competence_paper else ""
 
         return StreamingHttpResponse(
             _stream_voice_to_question_sse(
