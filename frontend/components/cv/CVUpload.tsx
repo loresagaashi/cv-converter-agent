@@ -44,11 +44,11 @@ export function CVUpload({ onUploaded }: Props) {
   };
 
   const onUpload = async () => {
-    if (!selectedFile || !token || uploading) return;
+    if (!selectedFile || uploading) return;
     setUploading(true);
     setError(null);
     try {
-      const cv = await uploadCV(selectedFile, token);
+      const cv = await uploadCV(selectedFile);
       setSelectedFile(null);
       onUploaded?.(cv);
       

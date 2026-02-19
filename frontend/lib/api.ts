@@ -1,5 +1,127 @@
 import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV } from "./types";
 
+function getAccessTokenFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )access_token=([^;]*)`)
+  );
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function clearAuthCookies() {
+  if (typeof document === "undefined") return;
+  const cookieNames = ["access_token", "refresh_token"];
+  cookieNames.forEach((name) => {
+    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+  });
+}
+
+function clearAllAuthState() {
+  // Clear cookies
+  clearAuthCookies();
+  
+  // Clear localStorage
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem("user");
+  }
+}
+
+function showSessionExpiredMessage() {
+  if (typeof document === "undefined") return;
+
+  // Detect system theme
+  const isDark =
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.id = "session-expired-overlay";
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: ${isDark ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.5)"};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.3s ease-in;
+    backdrop-filter: blur(4px);
+  `;
+
+  // Create message box (not blurred, sits on top)
+  const messageBox = document.createElement("div");
+  messageBox.style.cssText = `
+    background: ${isDark ? "#1f2937" : "#ffffff"};
+    border-radius: 8px;
+    padding: 32px;
+    box-shadow: 0 10px 25px ${isDark ? "rgba(0, 0, 0, 0.5)" : "rgba(0, 0, 0, 0.2)"};
+    text-align: center;
+    max-width: 500px;
+    animation: slideUp 0.4s ease-out;
+    position: relative;
+    z-index: 10000;
+  `;
+
+  // Create heading
+  const heading = document.createElement("h2");
+  heading.textContent = "Session Expired";
+  heading.style.cssText = `
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: ${isDark ? "#f3f4f6" : "#1f2937"};
+  `;
+
+  // Create message
+  const message = document.createElement("p");
+  message.textContent = "Your session has expired. Please log in again...";
+  message.style.cssText = `
+    font-size: 16px;
+    color: ${isDark ? "#d1d5db" : "#6b7280"};
+    margin: 0;
+    line-height: 1.5;
+  `;
+
+  messageBox.appendChild(heading);
+  messageBox.appendChild(message);
+  overlay.appendChild(messageBox);
+  document.body.appendChild(overlay);
+
+  // Add animations to head
+  if (!document.head.querySelector("style[data-session-expired]")) {
+    const style = document.createElement("style");
+    style.setAttribute("data-session-expired", "true");
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Auto-redirect after 4 seconds
+  setTimeout(() => {
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+  }, 4000);
+}
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL;
 
@@ -27,7 +149,103 @@ async function handleResponse<T>(res: Response): Promise<T> {
     throw error;
   }
 
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    const text = await res.text();
+    if (!text) {
+      return undefined as T;
+    }
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return text as T;
+    }
+  }
+
   return res.json() as Promise<T>;
+}
+
+let isRenewing = false;
+
+async function fetchWithAuthRetry(
+  url: string,
+  options?: RequestInit & { retryCount?: number }
+): Promise<Response> {
+  const retryCount = options?.retryCount || 0;
+  const fetchOptions = { ...options };
+  delete (fetchOptions as any).retryCount;
+
+  // Refresh Authorization header from cookie before each attempt
+  const token = getAccessTokenFromCookie();
+  if (token && fetchOptions.headers && typeof fetchOptions.headers === 'object') {
+    (fetchOptions.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  }
+
+  let res = await fetch(url, fetchOptions);
+
+  // If 401 and haven't retried yet, attempt token renewal
+  if (res.status === 401 && retryCount < 1) {
+    // Prevent multiple simultaneous renewal attempts
+    if (isRenewing) {
+      // Wait for the current renewal to complete
+      let attempts = 0;
+      while (isRenewing && attempts < 50) {
+        await new Promise((r) => setTimeout(r, 100));
+        attempts++;
+      }
+      // Try again with new token
+      return fetchWithAuthRetry(url, { ...options, retryCount: 1 });
+    }
+
+    isRenewing = true;
+    try {
+      await renewAccessToken();
+      // Token renewed, retry original request
+      isRenewing = false;
+      return fetchWithAuthRetry(url, { ...options, retryCount: 1 });
+    } catch (err: any) {
+      isRenewing = false;
+      // Renewal failed - renewAccessToken() already shows modal and handles redirect
+      // Don't redirect here, let the modal timeout handle it
+      return res;
+    }
+  }
+
+  return res;
+}
+
+async function handleAuthenticatedResponse<T>(
+  url: string,
+  options?: RequestInit & { retryCount?: number }
+): Promise<T> {
+  const res = await fetchWithAuthRetry(url, options);
+  return handleResponse<T>(res);
+}
+
+async function handleAuthenticatedBlobResponse(
+  url: string,
+  options?: RequestInit & { retryCount?: number }
+): Promise<Blob> {
+  const res = await fetchWithAuthRetry(url, options);
+
+  if (!res.ok) {
+    let detail = "Request failed";
+    try {
+      const data = await res.json();
+      detail = (data?.detail as string) || JSON.stringify(data);
+    } catch {
+      // ignore JSON parsing errors for non-JSON responses
+    }
+    const error = new Error(detail);
+    (error as any).status = res.status;
+    throw error;
+  }
+
+  return res.blob();
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
@@ -36,6 +254,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
     headers: {
       "Content-Type": "application/json",
     },
+    credentials: "include",
     body: JSON.stringify({ email, password }),
   });
 
@@ -53,20 +272,69 @@ export async function signup(payload: {
     headers: {
       "Content-Type": "application/json",
     },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
 
   return handleResponse<AuthResponse>(res);
 }
 
-export async function getCurrentUser(token: string): Promise<User> {
-  const res = await fetch(`${API_BASE_URL}/api/users/me/`, {
-    headers: {
-      Authorization: `Token ${token}`,
-    },
+export async function logout(): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/users/logout/`, {
+    method: "POST",
+    credentials: "include",
   });
 
-  return handleResponse<User>(res);
+  if (!res.ok) {
+    let detail = "Request failed";
+    try {
+      const data = await res.json();
+      detail = data?.detail || detail;
+    } catch {
+      // ignore JSON parsing errors
+    }
+    const error = new Error(detail);
+    (error as any).status = res.status;
+    throw error;
+  }
+}
+
+export async function renewAccessToken(): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/users/renew/`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    // Clear all auth state on renewal failure (token is dead)
+    clearAllAuthState();
+    
+    let detail = "Please login again.";
+    try {
+      const data = await res.json();
+      detail = data?.detail || detail;
+    } catch {
+      // ignore JSON parsing errors
+    }
+
+    // Show session expired message and redirect
+    showSessionExpiredMessage();
+
+    const error = new Error(detail);
+    (error as any).status = res.status;
+    throw error;
+  }
+
+  return handleResponse<AuthResponse>(res);
+}
+
+export async function getCurrentUser(token?: string): Promise<User> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<User>(`${API_BASE_URL}/api/users/me/`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -90,170 +358,141 @@ export interface AdminUserUpdatePayload {
   role?: UserRole;
 }
 
-export async function listUsers(token: string): Promise<User[]> {
-  const res = await fetch(`${API_BASE_URL}/api/users/`, {
+export async function listUsers(token?: string): Promise<User[]> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<User[]>(`${API_BASE_URL}/api/users/`, {
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
-
-  return handleResponse<User[]>(res);
 }
 
 export async function createUser(
-  token: string,
-  payload: AdminUserPayload
+  payload: AdminUserPayload,
+  token?: string
 ): Promise<User> {
-  const res = await fetch(`${API_BASE_URL}/api/users/`, {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<User>(`${API_BASE_URL}/api/users/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
   });
-
-  return handleResponse<User>(res);
 }
 
 export async function updateUser(
-  token: string,
   id: number,
-  payload: AdminUserUpdatePayload
+  payload: AdminUserUpdatePayload,
+  token?: string
 ): Promise<User> {
-  const res = await fetch(`${API_BASE_URL}/api/users/${id}/`, {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<User>(`${API_BASE_URL}/api/users/${id}/`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(payload),
   });
-
-  return handleResponse<User>(res);
 }
 
-export async function deleteUser(token: string, id: number): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/users/${id}/`, {
+export async function deleteUser(id: number, token?: string): Promise<void> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  await handleAuthenticatedResponse<void>(`${API_BASE_URL}/api/users/${id}/`, {
     method: "DELETE",
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
-
-  if (!res.ok) {
-    await handleResponse(res as Response);
-  }
 }
 
-export async function listCVs(token: string): Promise<CV[]> {
-  const res = await fetch(`${API_BASE_URL}/api/cv/upload/`, {
+export async function listCVs(token?: string): Promise<CV[]> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<CV[]>(`${API_BASE_URL}/api/cv/upload/`, {
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
-
-  return handleResponse<CV[]>(res);
 }
 
-export async function deleteCV(id: number, token: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/cv/${id}/`, {
+export async function deleteCV(id: number, token?: string): Promise<void> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  await handleAuthenticatedResponse<void>(`${API_BASE_URL}/api/cv/${id}/`, {
     method: "DELETE",
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
-
-  if (!res.ok) {
-    await handleResponse(res as Response);
-  }
 }
 
 export async function uploadCV(
   file: File,
-  token: string
+  token?: string
 ): Promise<CV> {
+  const accessToken = getAccessTokenFromCookie() || token;
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE_URL}/api/cv/upload/`, {
+  return handleAuthenticatedResponse<CV>(`${API_BASE_URL}/api/cv/upload/`, {
     method: "POST",
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: formData,
   });
-
-  return handleResponse<CV>(res);
 }
 
 export async function getCVText(
   id: number,
-  token: string
+  token?: string
 ): Promise<CVTextResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/cv/${id}/text/`, {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<CVTextResponse>(`${API_BASE_URL}/api/cv/${id}/text/`, {
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
-
-  return handleResponse<CVTextResponse>(res);
 }
 
 export async function convertCV(
   id: number,
-  token: string
+  token?: string
 ): Promise<ConvertCVResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/convert/`, {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<ConvertCVResponse>(`${API_BASE_URL}/api/convert/`, {
     method: "POST",
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ cv_id: id }),
   });
-
-  return handleResponse<ConvertCVResponse>(res);
 }
 
 export async function downloadFormattedCV(
   id: number,
-  token: string
+  token?: string
 ): Promise<Blob> {
-  const res = await fetch(`${API_BASE_URL}/api/cv/${id}/formatted/`, {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedBlobResponse(`${API_BASE_URL}/api/cv/${id}/formatted/`, {
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
-
-  if (!res.ok) {
-    let detail = "Request failed";
-    try {
-      const data = await res.json();
-      // DRF usually returns {"detail": "..."}
-      detail = (data?.detail as string) || JSON.stringify(data);
-    } catch {
-      // ignore JSON parsing errors for non-JSON responses
-    }
-    const error = new Error(detail);
-    (error as any).status = res.status;
-    throw error;
-  }
-
-  return res.blob();
 }
 
 export async function getStructuredCV(
   id: number,
-  token: string
+  token?: string
 ): Promise<StructuredCV> {
-  const res = await fetch(`${API_BASE_URL}/api/cv/${id}/structured/`, {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<StructuredCV>(`${API_BASE_URL}/api/cv/${id}/structured/`, {
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
   });
-
-  return handleResponse<StructuredCV>(res);
 }
 
 
@@ -274,28 +513,32 @@ export interface CompetencePaperListResponse {
 
 export async function getCompetencePapers(
   cvId: number,
-  token: string
+  token?: string
 ): Promise<CompetencePaperListResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/competence-papers/${cvId}/`, {
-    headers: {
-      Authorization: `Token ${token}`,
-    },
-  });
-
-  return handleResponse<CompetencePaperListResponse>(res);
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<CompetencePaperListResponse>(
+    `${API_BASE_URL}/api/interview/competence-papers/${cvId}/`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 }
 
 export async function getCompetencePaper(
   paperId: number,
-  token: string
+  token?: string
 ): Promise<CompetencePaper> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/competence-paper/${paperId}/`, {
-    headers: {
-      Authorization: `Token ${token}`,
-    },
-  });
-
-  return handleResponse<CompetencePaper>(res);
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<CompetencePaper>(
+    `${API_BASE_URL}/api/interview/competence-paper/${paperId}/`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 }
 
 export interface CompetencePaperWithCV extends CompetencePaper {
@@ -310,35 +553,33 @@ export interface AllCompetencePapersResponse {
 }
 
 export async function getAllCompetencePapers(
-  token: string
+  token?: string
 ): Promise<AllCompetencePapersResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/competence-papers/`, {
-    headers: {
-      Authorization: `Token ${token}`,
-    },
-  });
-
-  return handleResponse<AllCompetencePapersResponse>(res);
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<AllCompetencePapersResponse>(
+    `${API_BASE_URL}/api/interview/competence-papers/`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 }
 
 export async function deleteCompetencePaper(
   paperId: number,
-  token: string
+  token?: string
 ): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/competence-paper/${paperId}/delete/`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Token ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    const detail = (data?.detail as string) || "Failed to delete competence paper";
-    const error = new Error(detail);
-    (error as any).status = res.status;
-    throw error;
-  }
+  const accessToken = getAccessTokenFromCookie() || token;
+  await handleAuthenticatedResponse<void>(
+    `${API_BASE_URL}/api/interview/competence-paper/${paperId}/delete/`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 }
 
 // Conversation-based competence papers
@@ -367,61 +608,62 @@ export interface AllConversationCompetencePapersResponse {
 }
 
 export async function getAllConversationCompetencePapers(
-  token: string
+  token?: string
 ): Promise<AllConversationCompetencePapersResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-competence-papers/`, {
-    headers: {
-      Authorization: `Token ${token}`,
-    },
-  });
-
-  return handleResponse<AllConversationCompetencePapersResponse>(res);
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<AllConversationCompetencePapersResponse>(
+    `${API_BASE_URL}/api/interview/conversation-competence-papers/`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 }
 
 export async function getConversationCompetencePaper(
   paperId: number,
-  token: string
+  token?: string
 ): Promise<ConversationCompetencePaper> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/`, {
-    headers: {
-      Authorization: `Token ${token}`,
-    },
-  });
-
-  return handleResponse<ConversationCompetencePaper>(res);
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<ConversationCompetencePaper>(
+    `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 }
 
 export async function deleteConversationCompetencePaper(
   paperId: number,
-  token: string
+  token?: string
 ): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/delete/`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Token ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    const detail = (data?.detail as string) || "Failed to delete conversation competence paper";
-    const error = new Error(detail);
-    (error as any).status = res.status;
-    throw error;
-  }
+  const accessToken = getAccessTokenFromCookie() || token;
+  await handleAuthenticatedResponse<void>(
+    `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/delete/`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 }
 
 export async function exportEditedCV(
   id: number,
-  token: string,
   structuredCV: StructuredCV,
+  token?: string,
   sectionOrder?: string[],
   type: "cv" | "competence" = "cv"
 ): Promise<Blob> {
-  const res = await fetch(`${API_BASE_URL}/api/cv/${id}/structured/`, {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedBlobResponse(`${API_BASE_URL}/api/cv/${id}/structured/`, {
     method: "POST",
     headers: {
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -430,21 +672,6 @@ export async function exportEditedCV(
       type,
     }),
   });
-
-  if (!res.ok) {
-    let detail = "Request failed";
-    try {
-      const data = await res.json();
-      detail = (data?.detail as string) || JSON.stringify(data);
-    } catch {
-      // ignore JSON parsing errors
-    }
-    const error = new Error(detail);
-    (error as any).status = res.status;
-    throw error;
-  }
-
-  return res.blob();
 }
 
 // ---------------------------------------------------------------------------
@@ -457,20 +684,22 @@ export interface ConversationSessionStartResponse {
 }
 
 export async function startConversationSession(
-  token: string,
   cvId: number,
-  paperId: number
+  paperId: number,
+  token?: string
 ): Promise<ConversationSessionStartResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-session/start/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Token ${token}`,
-    },
-    body: JSON.stringify({ cv_id: cvId, paper_id: paperId }),
-  });
-
-  return handleResponse<ConversationSessionStartResponse>(res);
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<ConversationSessionStartResponse>(
+    `${API_BASE_URL}/api/interview/conversation-session/start/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ cv_id: cvId, paper_id: paperId }),
+    }
+  );
 }
 
 export interface ConversationTurnPayload {
@@ -490,85 +719,71 @@ export interface ConversationTurnResponse {
 }
 
 export async function createConversationTurn(
-  token: string,
-  payload: ConversationTurnPayload
+  payload: ConversationTurnPayload,
+  token?: string
 ): Promise<ConversationTurnResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/interview/conversation-session/turn/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Token ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  return handleResponse<ConversationTurnResponse>(res);
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<ConversationTurnResponse>(
+    `${API_BASE_URL}/api/interview/conversation-session/turn/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
 export async function generateConversationCompetencePaper(
-  token: string,
-  sessionId: number
+  sessionId: number,
+  token?: string
 ): Promise<ConversationCompetencePaperWithCV> {
-  const res = await fetch(
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<ConversationCompetencePaperWithCV>(
     `${API_BASE_URL}/api/interview/conversation-session/${sessionId}/generate-paper/`,
     {
       method: "POST",
       headers: {
-        Authorization: `Token ${token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
     }
   );
-
-  return handleResponse<ConversationCompetencePaperWithCV>(res);
 }
 
 export async function updateConversationCompetencePaper(
-  token: string,
   paperId: number,
-  content: string
+  content: string,
+  token?: string
 ): Promise<ConversationCompetencePaperWithCV> {
-  const res = await fetch(
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<ConversationCompetencePaperWithCV>(
     `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/edit/`,
     {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Token ${token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({ content }),
     }
   );
-
-  return handleResponse<ConversationCompetencePaperWithCV>(res);
 }
 
 export async function downloadConversationCompetencePaperPdf(
-  token: string,
-  paperId: number
+  paperId: number,
+  token?: string
 ): Promise<Blob> {
-  const res = await fetch(
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedBlobResponse(
     `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/pdf/`,
     {
       headers: {
-        Authorization: `Token ${token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
     }
   );
-
-  if (!res.ok) {
-    let detail = "Request failed";
-    try {
-      const data = await res.json();
-      detail = (data?.detail as string) || JSON.stringify(data);
-    } catch {
-      // ignore JSON parsing errors
-    }
-    const error = new Error(detail);
-    (error as any).status = res.status;
-    throw error;
-  }
-
-  return res.blob();
 }
 
 // ---------------------------------------------------------------------------
@@ -577,14 +792,15 @@ export async function downloadConversationCompetencePaperPdf(
 
 export async function playTextToSpeech(
   text: string,
-  token: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  token?: string
 ): Promise<HTMLAudioElement> {
-  const res = await fetch(`${API_BASE_URL}/api/llm/tts/`, {
+  const accessToken = getAccessTokenFromCookie() || token;
+  const res = await fetchWithAuthRetry(`${API_BASE_URL}/api/llm/tts/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Token ${token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ text }),
     signal,
@@ -611,19 +827,18 @@ export async function playTextToSpeech(
 }
 
 export async function endConversationSession(
-  token: string,
-  sessionId: number
+  sessionId: number,
+  token?: string
 ): Promise<{ detail: string; status: string }> {
-  const res = await fetch(
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<{ detail: string; status: string }>(
     `${API_BASE_URL}/api/interview/conversation-session/${sessionId}/end/`,
     {
       method: "POST",
       headers: {
-        Authorization: `Token ${token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
     }
   );
-
-  return handleResponse<{ detail: string; status: string }>(res);
 }
 

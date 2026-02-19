@@ -31,6 +31,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY environment variable is not set. Please set it in your environment variables.")
 
+JWT_SECRET = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
@@ -192,8 +194,7 @@ AUTH_USER_MODEL = 'users.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        'apps.users.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -202,7 +203,13 @@ REST_FRAMEWORK = {
 
 # Allow the Next.js dev server (and other origins in development) to call the API.
 # For production, this should be tightened to explicit allowed origins.
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 # Cloudinary Storage Configuration
 # This tells Django to use Cloudinary instead of the local disk

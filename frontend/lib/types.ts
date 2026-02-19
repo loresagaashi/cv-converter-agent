@@ -13,7 +13,7 @@ export interface User {
 }
 
 export interface AuthResponse extends User {
-  token: string;
+  access_token: string;
 }
 
 export interface CV {

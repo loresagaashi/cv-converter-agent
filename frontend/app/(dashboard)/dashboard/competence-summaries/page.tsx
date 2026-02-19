@@ -24,7 +24,7 @@ export default function CompetenceSummariesPage() {
     if (!token) return;
     setLoading(true);
     setError(null);
-    getAllCompetencePapers(token)
+    getAllCompetencePapers()
       .then((res) => setPapers(res.papers))
       .catch((err: any) => {
         setError(err?.message || "Failed to load competence papers.");
@@ -61,7 +61,7 @@ export default function CompetenceSummariesPage() {
     
     setDeleting(true);
     try {
-      await deleteCompetencePaper(paperToDelete.id, token);
+      await deleteCompetencePaper(paperToDelete.id);
       // Remove from papers list
       setPapers(papers.filter((p) => p.id !== paperToDelete.id));
       setDeleteModalOpen(false);

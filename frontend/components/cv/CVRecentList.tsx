@@ -40,7 +40,7 @@ export function CVRecentList() {
     if (!token) return;
     setLoading(true);
     setError(null);
-    listCVs(token)
+    listCVs()
       .then((data) => {
         // Sort by ID descending - newest first
         const sorted = [...data].sort((a, b) => b.id - a.id);

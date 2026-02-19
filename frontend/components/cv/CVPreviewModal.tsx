@@ -57,7 +57,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
     setLoading(true);
     setError(null);
     try {
-      const data = await getStructuredCV(cvId, token);
+      const data = await getStructuredCV(cvId);
       // Ensure all nested arrays and fields have proper defaults
       const normalizedData: StructuredCVPayload = {
         ...data,
@@ -121,7 +121,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
     setError(null);
     try {
       // Cast to StructuredCV since we've validated all required fields exist
-      const blob = await exportEditedCV(cvId, token, structuredCV as StructuredCV, undefined, type);
+      const blob = await exportEditedCV(cvId, structuredCV as StructuredCV, undefined, undefined, type);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
