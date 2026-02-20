@@ -198,7 +198,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
-}
+} 
 
 # Allow the Next.js dev server (and other origins in development) to call the API.
 # For production, this should be tightened to explicit allowed origins.
