@@ -32,3 +32,6 @@ gunicorn==23.0.0
 
 # Static file serving
 whitenoise==6.8.2
+
+#JWT
+PyJWT>=2.7.0

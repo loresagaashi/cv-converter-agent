@@ -35,7 +35,7 @@ export default function CVDetailPage() {
     ranFetch.current = true;
     setLoadingText(true);
     setError(null);
-    getCVText(id, token)
+    getCVText(id)
       .then((res) => setCvText(res))
       .catch((err: any) => {
         setError(err?.message || "Failed to load CV text.");
@@ -43,7 +43,7 @@ export default function CVDetailPage() {
       .finally(() => setLoadingText(false));
 
     setLoadingConvert(true);
-    convertCV(id, token)
+    convertCV(id)
       .then((res) => setConvertData(res))
       .catch(() => {
         // Conversion is optional UX sugar; keep failure soft.
@@ -53,7 +53,7 @@ export default function CVDetailPage() {
 
     // Load stored competence papers
     setLoadingPapers(true);
-    getCompetencePapers(id, token)
+    getCompetencePapers(id)
       .then((res) => setStoredPapers(res.papers))
       .catch(() => {
         setStoredPapers([]);
@@ -70,7 +70,7 @@ export default function CVDetailPage() {
     setDownloading(true);
     setDownloadError(null);
     try {
-      const blob = await downloadFormattedCV(id, token);
+      const blob = await downloadFormattedCV(id);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -351,7 +351,7 @@ export default function CVDetailPage() {
           setPreviewModalOpen(false);
           // Reload stored papers after closing (in case new one was created)
           if (token) {
-            getCompetencePapers(id, token)
+            getCompetencePapers(id)
               .then((res) => setStoredPapers(res.papers))
               .catch(() => {});
           }

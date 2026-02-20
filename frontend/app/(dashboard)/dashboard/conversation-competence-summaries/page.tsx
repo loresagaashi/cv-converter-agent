@@ -66,7 +66,7 @@ export default function ConversationCompetenceSummariesPage() {
     if (!token) return;
     setLoading(true);
     setError(null);
-    getAllConversationCompetencePapers(token)
+    getAllConversationCompetencePapers()
       .then((res) => setPapers(res.papers))
       .catch((err: any) => {
         setError(err?.message || "Failed to load conversation competence papers.");
@@ -144,7 +144,7 @@ export default function ConversationCompetenceSummariesPage() {
     
     setDeleting(true);
     try {
-      await deleteConversationCompetencePaper(paperToDelete.id, token);
+      await deleteConversationCompetencePaper(paperToDelete.id);
       // Remove from papers list
       setPapers(papers.filter((p) => p.id !== paperToDelete.id));
       setDeleteModalOpen(false);
@@ -179,7 +179,7 @@ export default function ConversationCompetenceSummariesPage() {
         setEditContent(contentToSave);
       }
       
-      const updated = await updateConversationCompetencePaper(token, selectedPaper.id, contentToSave);
+      const updated = await updateConversationCompetencePaper(selectedPaper.id, contentToSave);
       setSelectedPaper(updated);
       // Update editContent and sectionContents to reflect saved changes
       setEditContent(updated.content);
@@ -199,7 +199,7 @@ export default function ConversationCompetenceSummariesPage() {
     if (!selectedPaper || !token) return;
     setDownloadingPdf(true);
     try {
-      const blob = await downloadConversationCompetencePaperPdf(token, selectedPaper.id);
+      const blob = await downloadConversationCompetencePaperPdf(selectedPaper.id);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

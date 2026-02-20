@@ -5,6 +5,8 @@ from .views import (
     AdminUserListCreateView,
     CurrentUserView,
     LoginView,
+    LogoutView,
+    RenewAccessTokenView,
     SignupView,
 )
 
@@ -13,6 +15,8 @@ app_name = "users"
 urlpatterns = [
     path("signup/", SignupView.as_view(), name="signup"),
     path("login/", LoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
+    path("renew/", RenewAccessTokenView.as_view(), name="renew"),
     path("me/", CurrentUserView.as_view(), name="me"),
     # Admin user management endpoints (RBAC-protected)
     path("", AdminUserListCreateView.as_view(), name="admin-user-list-create"),

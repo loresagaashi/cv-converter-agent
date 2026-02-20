@@ -31,8 +31,14 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY environment variable is not set. Please set it in your environment variables.")
 
+JWT_SECRET = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+
+# With Vercel proxy (vercel.json rewrites /api/* to Render),
+# frontend and backend are on the same origin, so SameSite=Lax is safe.
+COOKIE_SAMESITE = "Lax"
 
 # Get Render service URL from environment or use default
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '')
@@ -80,6 +86,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Disable automatic slash appending for REST API (POST requests can't redirect with data)
+APPEND_SLASH = False
 
 ROOT_URLCONF = 'config.urls'
 
@@ -192,17 +201,34 @@ AUTH_USER_MODEL = 'users.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        'apps.users.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
 } 
 
-# Allow the Next.js dev server (and other origins in development) to call the API.
-# For production, this should be tightened to explicit allowed origins.
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS Configuration for Vercel Proxy Setup
+# Frontend uses Vercel rewrites to proxy /api/* to backend
+# Browser sees same-origin, but Vercel forwards with Origin header
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    origin.strip().rstrip('/')  # Remove trailing slashes
+    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+# Validate CORS configuration
+if not CORS_ALLOWED_ORIGINS:
+    print("WARNING: CORS_ALLOWED_ORIGINS is empty. Set it to your Vercel domain.")
+
+# Cookie Settings - SameSite=Lax works with Vercel proxy (same-origin to browser)
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = True  # HTTPS required in production
+
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = True     # HTTPS required in production
 
 # Cloudinary Storage Configuration
 # This tells Django to use Cloudinary instead of the local disk

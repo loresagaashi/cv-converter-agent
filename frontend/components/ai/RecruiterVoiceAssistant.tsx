@@ -122,7 +122,7 @@ export function RecruiterVoiceAssistant({
       const downloadStart = performance.now();
       setStatus("thinking");
       //console.log(`[TIMING] TTS download started`);
-      const audio = await playTextToSpeech(text, token);
+      const audio = await playTextToSpeech(text, ttsAbortRef.current.signal);
       const downloadEnd = performance.now();
       if (cancelledRef.current) {
         return;
@@ -253,7 +253,7 @@ export function RecruiterVoiceAssistant({
               {
                 method: 'POST',
                 headers: {
-                  Authorization: `Token ${token}`,
+                  Authorization: `Bearer ${token}`,
                   // Do NOT set Content-Type - let browser set it with boundary
                 },
                 body: formData,
@@ -385,7 +385,7 @@ export function RecruiterVoiceAssistant({
               `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL}/api/llm/voice-to-question-stream/`,
               {
                 method: 'POST',
-                headers: { Authorization: `Token ${token}` },
+                headers: { Authorization: `Bearer ${token}` },
                 body: formData,
                 signal: streamAbortRef.current.signal,
               }
@@ -507,7 +507,7 @@ export function RecruiterVoiceAssistant({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Token ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           session_id: activeSessionId,
@@ -551,7 +551,7 @@ export function RecruiterVoiceAssistant({
       }
 
       // Ensure we have a conversation session (Phase 0)
-      const startRes = await startConversationSession(token, cvId, paperId);
+      const startRes = await startConversationSession(cvId, paperId);
       setSessionId(startRes.session_id);
       sessionIdRef.current = startRes.session_id;
 
@@ -639,7 +639,7 @@ export function RecruiterVoiceAssistant({
         const currentSessionId = sessionIdRef.current || sessionId;
         if (currentSessionId) {
           const phase = currentSection === "additional_info" ? "discovery" : "validation";
-          createConversationTurn(token, {
+          createConversationTurn({
             session_id: currentSessionId,
             section: currentSection,
             phase: phase,
@@ -696,7 +696,7 @@ export function RecruiterVoiceAssistant({
         try {
           const finalSessionId = sessionIdRef.current || sessionId;
           if (finalSessionId) {
-            const paperResult = await generateConversationCompetencePaper(token, finalSessionId);
+            const paperResult = await generateConversationCompetencePaper(finalSessionId);
             setHasGeneratedPaper(true);
             setGeneratedPaperId(paperResult?.id ?? null);
           }
@@ -813,7 +813,7 @@ export function RecruiterVoiceAssistant({
     setStatus("finished");
     const activeSessionId = sessionIdRef.current || sessionId;
     if (token && activeSessionId) {
-      endConversationSession(activeSessionId, token).catch((err: any) => {
+      endConversationSession(activeSessionId).catch((err: any) => {
         console.error("[handleEnd] Failed to end session:", err);
       });
     }

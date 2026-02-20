@@ -88,11 +88,10 @@ export default function UsersAdminPage() {
 
     let cancelled = false;
     async function load() {
-      if (!token) return; // Type guard
       setLoading(true);
       setError(null);
       try {
-        const data = await listUsers(token);
+        const data = await listUsers();
         if (!cancelled) {
           setUsers(data);
         }
@@ -158,7 +157,6 @@ export default function UsersAdminPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
 
     setSubmitting(true);
     setError(null);
@@ -172,7 +170,7 @@ export default function UsersAdminPage() {
           password: formState.password || undefined,
           role: formState.role,
         };
-        const created = await createUser(token, payload);
+        const created = await createUser(payload);
         setUsers((prev) => [...prev, created]);
       } else if (formMode === "edit" && formState.id) {
         const payload: AdminUserUpdatePayload = {
@@ -183,7 +181,7 @@ export default function UsersAdminPage() {
         if (formState.password) {
           payload.password = formState.password;
         }
-        const updated = await updateUser(token, formState.id, payload);
+        const updated = await updateUser(formState.id, payload);
         setUsers((prev) =>
           prev.map((u) => (u.id === updated.id ? updated : u))
         );
@@ -207,7 +205,7 @@ export default function UsersAdminPage() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!token || !deleteTarget) return;
+    if (!deleteTarget) return;
     // Safety check: prevent admins from deleting their own account
     if (user?.id === deleteTarget.id) {
       setError("You cannot delete your own account.");
@@ -217,7 +215,7 @@ export default function UsersAdminPage() {
     setDeleting(true);
     setError(null);
     try {
-      await deleteUser(token, deleteTarget.id);
+      await deleteUser(deleteTarget.id);
       setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err: any) {

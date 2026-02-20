@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import type { AuthResponse, User } from "@/lib/types";
-import { getCurrentUser, login as apiLogin, signup as apiSignup } from "@/lib/api";
+import { getCurrentUser, login as apiLogin, logout as apiLogout, signup as apiSignup } from "@/lib/api";
 
 type AuthContextValue = {
   user: User | null;
@@ -27,16 +27,37 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const TOKEN_KEY = "cv_auth_token";
+const ACCESS_TOKEN_COOKIE = "access_token";
+const ACCESS_TOKEN_MAX_AGE_SECONDS = 15 * 60;
 const USER_KEY = "cv_auth_user";
 
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${name.replace(/([.$?*|{}()\[\]\\\/\+^])/g, "\\$1")}=([^;]*)`)
+  );
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function setCookie(name: string, value: string, maxAgeSeconds: number) {
+  if (typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secure}`;
+}
+
+function clearCookie(name: string) {
+  if (typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+}
+
 function persistAuth(auth: AuthResponse, remember: boolean) {
+  setCookie(ACCESS_TOKEN_COOKIE, auth.access_token, ACCESS_TOKEN_MAX_AGE_SECONDS);
   if (!remember) {
     // In-memory only; nothing to persist.
     return;
   }
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(TOKEN_KEY, auth.token);
   window.localStorage.setItem(
     USER_KEY,
     JSON.stringify({
@@ -51,8 +72,8 @@ function persistAuth(auth: AuthResponse, remember: boolean) {
 }
 
 function clearPersistedAuth() {
+  clearCookie(ACCESS_TOKEN_COOKIE);
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(USER_KEY);
 }
 
@@ -64,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Hydrate from localStorage on first client render.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const storedToken = window.localStorage.getItem(TOKEN_KEY);
+    const storedToken = getCookie(ACCESS_TOKEN_COOKIE);
     const storedUser = window.localStorage.getItem(USER_KEY);
     if (storedToken && storedUser) {
       try {
@@ -93,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleAuthSuccess = useCallback(
     (auth: AuthResponse, remember: boolean) => {
-      setToken(auth.token);
+      setToken(auth.access_token);
       setUser({
         id: auth.id,
         email: auth.email,
@@ -126,6 +147,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     setUser(null);
     clearPersistedAuth();
+    apiLogout().catch(() => {
+      // Ignore logout failures; frontend state is already cleared.
+    });
   }, []);
 
   const value = useMemo<AuthContextValue>(

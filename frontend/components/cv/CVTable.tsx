@@ -58,7 +58,7 @@ export function CVTable({ refreshTrigger }: Props) {
     if (!token) return;
     setLoading(true);
     setError(null);
-    listCVs(token)
+    listCVs()
       .then((data) => {
         // Sort by ID descending - newest (highest ID) first
         const sorted = [...data].sort((a, b) => b.id - a.id);
@@ -90,7 +90,7 @@ export function CVTable({ refreshTrigger }: Props) {
     setDeletingId(deleteModal.id);
     setError(null);
     try {
-      await deleteCV(deleteModal.id, token);
+      await deleteCV(deleteModal.id);
       setItems((prev) => prev.filter((item) => item.id !== deleteModal.id));
       setDeleteModal(null);
     } catch (err: any) {
