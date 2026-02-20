@@ -58,6 +58,7 @@ class ConversationSession(models.Model):
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),
         ('completed', 'Completed'),
+        ('canceled', 'Canceled'),
     ]
     
     cv = models.ForeignKey(
@@ -81,6 +82,11 @@ class ConversationSession(models.Model):
         max_length=20,
         choices=STATUS_CHOICES,
         default='pending',
+    )
+    cv_extracted_text = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Competence Paper text extracted from CV at time of conversation"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)

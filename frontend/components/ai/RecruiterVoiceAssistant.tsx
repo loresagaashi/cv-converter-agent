@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
-import { createConversationTurn, generateConversationCompetencePaper, startConversationSession, playTextToSpeech } from "@/lib/api";
+import { createConversationTurn, endConversationSession, generateConversationCompetencePaper, startConversationSession, playTextToSpeech } from "@/lib/api";
 
 // MediaRecorder and AudioContext types are built-in to TypeScript
 
@@ -88,6 +88,8 @@ export function RecruiterVoiceAssistant({
   const volumeCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const cancelledRef = useRef(false);
+  const ttsAbortRef = useRef<AbortController | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const loggedVoiceRef = useRef(false);
   const sessionIdRef = useRef<number | null>(null); // Use ref to always have latest sessionId
   const sectionQuestionCountRef = useRef<Record<SectionKey, number>>({
@@ -107,13 +109,24 @@ export function RecruiterVoiceAssistant({
       throw new Error("Missing auth token for TTS.");
     }
 
+    if (cancelledRef.current) {
+      return;
+    }
+
     try {
+      if (ttsAbortRef.current) {
+        ttsAbortRef.current.abort();
+      }
+      ttsAbortRef.current = new AbortController();
       // FAST WAY: Show "thinking" while audio is downloading
       const downloadStart = performance.now();
       setStatus("thinking");
       //console.log(`[TIMING] TTS download started`);
       const audio = await playTextToSpeech(text, token);
       const downloadEnd = performance.now();
+      if (cancelledRef.current) {
+        return;
+      }
       currentAudioRef.current = audio;
       //console.log(`[TIMING] TTS download completed: ${(downloadEnd - downloadStart).toFixed(0)}ms`);
 
@@ -136,6 +149,9 @@ export function RecruiterVoiceAssistant({
         audio.play().catch(reject);
       });
     } catch (err) {
+      if ((err as any)?.name === "AbortError") {
+        return;
+      }
       console.error("[speak] TTS error:", err);
       currentAudioRef.current = null;
       throw err;
@@ -283,7 +299,8 @@ export function RecruiterVoiceAssistant({
     cvId: number,
     paperId: number,
     history: any[],
-    currentSection: string
+    currentSection: string,
+    sessionId?: number | null
   ): Promise<{ transcription: string; question_data: any }> => {
     return new Promise(async (resolve, reject) => {
       try {
@@ -353,8 +370,16 @@ export function RecruiterVoiceAssistant({
             formData.append('audio', audioBlob, 'recording.webm');
             formData.append('cv_id', String(cvId));
             formData.append('paper_id', String(paperId));
+            if (sessionId) {
+              formData.append('session_id', String(sessionId));
+            }
             formData.append('history', JSON.stringify(history));
             formData.append('section', currentSection);
+
+            if (streamAbortRef.current) {
+              streamAbortRef.current.abort();
+            }
+            streamAbortRef.current = new AbortController();
 
             const response = await fetch(
               `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL}/api/llm/voice-to-question-stream/`,
@@ -362,6 +387,7 @@ export function RecruiterVoiceAssistant({
                 method: 'POST',
                 headers: { Authorization: `Token ${token}` },
                 body: formData,
+                signal: streamAbortRef.current.signal,
               }
             );
 
@@ -431,6 +457,10 @@ export function RecruiterVoiceAssistant({
               question_data: null,
             });
           } catch (err: any) {
+            if (err?.name === "AbortError") {
+              resolve({ transcription: "", question_data: null });
+              return;
+            }
             reject(err);
           }
         };
@@ -469,6 +499,8 @@ export function RecruiterVoiceAssistant({
       throw new Error("Missing auth token.");
     }
 
+    const activeSessionId = sessionIdRef.current ?? sessionId;
+
     const res = await fetch(
       `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL}/api/llm/recruiter-assistant/question/`,
       {
@@ -478,6 +510,7 @@ export function RecruiterVoiceAssistant({
           Authorization: `Token ${token}`,
         },
         body: JSON.stringify({
+          session_id: activeSessionId,
           cv_id: cvId,
           paper_id: paperId,
           history: historyRef.current,
@@ -555,7 +588,14 @@ export function RecruiterVoiceAssistant({
           // Clear previous transcript right when we start listening again (so the last answer
           // remains visible during "Speaking" / "Thinking" states).
           setLastTranscript("");
-          result = await startListeningAndProcessing(cvId, paperId, historyRef.current, currentSection);
+          const activeSessionId = sessionIdRef.current || sessionId;
+          result = await startListeningAndProcessing(
+            cvId,
+            paperId,
+            historyRef.current,
+            currentSection,
+            activeSessionId,
+          );
 
           //console.log("[DEBUG] Result from combined endpoint:", result);
           //console.log("[DEBUG] Transcription:", result?.transcription);
@@ -695,6 +735,7 @@ export function RecruiterVoiceAssistant({
       setHasGeneratedPaper(false);
       setIsGeneratingPaper(false);
       setSection("core_skills");
+      setLastTranscript("");
       runConversation();
     } else {
       cancelledRef.current = true;
@@ -707,6 +748,7 @@ export function RecruiterVoiceAssistant({
       setSessionId(null);
       sessionIdRef.current = null; // Clear ref as well
       historyRef.current = [];
+      setLastTranscript("");
     }
 
     return () => {
@@ -718,6 +760,15 @@ export function RecruiterVoiceAssistant({
 
   const handleEnd = () => {
     cancelledRef.current = true;
+
+    if (ttsAbortRef.current) {
+      ttsAbortRef.current.abort();
+      ttsAbortRef.current = null;
+    }
+    if (streamAbortRef.current) {
+      streamAbortRef.current.abort();
+      streamAbortRef.current = null;
+    }
 
     // Stop any currently playing audio IMMEDIATELY
     if (currentAudioRef.current) {
@@ -760,6 +811,13 @@ export function RecruiterVoiceAssistant({
     }
 
     setStatus("finished");
+    const activeSessionId = sessionIdRef.current || sessionId;
+    if (token && activeSessionId) {
+      endConversationSession(activeSessionId, token).catch((err: any) => {
+        console.error("[handleEnd] Failed to end session:", err);
+      });
+    }
+    setLastTranscript("");
     onClose();
   };
 

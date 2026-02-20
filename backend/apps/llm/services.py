@@ -517,7 +517,7 @@ def generate_ai_voice(text: str) -> bytes:
         text: The text to convert to speech
         
     Returns:
-        Binary audio content (MP3 format)
+        Binary audio content (Opus format)
         
     Raises:
         Exception: If the API call fails
@@ -529,6 +529,7 @@ def generate_ai_voice(text: str) -> bytes:
         raise ValueError("OPENAI_API_KEY is not configured")
     
     try:
+        start = time.monotonic()
         resp = requests.post(
             OPENAI_AUDIO_SPEECH_URL,
             headers={
@@ -540,10 +541,17 @@ def generate_ai_voice(text: str) -> bytes:
                 "voice": "shimmer",  # Expressive, warm female voice
                 "speed": 1.1,
                 "input": text.strip(),
+                "response_format": "opus",
             },
             timeout=60,
         )
         resp.raise_for_status()
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logger.info(
+            "[generate_ai_voice] TTS OK: %.1fms, bytes=%d",
+            elapsed_ms,
+            len(resp.content),
+        )
         return resp.content
     except Exception as e:
         logger.error(f"OpenAI TTS generation failed: {e}")

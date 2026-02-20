@@ -570,6 +570,22 @@ export async function downloadConversationCompetencePaperPdf(
 
   return res.blob();
 }
+export async function endConversationSession(
+  sessionId: number,
+  token: string
+): Promise<{ detail: string; status: string }> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/interview/conversation-session/${sessionId}/end/`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${token}`,
+      },
+    }
+  );
+
+  return handleResponse<{ detail: string; status: string }>(res);
+}
 
 // ---------------------------------------------------------------------------
 // Text-to-Speech (OpenAI Emotional TTS)
