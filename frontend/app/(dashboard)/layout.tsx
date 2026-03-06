@@ -13,6 +13,11 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -20,7 +25,7 @@ export default function DashboardLayout({
     }
   }, [loading, user, router]);
 
-  if (loading || (!user && typeof window !== "undefined")) {
+  if (!mounted || loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950">
         <div className="text-center space-y-3">
@@ -29,10 +34,6 @@ export default function DashboardLayout({
         </div>
       </div>
     );
-  }
-
-  if (!user) {
-    return null;
   }
 
   return (

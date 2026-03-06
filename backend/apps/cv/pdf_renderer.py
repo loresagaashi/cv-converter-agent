@@ -180,7 +180,7 @@ def _safe_multi_cell(pdf: FPDF, w: float, h: float, text: str) -> None:
 
 
 def render_structured_cv_to_pdf(
-  structured_cv: Dict[str, Any], *, output_path: Path, html_template_path: Optional[Path] = None, section_order: Optional[List[str]] = None
+  structured_cv: Dict[str, Any], *, output_path: Path, html_template_path: Optional[Path] = None, section_order: Optional[List[str]] = None, cp_status: str = ""
 ) -> Path:
   """
   Render a normalized structured CV into a PDF.
@@ -222,10 +222,12 @@ def render_structured_cv_to_pdf(
         seniority = _calculate_seniority_label(work_exp)
       # Soft skills: from structured_cv["soft_skills"] or empty, limited to max 3
       soft_skills = [str(s).strip() for s in (structured_cv.get("soft_skills") or []) if s][:3]
-      # Core skills and tech competencies:
+      # Core skills: from structured_cv["core_skills"] or empty (same approach as soft_skills)
+      core_skills: List[str] = [str(s).strip() for s in (structured_cv.get("core_skills") or []) if s]
+      
+      # Tech competencies:
       # Use AI-based grouping for tech competencies (max 6 groups), with a simple
       # heuristic fallback if the LLM is unavailable.
-      core_skills: List[str] = []
       tech_competencies: Dict[str, List[str]] = {}
       tech_competencies_flat: List[str] = []
 
@@ -292,18 +294,6 @@ def render_structured_cv_to_pdf(
             tech_competencies_flat.append(f"{group}: {', '.join(limited_skills)}")
       else:
         tech_competencies_flat = tech_competencies_items
-
-      # Core skills: top 3 unique across all tech competencies.
-      seen_core = set()
-      for group in tech_competencies.values():
-        for s in group:
-          if s not in seen_core:
-            core_skills.append(s)
-            seen_core.add(s)
-          if len(core_skills) >= 3:
-            break
-        if len(core_skills) >= 3:
-          break
       # Languages: join name+level, limit to max 3
       languages = []
       for lang in structured_cv.get("languages") or []:
@@ -413,6 +403,7 @@ def render_structured_cv_to_pdf(
         "tech_competencies_line": " | ".join(tech_competencies_flat),
         "project_experience_line": " | ".join(project_experience_flat),
         "footer_logo_url": footer_logo_url,
+        "cp_status": cp_status,
       }
       # Render with landscape orientation (force via CSS if needed)
       html_out = template.render(**context)

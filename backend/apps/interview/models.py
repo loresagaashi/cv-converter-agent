@@ -5,15 +5,28 @@ from apps.cv.models import CV
 
 class CompetencePaper(models.Model):
     """Store original competence papers only (from CV export)"""
-    
+
+    CP_STATUS_CHOICES = [
+        ('borek_assessed', 'Borek Assessed'),
+        ('borek_employee_assessed', 'Borek Employee & Assessed'),
+        ('market_research', 'Market Research'),
+    ]
+
     cv = models.ForeignKey(
         CV,
         on_delete=models.CASCADE,
         related_name='competence_papers',
     )
     content = models.TextField()
+    status = models.CharField(
+        max_length=30,
+        choices=CP_STATUS_CHOICES,
+        blank=True,
+        default='',
+        help_text='Assessment status shown in the footer badge of the CP PDF',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         db_table = 'competence_paper'
         ordering = ('-created_at',)
@@ -22,7 +35,7 @@ class CompetencePaper(models.Model):
         indexes = [
             models.Index(fields=['cv', 'created_at']),
         ]
-    
+
     def __str__(self):
         return f'{self.cv.original_filename} - Original'
 

@@ -675,7 +675,8 @@ export async function exportEditedCV(
   structuredCV: StructuredCV,
   token?: string,
   sectionOrder?: string[],
-  type: "cv" | "competence" = "cv"
+  type: "cv" | "competence" = "cv",
+  status?: string
 ): Promise<Blob> {
   const accessToken = getAccessTokenFromCookie() || token;
   return handleAuthenticatedBlobResponse(`${API_BASE_URL}/api/cv/${id}/structured/`, {
@@ -688,6 +689,7 @@ export async function exportEditedCV(
       structured_cv: structuredCV,
       section_order: sectionOrder,
       type,
+      status,
     }),
   });
 }

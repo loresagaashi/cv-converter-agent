@@ -80,6 +80,8 @@ export interface StructuredCV {
   education: EducationItem[];
   projects: ProjectItem[];
   skills: string[];
+  core_skills: string[];
+  soft_skills: string[];
   courses: string[];
   languages: LanguageItem[];
 }

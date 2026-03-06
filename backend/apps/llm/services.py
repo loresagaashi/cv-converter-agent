@@ -715,6 +715,8 @@ _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
         }
     ],
     "skills": ["Python", "TypeScript", "React", "SCRUM", "Kanban"],
+    "core_skills": ["Python", "TypeScript", "React"],
+    "soft_skills": ["Communication", "Leadership", "Problem Solving"],
     "courses": ["Course description"],
     "languages": [
         {"name": "English", "level": "C1"},
@@ -740,6 +742,9 @@ TASK:
 - Extract ALL education items (degrees, diplomas) with **1-2 sentences**.
 - Extract ALL projects as their own list (do NOT merge into work_experience); include project name, context (e.g., Personal Project, client), dates, and **1-line bullets**, max **2-3 sentences total** per project.
 - Extract a flat skills list (no nesting).
+- **IMPORTANT**: From the skills list, also categorize and populate:
+  - **core_skills**: Technical/hard skills (e.g., programming languages, frameworks, databases, tools, technologies). Top 3-5 most important technical skills.
+  - **soft_skills**: Interpersonal/transferable skills (e.g., Communication, Leadership, Problem Solving, Teamwork, Project Management). Top 3 most relevant soft skills.
 - Extract ALL courses as their own list (1 line each entry).
 - Keep languages if present and place them last in the JSON order.
 - Map everything into the JSON schema below so it can render directly into a formatted CV PDF.
@@ -765,6 +770,8 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "profile": "",
             "languages": [],
             "skills": [],
+            "core_skills": [],
+            "soft_skills": [],
             "skills_grouped": {},
             "work_experience": [],
             "education": [],
@@ -784,6 +791,8 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "profile": "",
             "languages": [],
             "skills": [],
+            "core_skills": [],
+            "soft_skills": [],
             "skills_grouped": {},
             "work_experience": [],
             "education": [],
@@ -796,6 +805,8 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
     profile = str(data.get("profile") or "").strip()
     languages = data.get("languages") or []
     skills = data.get("skills") or []
+    core_skills = data.get("core_skills") or []
+    soft_skills = data.get("soft_skills") or []
     work_experience = data.get("work_experience") or []
     education = data.get("education") or []
     projects = data.get("projects") or []
@@ -809,6 +820,10 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
         languages = languages[:3]
     if not isinstance(skills, list):
         skills = []
+    if not isinstance(core_skills, list):
+        core_skills = []
+    if not isinstance(soft_skills, list):
+        soft_skills = []
     if not isinstance(work_experience, list):
         work_experience = []
     if not isinstance(education, list):
@@ -827,6 +842,20 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             if s_clean:
                 normalized_skills.append(s_clean)
 
+    normalized_core_skills: List[str] = []
+    for s in core_skills:
+        if isinstance(s, str):
+            s_clean = s.strip()
+            if s_clean:
+                normalized_core_skills.append(s_clean)
+
+    normalized_soft_skills: List[str] = []
+    for s in soft_skills:
+        if isinstance(s, str):
+            s_clean = s.strip()
+            if s_clean:
+                normalized_soft_skills.append(s_clean)
+
     skills_grouped: Dict[str, List[str]] = {}
 
     return {
@@ -834,6 +863,8 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
         "profile": profile,
         "languages": languages,
         "skills": normalized_skills,
+        "core_skills": normalized_core_skills,
+        "soft_skills": normalized_soft_skills,
         "skills_grouped": skills_grouped,
         "work_experience": work_experience,
         "education": education,

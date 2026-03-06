@@ -19,6 +19,8 @@ type StructuredCVPayload = Partial<StructuredCV>;
 type EditingSection =
   | "profile"
   | "skills"
+  | "core_skills"
+  | "soft_skills"
   | "work_experience"
   | "education"
   | "projects"
@@ -38,6 +40,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"cv" | "competence" | null>(null);
   const [editingSection, setEditingSection] = useState<EditingSection | null>(null);
+  const [cpStatus, setCpStatus] = useState<string>("");
 
   // Update local state when cached CV changes
   useEffect(() => {
@@ -120,8 +123,26 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
     setExporting(type);
     setError(null);
     try {
+      // For competence paper exports, limit core_skills to 3
+      const exportPayload: StructuredCVPayload =
+        type === "competence"
+          ? {
+              ...structuredCV,
+              core_skills: (structuredCV.core_skills || [])
+                .filter((s) => s.trim())
+                .slice(0, 3),
+            }
+          : structuredCV;
+
       // Cast to StructuredCV since we've validated all required fields exist
-      const blob = await exportEditedCV(cvId, structuredCV as StructuredCV, undefined, undefined, type);
+      const blob = await exportEditedCV(
+        cvId,
+        exportPayload as StructuredCV,
+        undefined,
+        undefined,
+        type,
+        type === "competence" ? cpStatus : undefined
+      );
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -153,6 +174,8 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
 
   const showProfile = structuredCV?.profile !== undefined && structuredCV?.profile !== null && structuredCV.profile.trim() !== "";
   const showSkills = Array.isArray(structuredCV?.skills) && structuredCV.skills.length > 0;
+  const showCoreSkills = Array.isArray(structuredCV?.core_skills) && structuredCV.core_skills.length > 0;
+  const showSoftSkills = Array.isArray(structuredCV?.soft_skills) && structuredCV.soft_skills.length > 0;
   const showWorkExperience = Array.isArray(structuredCV?.work_experience) && structuredCV.work_experience.length > 0;
   const showEducation = Array.isArray(structuredCV?.education) && structuredCV.education.length > 0;
   const showCertifications = Array.isArray(structuredCV?.certifications) && structuredCV.certifications.length > 0;
@@ -250,44 +273,43 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 </Section>
               )}
 
-              {showSkills && (
+              {showCoreSkills && (
                 <Section
-                  title="Skills"
-                  isEditing={editingSection === "skills"}
+                  title="Core Skills"
+                  isEditing={editingSection === "core_skills"}
                   onEdit={() => {
-                    // When leaving edit mode for Skills, ensure there are no blank rows.
-                    if (editingSection === "skills" && structuredCV && Array.isArray(structuredCV.skills)) {
-                      for (let i = 0; i < structuredCV.skills.length; i++) {
-                        if (!structuredCV.skills[i].trim()) {
+                    if (editingSection === "core_skills" && structuredCV && Array.isArray(structuredCV.core_skills)) {
+                      for (let i = 0; i < structuredCV.core_skills.length; i++) {
+                        if (!structuredCV.core_skills[i].trim()) {
                           setError(
-                            `Skill #${i + 1} is empty. Please fill it in or remove this skill.`
+                            `Core Skill #${i + 1} is empty. Please fill it in or remove this skill.`
                           );
                           return;
                         }
                       }
                     }
                     setError(null);
-                    setEditingSection(editingSection === "skills" ? null : "skills");
+                    setEditingSection(editingSection === "core_skills" ? null : "core_skills");
                   }}
                 >
-                  {editingSection === "skills" ? (
+                  {editingSection === "core_skills" ? (
                     <div className="space-y-2">
-                      {(structuredCV.skills || []).map((skill, idx) => (
+                      {(structuredCV.core_skills || []).map((skill, idx) => (
                         <div key={idx} className="flex items-center gap-2">
                           <input
                             type="text"
                             value={skill}
                             onChange={(e) => {
-                              const newSkills = [...(structuredCV.skills || [])];
+                              const newSkills = [...(structuredCV.core_skills || [])];
                               newSkills[idx] = e.target.value;
-                              updateSection("skills", newSkills);
+                              updateSection("core_skills", newSkills);
                             }}
                             className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
                           <button
                             onClick={() => {
-                              const newSkills = (structuredCV.skills || []).filter((_, i) => i !== idx);
-                              updateSection("skills", newSkills);
+                              const newSkills = (structuredCV.core_skills || []).filter((_, i) => i !== idx);
+                              updateSection("core_skills", newSkills);
                             }}
                             className="text-red-400 hover:text-red-300 text-sm"
                           >
@@ -296,20 +318,94 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                         </div>
                       ))}
                       <button
-                        onClick={() => updateSection("skills", [...(structuredCV.skills || []), ""])}
+                        onClick={() => updateSection("core_skills", [...(structuredCV.core_skills || []), ""])}
                         className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
                       >
-                        + Add Skill
+                        + Add Core Skill
                       </button>
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      {(structuredCV.skills || [])
+                      {(structuredCV.core_skills || [])
+                        .filter((s) => s.trim())
+                        .slice(0, 3)
+                        .map((skill, idx) => (
+                          <span
+                            key={`core-skill-${idx}`}
+                            className="rounded-full bg-blue-500/10 border border-blue-500/40 px-2 py-1 text-xs text-blue-200"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      {(structuredCV.core_skills || []).filter((s) => s.trim()).length > 3 && (
+                        <span className="rounded-full bg-slate-700/60 border border-slate-600/40 px-2 py-1 text-xs text-slate-400">
+                          +{(structuredCV.core_skills || []).filter((s) => s.trim()).length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </Section>
+              )}
+
+              {showSoftSkills && (
+                <Section
+                  title="Soft Skills"
+                  isEditing={editingSection === "soft_skills"}
+                  onEdit={() => {
+                    if (editingSection === "soft_skills" && structuredCV && Array.isArray(structuredCV.soft_skills)) {
+                      for (let i = 0; i < structuredCV.soft_skills.length; i++) {
+                        if (!structuredCV.soft_skills[i].trim()) {
+                          setError(
+                            `Soft Skill #${i + 1} is empty. Please fill it in or remove this skill.`
+                          );
+                          return;
+                        }
+                      }
+                    }
+                    setError(null);
+                    setEditingSection(editingSection === "soft_skills" ? null : "soft_skills");
+                  }}
+                >
+                  {editingSection === "soft_skills" ? (
+                    <div className="space-y-2">
+                      {(structuredCV.soft_skills || []).map((skill, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={skill}
+                            onChange={(e) => {
+                              const newSkills = [...(structuredCV.soft_skills || [])];
+                              newSkills[idx] = e.target.value;
+                              updateSection("soft_skills", newSkills);
+                            }}
+                            className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <button
+                            onClick={() => {
+                              const newSkills = (structuredCV.soft_skills || []).filter((_, i) => i !== idx);
+                              updateSection("soft_skills", newSkills);
+                            }}
+                            className="text-red-400 hover:text-red-300 text-sm"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => updateSection("soft_skills", [...(structuredCV.soft_skills || []), ""])}
+                        className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                      >
+                        + Add Soft Skill
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {(structuredCV.soft_skills || [])
                         .filter((s) => s.trim())
                         .map((skill, idx) => (
                           <span
-                            key={`skill-${idx}`}
-                            className="rounded-full bg-emerald-500/10 border border-emerald-500/40 px-2 py-1 text-xs text-emerald-200"
+                            key={`soft-skill-${idx}`}
+                            className="rounded-full bg-purple-500/10 border border-purple-500/40 px-2 py-1 text-xs text-purple-200"
                           >
                             {skill}
                           </span>
@@ -968,6 +1064,29 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   </div>
                 )}
               </Section>
+
+              {/* Kategoria — CP status badge selector */}
+              <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm hover:border-slate-700/80 transition-all duration-200">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-100 text-sm">Kategoria</h3>
+                </div>
+                <select
+                  value={cpStatus}
+                  onChange={(e) => setCpStatus(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">— Select status —</option>
+                  <option value="borek_assessed">Borek Assessed</option>
+                  <option value="borek_employee_assessed">Borek Employee &amp; Assessed</option>
+                  <option value="market_research">Market Research</option>
+                </select>
+                {cpStatus && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    This badge will appear in the footer of the generated Competence Paper.
+                  </p>
+                )}
+              </div>
+
             </>
           ) : null}
         </div>

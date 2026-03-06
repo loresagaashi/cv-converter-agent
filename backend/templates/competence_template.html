@@ -389,10 +389,16 @@
         <img src="{{ footer_logo_url if footer_logo_url else '../../borek-logo/borek.jpeg' }}"
             alt="Borek Solutions Group" class="footer-logo">
         <div class="footer-badges" style="display: flex; gap: 10px; align-items: center;">
-            {% if is_assessment %}
-            <div class="footer-badge" style="background-color: #1a2b5c;">Borek assessed</div>
+            {% if cp_status == 'borek_assessed' %}
+            <div class="footer-badge" style="background-color: #1a2b5c;">Borek Assessed</div>
+            {% elif cp_status == 'borek_employee_assessed' %}
+            <div class="footer-badge" style="background-color: #1a2b5c;">Borek Employee</div>
+            <div class="footer-badge" style="background-color: #1a2b5c;">Borek Assessed</div>
+            {% elif cp_status == 'market_research' %}
+            <div class="footer-badge" style="background-color: #1a2b5c;">Market Research</div>
+            {% else %}
+            <div class="footer-badge">Borek Employee</div>
             {% endif %}
-            <div class="footer-badge">Borek employee</div>
         </div>
     </div>
 </body>

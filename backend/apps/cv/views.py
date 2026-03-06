@@ -289,6 +289,7 @@ class StructuredCVView(APIView):
             structured_cv = request.data.get("structured_cv", {})
             section_order = request.data.get("section_order")
             export_type = request.data.get("type", "cv")
+            cp_status = request.data.get("status", "")
         except Exception as e:
             return Response(
                 {"detail": f"Invalid payload: {str(e)}"},
@@ -313,6 +314,7 @@ class StructuredCVView(APIView):
                 output_path=output_path,
                 html_template_path=template_path,
                 section_order=section_order,
+                cp_status=cp_status,
             )
             with open(pdf_path, "rb") as f:
                 pdf_bytes = f.read()
@@ -349,8 +351,14 @@ class StructuredCVView(APIView):
                 for skill in soft_skills:
                     competence_content_parts.append(f"• {skill}")
             
-            # Core skills and Tech Competencies: TOP 5 ONLY (same logic as pdf_renderer lines 270-280)
-            core_skills = []
+            # Core skills: use edited core_skills if provided, otherwise regenerate (same as soft_skills above)
+            core_skills = [str(s).strip() for s in (structured_cv.get("core_skills") or []) if s]
+            if core_skills:
+                competence_content_parts.append(f"\nCore Skills:")
+                for skill in core_skills:
+                    competence_content_parts.append(f"• {skill}")
+            
+            # Tech Competencies: max 6 categories, max 5 skills per category (same as pdf_renderer)
             tech_competencies = {}
             
             # Group skills (same logic as pdf_renderer)
@@ -382,29 +390,6 @@ class StructuredCVView(APIView):
                     elif any(x in lower for x in ["architecture", "design pattern", "clean code", "solid", "mvc", "mvvm", "microservices", "serverless", "event-driven", "tdd", "bdd", "agile", "scrum", "hexagonal", "onion", "adapter"]):
                         key = "Architecture & Practices"
                     tech_competencies.setdefault(key, []).append(skill)
-            
-            # Extract top 3 core skills from tech_competencies (same as pdf_renderer)
-            seen_core = set()
-            for group in tech_competencies.values():
-                for s in group:
-                    if s not in seen_core:
-                        core_skills.append(s)
-                        seen_core.add(s)
-                    if len(core_skills) >= 3:
-                        break
-                if len(core_skills) >= 3:
-                    break
-            
-            # If no core skills from grouped, try to get top 3 from raw skills list
-            if not core_skills:
-                raw_skills = [str(s).strip() for s in (structured_cv.get("skills") or []) if str(s).strip()]
-                core_skills = raw_skills[:3]
-            
-            # Store Core Skills
-            if core_skills:
-                competence_content_parts.append(f"\nCore Skills:")
-                for skill in core_skills:
-                    competence_content_parts.append(f"• {skill}")
             
             # Tech Competencies: max 6 categories, max 5 skills per category (same as pdf_renderer)
             # Always include tech competencies if we have any grouped skills
@@ -488,18 +473,25 @@ class StructuredCVView(APIView):
             full_content = "\n".join(competence_content_parts)
             
             if full_content.strip():
-                # Create new competence paper (store exactly what was exported - always original)
-                competence_paper = CompetencePaper.objects.create(
+                # Build the update payload: always update content.
+                # Only update status if the user explicitly selected one (non-empty),
+                # so that re-exporting without changing the dropdown preserves the
+                # previously saved status in the DB.
+                update_defaults: dict = {"content": full_content}
+                if cp_status:
+                    update_defaults["status"] = cp_status
+
+                competence_paper, created = CompetencePaper.objects.update_or_create(
                     cv=cv_instance,
-                    content=full_content,
+                    defaults=update_defaults,
                 )
-                # Automatically create a pending conversation session for this competence paper
-                # so a voice agent can be started for every generated summary.
-                ConversationSession.objects.create(
-                    cv=cv_instance,
-                    original_competence_paper=competence_paper,
-                    status="pending",
-                )
+                # Only create a conversation session on the very first export.
+                if created:
+                    ConversationSession.objects.create(
+                        cv=cv_instance,
+                        original_competence_paper=competence_paper,
+                        status="pending",
+                    )
 
         response = HttpResponse(
             pdf_bytes,
