@@ -744,7 +744,7 @@ TASK:
 - Extract a flat skills list (no nesting).
 - **IMPORTANT**: From the skills list, also categorize and populate:
   - **core_skills**: Technical/hard skills (e.g., programming languages, frameworks, databases, tools, technologies). Top 3-5 most important technical skills.
-  - **soft_skills**: Interpersonal/transferable skills (e.g., Communication, Leadership, Problem Solving, Teamwork, Project Management). Top 3 most relevant soft skills.
+  - **soft_skills**: ONLY interpersonal/behavioral traits—NOT tasks, deliverables, or technical practices. Examples: Communication, Leadership, Problem Solving, Teamwork, Project Management, Collaboration, Adaptability, Critical Thinking, Time Management, Persuasion, Negotiation. EXCLUDE: "Documentation", "Testing", "Code Review", "Agile", "Mentoring" (if context-dependent), technical practices, methodologies. Top 3 most relevant soft skills only.
 - Extract ALL courses as their own list (1 line each entry).
 - Keep languages if present and place them last in the JSON order.
 - Map everything into the JSON schema below so it can render directly into a formatted CV PDF.
