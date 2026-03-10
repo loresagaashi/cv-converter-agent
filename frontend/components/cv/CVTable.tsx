@@ -6,6 +6,7 @@ import Link from "next/link";
 import { deleteCV, listCVs } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { CV } from "@/lib/types";
+import { getCachedCVs, setCachedCVs } from "@/lib/dashboardListCache";
 
 interface Props {
   refreshTrigger?: number;
@@ -21,60 +22,52 @@ export function CVTable({ refreshTrigger }: Props) {
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [deleteModal, setDeleteModal] = useState<CV | null>(null);
+  const [reloading, setReloading] = useState(false);
 
-  useEffect(() => {
-    // Add glow animation styles and slide-in animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes cv-glow {
-        0%, 100% {
-          box-shadow: 0 0 15px rgba(239, 68, 68, 0.4), -15px 0 15px rgba(239, 68, 68, 0.4), 15px 0 15px rgba(239, 68, 68, 0.4);
-        }
-        50% {
-          box-shadow: 0 0 25px rgba(239, 68, 68, 0.6), -25px 0 25px rgba(239, 68, 68, 0.6), 25px 0 25px rgba(239, 68, 68, 0.6);
-        }
-      }
-      @keyframes slideIn {
-        from {
-          opacity: 0;
-          transform: translateX(-20px);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(0);
-        }
-      }
-      .cv-record {
-        animation: slideIn 0.4s ease-out forwards;
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
+  const applyHighlightFromQuery = () => {
+    const highlight = searchParams.get("highlight");
+    if (!highlight) return;
+    setHighlightId(Number(highlight));
+    setTimeout(() => setHighlightId(null), 3000);
+  };
 
-  useEffect(() => {
+  const loadCVs = async (force = false) => {
     if (!token) return;
-    setLoading(true);
+
+    if (!force) {
+      const cached = getCachedCVs();
+      if (cached) {
+        setItems(cached);
+        setError(null);
+        setLoading(false);
+        applyHighlightFromQuery();
+        return;
+      }
+    }
+
     setError(null);
-    listCVs()
-      .then((data) => {
-        // Sort by ID descending - newest (highest ID) first
-        const sorted = [...data].sort((a, b) => b.id - a.id);
-        setItems(sorted);
-        
-        // Check for highlight parameter
-        const highlight = searchParams.get('highlight');
-        if (highlight) {
-          setHighlightId(Number(highlight));
-          setTimeout(() => setHighlightId(null), 3000);
-        }
-      })
-      .catch((err: any) => {
-        setError(err?.message || "Failed to load CVs.");
-      })
-      .finally(() => setLoading(false));
+    if (force) {
+      setReloading(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const data = await listCVs();
+      const sorted = [...data].sort((a, b) => b.id - a.id);
+      setItems(sorted);
+      setCachedCVs(sorted);
+      applyHighlightFromQuery();
+    } catch (err: any) {
+      setError(err?.message || "Failed to load CVs.");
+    } finally {
+      setLoading(false);
+      setReloading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCVs(refreshTrigger !== undefined);
   }, [token, refreshTrigger, searchParams]);
 
   if (!token) {
@@ -91,7 +84,11 @@ export function CVTable({ refreshTrigger }: Props) {
     setError(null);
     try {
       await deleteCV(deleteModal.id);
-      setItems((prev) => prev.filter((item) => item.id !== deleteModal.id));
+      setItems((prev) => {
+        const next = prev.filter((item) => item.id !== deleteModal.id);
+        setCachedCVs(next);
+        return next;
+      });
       setDeleteModal(null);
     } catch (err: any) {
       setError(err?.message || "Failed to delete CV.");
@@ -126,6 +123,17 @@ export function CVTable({ refreshTrigger }: Props) {
           <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
             {filtered.length} {filtered.length === 1 ? "file" : "files"}
           </span>
+          <button
+            type="button"
+            onClick={() => void loadCVs(true)}
+            disabled={reloading || loading}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/70 bg-slate-900/70 text-slate-200 hover:bg-slate-800/80 hover:border-slate-600/80 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+            title="Reload CV records"
+          >
+            <svg className={`h-4 w-4 ${reloading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 11a8.1 8.1 0 00-15.5-2M4 5v4h4M4 13a8.1 8.1 0 0015.5 2M20 19v-4h-4" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -174,50 +182,47 @@ export function CVTable({ refreshTrigger }: Props) {
           </p>
         </div>
       ) : (
-        <div
-          className={`space-y-2 ${
-            filtered.length > 10 ? "max-h-[500px] overflow-y-auto pr-1" : ""
-          }`}
-        >
-          {filtered.map((cv, idx) => (
-            <div
-              key={cv.id}
-              className="cv-record flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200"
-              style={{ animationDelay: `${idx * 0.05}s` }}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-100">
-                  {cv.original_filename}
-                </p>
-                <div className="text-xs text-slate-500 mt-1">
-                  <span>{cv.uploaded_by || "You"} • </span>
-                  {new Date(cv.uploaded_at).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+        <div className="overflow-x-auto -mx-6 px-6">
+          <div className="space-y-2 min-w-max">
+            {filtered.map((cv) => (
+              <div
+                key={cv.id}
+                className="flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200 w-full"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-100">
+                    {cv.original_filename}
+                  </p>
+                  <div className="text-xs text-slate-500 mt-1">
+                    <span>{cv.uploaded_by || "You"} • </span>
+                    {new Date(cv.uploaded_at).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
+                </div>
+                <div className="ml-4 flex items-center gap-2 flex-shrink-0">
+                  <Link
+                    href={`/cv/${cv.id}`}
+                    className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                  >
+                    View
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModal(cv)}
+                    disabled={deletingId === cv.id}
+                    className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  >
+                    {deletingId === cv.id ? "Deleting..." : "Delete"}
+                  </button>
                 </div>
               </div>
-              <div className="ml-4 flex items-center gap-2">
-                <Link
-                  href={`/cv/${cv.id}`}
-                  className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
-                >
-                  View
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setDeleteModal(cv)}
-                  disabled={deletingId === cv.id}
-                  className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                >
-                  {deletingId === cv.id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 

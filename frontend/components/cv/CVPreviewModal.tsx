@@ -1065,10 +1065,10 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 )}
               </Section>
 
-              {/* Kategoria — CP status badge selector */}
+              {/* Category — CP status badge selector */}
               <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm hover:border-slate-700/80 transition-all duration-200">
                 <div className="mb-3 flex items-center justify-between">
-                  <h3 className="font-bold text-slate-100 text-sm">Kategoria</h3>
+                  <h3 className="font-bold text-slate-100 text-sm">Category</h3>
                 </div>
                 <select
                   value={cpStatus}

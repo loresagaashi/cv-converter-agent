@@ -13,6 +13,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -27,8 +28,8 @@ export default function DashboardLayout({
 
   if (!mounted || loading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
-        <div className="text-center space-y-3">
+      <div className="flex min-h-screen items-center justify-center bg-slate-950" suppressHydrationWarning>
+        <div className="text-center space-y-3" suppressHydrationWarning>
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent"></div>
           <p className="text-sm text-slate-400">Loading your workspace...</p>
         </div>
@@ -37,7 +38,8 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-50">
+    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-50 relative" suppressHydrationWarning>
+      {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-64 flex-col border-r border-slate-800/60 bg-slate-950/80 px-5 py-6">
         <div className="mb-8">
           <div className="flex items-center gap-2.5 mb-2.5">
@@ -135,13 +137,190 @@ export default function DashboardLayout({
           </div>
         </div>
       </aside>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex items-center justify-between border-b border-slate-800/60 bg-slate-950/90 backdrop-blur-sm px-4 py-4 md:px-6 flex-shrink-0">
-          <div className="flex items-center gap-3 md:hidden">
-            <div className="h-7 w-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-              <span className="text-emerald-400 font-bold text-xs">CV</span>
+
+      {/* Mobile Sidebar - Sliding from left */}
+      <>
+        {/* Backdrop overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Sliding Sidebar */}
+        <aside
+          className={`fixed bottom-0 left-0 top-0 z-40 w-64 flex-col border-r border-slate-800/60 bg-slate-950/95 px-5 py-6 md:hidden flex transform transition-transform duration-300 ease-in-out ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                  <span className="text-emerald-400 font-bold text-sm">CV</span>
+                </div>
+                <span className="text-sm font-bold text-slate-50">
+                  CV Converter
+                </span>
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="md:hidden p-1 rounded-lg hover:bg-slate-900/60 transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 text-slate-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
             </div>
-            <span className="text-sm font-semibold text-slate-100">
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Manage and format your resumes
+            </p>
+          </div>
+          <nav className="space-y-1.5 flex-1">
+            <button
+              onClick={() => {
+                router.push("/dashboard");
+                setSidebarOpen(false);
+              }}
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                pathname === "/dashboard"
+                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                  : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+              }`}
+            >
+              Upload CV
+            </button>
+            <button
+              onClick={() => {
+                router.push("/dashboard/cvs");
+                setSidebarOpen(false);
+              }}
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                pathname === "/dashboard/cvs"
+                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                  : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+              }`}
+            >
+              My CVs
+            </button>
+            <button
+              onClick={() => {
+                router.push("/dashboard/competence-summaries");
+                setSidebarOpen(false);
+              }}
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                pathname === "/dashboard/competence-summaries"
+                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                  : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+              }`}
+            >
+              Competence Summaries
+            </button>
+            <button
+              onClick={() => {
+                router.push("/dashboard/conversation-competence-summaries");
+                setSidebarOpen(false);
+              }}
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                pathname === "/dashboard/conversation-competence-summaries"
+                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                  : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+              }`}
+            >
+              Conversation Summaries
+            </button>
+            {user.role === "admin" && (
+              <button
+                onClick={() => {
+                  router.push("/dashboard/users");
+                  setSidebarOpen(false);
+                }}
+                className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  pathname === "/dashboard/users"
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                    : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+                }`}
+              >
+                User Management
+              </button>
+            )}
+          </nav>
+          <div className="mt-auto pt-6 space-y-4">
+            <button
+              onClick={() => {
+                setShowLogoutModal(true);
+                setSidebarOpen(false);
+              }}
+              className="w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:text-slate-100 transition-all duration-200 flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Log out
+            </button>
+            <div className="border-t border-slate-800/60 pt-4">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0 text-xs">
+                  <div className="font-semibold text-slate-100 mb-1 truncate">
+                    {user.first_name || user.last_name
+                      ? `${user.first_name} ${user.last_name}`.trim()
+                      : "User"}
+                  </div>
+                  <div className="text-slate-500 truncate text-xs">{user.email}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </>
+
+      <div className="flex flex-1 flex-col overflow-hidden w-full">
+        <header className="flex items-center justify-between border-b border-slate-800/60 bg-slate-950/90 backdrop-blur-sm px-4 py-4 md:px-6 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Hamburger Menu for Mobile */}
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="md:hidden p-2 rounded-lg hover:bg-slate-900/60 transition-colors"
+            >
+              <svg
+                className="w-6 h-6 text-slate-300"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+            <div className="hidden md:flex items-center gap-2.5">
+              <div className="h-7 w-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                <span className="text-emerald-400 font-bold text-xs">CV</span>
+              </div>
+              <span className="text-sm font-semibold text-slate-100">
+                CV Converter
+              </span>
+            </div>
+            <span className="md:hidden text-sm font-semibold text-slate-100">
               CV Converter
             </span>
           </div>

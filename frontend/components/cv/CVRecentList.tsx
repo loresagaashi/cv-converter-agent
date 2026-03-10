@@ -5,51 +5,50 @@ import Link from "next/link";
 import { listCVs } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { CV } from "@/lib/types";
+import { getCachedCVs, setCachedCVs } from "@/lib/dashboardListCache";
 
 export function CVRecentList() {
   const { token } = useAuth();
   const [items, setItems] = useState<CV[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloading, setReloading] = useState(false);
 
-  useEffect(() => {
-    // Add slide-in animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slideIn {
-        from {
-          opacity: 0;
-          transform: translateX(-20px);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(0);
-        }
-      }
-      .recent-cv-record {
-        animation: slideIn 0.4s ease-out forwards;
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  useEffect(() => {
+  const loadRecentCVs = async (force = false) => {
     if (!token) return;
-    setLoading(true);
+
+    if (!force) {
+      const cached = getCachedCVs();
+      if (cached) {
+        setItems(cached);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+    }
+
     setError(null);
-    listCVs()
-      .then((data) => {
-        // Sort by ID descending - newest first
-        const sorted = [...data].sort((a, b) => b.id - a.id);
-        setItems(sorted);
-      })
-      .catch((err: any) => {
-        setError(err?.message || "Failed to load recent CVs.");
-      })
-      .finally(() => setLoading(false));
+    if (force) {
+      setReloading(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const data = await listCVs();
+      const sorted = [...data].sort((a, b) => b.id - a.id);
+      setItems(sorted);
+      setCachedCVs(sorted);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load recent CVs.");
+    } finally {
+      setLoading(false);
+      setReloading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadRecentCVs(false);
   }, [token]);
 
   if (!token) {
@@ -65,14 +64,31 @@ export function CVRecentList() {
             Your most recently uploaded CVs
           </p>
         </div>
-        {items.length > 0 && (
-          <Link
-            href="/dashboard/cvs"
-            className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+        <div className="flex items-center gap-2">
+          
+          <button
+            type="button"
+            onClick={() => void loadRecentCVs(true)}
+            disabled={loading || reloading}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/70 bg-slate-900/70 text-slate-200 hover:bg-slate-800/80 hover:border-slate-600/80 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+            title="Reload recent CV records"
           >
-            View all →
-          </Link>
-        )}
+            <svg className={`h-4 w-4 ${reloading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 11a8.1 8.1 0 00-15.5-2M4 5v4h4M4 13a8.1 8.1 0 0015.5 2M20 19v-4h-4" />
+            </svg>
+          </button>
+          {items.length > 0 && (
+            <Link
+              href="/dashboard/cvs"
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400/50 transition-all duration-200"
+            >
+              <span>View</span>
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </Link>
+          )}
+        </div>
       </div>
       {loading ? (
         <div className="space-y-2">
@@ -104,12 +120,11 @@ export function CVRecentList() {
         </div>
       ) : (
         <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-          {items.slice(0, 5).map((cv, idx) => (
+          {items.slice(0, 5).map((cv) => (
             <Link
               key={cv.id}
               href={`/cv/${cv.id}`}
-              className="recent-cv-record flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200 group"
-              style={{ animationDelay: `${idx * 0.05}s` }}
+              className="flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200 group"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-slate-100 group-hover:text-slate-50">

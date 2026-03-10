@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getAllCompetencePapers, getCompetencePaper, deleteCompetencePaper, type CompetencePaperWithCV } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { RecruiterVoiceAssistant } from "@/components/ai/RecruiterVoiceAssistant";
+import { getCachedCompetencePapers, setCachedCompetencePapers } from "@/lib/dashboardListCache";
 
 export default function CompetenceSummariesPage() {
   const { token, user } = useAuth();
@@ -19,18 +20,43 @@ export default function CompetenceSummariesPage() {
   const [paperToDelete, setPaperToDelete] = useState<CompetencePaperWithCV | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [reloading, setReloading] = useState(false);
+
+  const loadPapers = useCallback(async (force = false) => {
+    if (!token) return;
+
+    if (!force) {
+      const cached = getCachedCompetencePapers();
+      if (cached) {
+        setPapers(cached);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+    }
+
+    setError(null);
+    if (force) {
+      setReloading(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const res = await getAllCompetencePapers();
+      setPapers(res.papers);
+      setCachedCompetencePapers(res.papers);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load competence papers.");
+    } finally {
+      setLoading(false);
+      setReloading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    getAllCompetencePapers()
-      .then((res) => setPapers(res.papers))
-      .catch((err: any) => {
-        setError(err?.message || "Failed to load competence papers.");
-      })
-      .finally(() => setLoading(false));
-  }, [token]);
+    void loadPapers(false);
+  }, [loadPapers]);
 
   // Filter papers based on search query
   const filteredPapers = useMemo(() => {
@@ -62,8 +88,11 @@ export default function CompetenceSummariesPage() {
     setDeleting(true);
     try {
       await deleteCompetencePaper(paperToDelete.id);
-      // Remove from papers list
-      setPapers(papers.filter((p) => p.id !== paperToDelete.id));
+      setPapers((prev) => {
+        const next = prev.filter((p) => p.id !== paperToDelete.id);
+        setCachedCompetencePapers(next);
+        return next;
+      });
       setDeleteModalOpen(false);
       setPaperToDelete(null);
     } catch (err: any) {
@@ -104,6 +133,17 @@ export default function CompetenceSummariesPage() {
           <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
             {filteredPapers.length} {filteredPapers.length === 1 ? "paper" : "papers"}
           </span>
+          <button
+            type="button"
+            onClick={() => void loadPapers(true)}
+            disabled={loading || reloading}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/70 bg-slate-900/70 text-slate-200 hover:bg-slate-800/80 hover:border-slate-600/80 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+            title="Reload competence records"
+          >
+            <svg className={`h-4 w-4 ${reloading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 11a8.1 8.1 0 00-15.5-2M4 5v4h4M4 13a8.1 8.1 0 0015.5 2M20 19v-4h-4" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -136,61 +176,67 @@ export default function CompetenceSummariesPage() {
           </p>
         </div>
       ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="overflow-x-auto md:overflow-x-visible -mx-6 px-6 md:mx-0 md:px-0">
+          <div
+            className={`space-y-2 min-w-max md:min-w-0 ${
+              filteredPapers.length > 10 ? "max-h-[42rem] overflow-y-auto pr-1" : ""
+            }`}
+          >
             {filteredPapers.map((paper) => (
               <div
                 key={paper.id}
                 onClick={() => handleViewPaper(paper)}
-                className="rounded-lg border border-slate-700/60 bg-slate-900/50 p-4 hover:border-emerald-500/50 hover:bg-slate-800/50 cursor-pointer transition-all duration-200 relative group"
+                className="flex min-w-[760px] md:min-w-0 items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200 cursor-pointer"
               >
-                <button
-                  onClick={(e) => handleDeleteClick(e, paper)}
-                  className="absolute top-2 right-2 p-1.5 rounded-md bg-slate-800/80 border border-slate-700/50 text-slate-400 hover:bg-red-500/20 hover:border-red-500/50 hover:text-red-400 transition-all duration-200 z-10 opacity-0 group-hover:opacity-100"
-                  title="Delete paper"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-                <div className="flex items-start justify-between mb-2">
-                  <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">
-                    {paper.paper_type === 'original' ? 'ORIGINAL' : 'INTERVIEW BASED'}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {new Date(paper.created_at).toLocaleString(undefined, {
-                      month: "numeric",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
-                <div className="mb-2">
-                  <p className="text-xs text-slate-400 mb-1">From CV:</p>
-                  <p className="text-xs font-medium text-slate-300 truncate">
+                <div className="flex-1 min-w-0">
+                  <div className="mb-1.5 flex items-center gap-3">
+                    <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">
+                      {paper.paper_type === "original" ? "ORIGINAL" : "INTERVIEW BASED"}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {new Date(paper.created_at).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                  <p className="truncate text-sm font-semibold text-slate-100">
                     {paper.cv_filename}
                   </p>
-                  {user?.role === "admin" && paper.user_name && (
-                    <p className="text-xs text-slate-500 mt-1">
-                      User: {paper.user_name}
-                    </p>
-                  )}
+                  <div className="mt-1 block max-w-[52ch] text-xs text-slate-500 truncate">
+                    {user?.role === "admin" && paper.user_name ? (
+                      <span>{paper.user_name} • </span>
+                    ) : null}
+                    {paper.preview || paper.content.substring(0, 120)}
+                  </div>
                 </div>
-                <p className="text-sm text-slate-300 line-clamp-3 mb-3">
-                  {paper.preview || paper.content.substring(0, 150)}
-                </p>
-                <div className="flex items-center text-xs text-emerald-400">
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  View Paper
+
+                <div className="ml-4 flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleViewPaper(paper);
+                    }}
+                    className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                  >
+                    View
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteClick(e, paper)}
+                    className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 transition-all duration-200"
+                    title="Delete paper"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
 
       {/* View Paper Modal */}
       {viewModalOpen && selectedPaper && (

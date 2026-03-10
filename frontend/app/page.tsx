@@ -20,9 +20,9 @@ export default function Home() {
             Sign in
           </a>
         </div>
-        <div className="pt-6 text-xs text-slate-500">
+        {/* <div className="pt-6 text-xs text-slate-500">
           Free to use • Secure • No credit card required
-        </div>
+        </div> */}
       </div>
     </div>
   );
