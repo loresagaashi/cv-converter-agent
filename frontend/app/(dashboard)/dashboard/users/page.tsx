@@ -48,6 +48,7 @@ export default function UsersAdminPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [formState, setFormState] = useState<UserFormState>(emptyForm);
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
@@ -133,6 +134,7 @@ export default function UsersAdminPage() {
   const openCreateForm = () => {
     setFormMode("create");
     setFormState(emptyForm);
+    setShowPassword(false);
     setFormOpen(true);
   };
 
@@ -146,6 +148,7 @@ export default function UsersAdminPage() {
       password: "",
       role: u.role,
     });
+    setShowPassword(false);
     setFormOpen(true);
   };
 
@@ -195,6 +198,7 @@ export default function UsersAdminPage() {
       }
       setFormOpen(false);
       setFormState(emptyForm);
+      setShowPassword(false);
     } catch (err: any) {
       setError(err?.message || "Unable to save user.");
     } finally {
@@ -346,7 +350,7 @@ export default function UsersAdminPage() {
           <div className="overflow-x-auto -mx-6 px-6">
             <div
               className={`space-y-2 min-w-max ${
-                filteredUsers.length > 10 ? "max-h-[500px] overflow-y-auto pr-1" : ""
+                filteredUsers.length > 10 ? "max-h-[700px] overflow-y-auto pr-1" : ""
               }`}
             >
             {filteredUsers.map((u) => (
@@ -400,7 +404,7 @@ export default function UsersAdminPage() {
 
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-950/95 p-6 shadow-2xl">
+          <div className="w-full max-h-[90vh] max-w-md overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/95 p-4 shadow-2xl sm:p-6">
             <div className="mb-5 flex items-start justify-between">
               <div className="flex-1">
                 <h2 className="text-base font-semibold text-slate-50 mb-1">
@@ -413,7 +417,10 @@ export default function UsersAdminPage() {
                 </p>
               </div>
               <button
-                onClick={() => setFormOpen(false)}
+                onClick={() => {
+                  setFormOpen(false);
+                  setShowPassword(false);
+                }}
                 className="ml-4 rounded-lg p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-all"
                 aria-label="Close"
               >
@@ -440,7 +447,7 @@ export default function UsersAdminPage() {
                   placeholder="user@example.com"
                 />
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <div className="flex-1">
                   <label className="mb-2 block text-sm font-semibold text-slate-200">
                     First name
@@ -470,7 +477,7 @@ export default function UsersAdminPage() {
                   />
                 </div>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <div className="flex-1">
                   <label className="mb-2 block text-sm font-semibold text-slate-200">
                     Role
@@ -492,34 +499,56 @@ export default function UsersAdminPage() {
                       ? "Password"
                       : "Password (optional)"}
                   </label>
-                  <input
-                    type="password"
-                    value={formState.password}
-                    onChange={(e) =>
-                      handleFormChange("password", e.target.value)
-                    }
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                    placeholder={
-                      formMode === "create"
-                        ? "Set a password"
-                        : "Leave blank to keep current"
-                    }
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={formState.password}
+                      onChange={(e) =>
+                        handleFormChange("password", e.target.value)
+                      }
+                      className="w-full rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-2.5 pr-11 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                      placeholder={
+                        formMode === "create"
+                          ? "Set a password"
+                          : "Leave blank to keep current"
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-200"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? (
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3l18 18M10.58 10.58A3 3 0 0013.42 13.42M9.88 5.09A10.45 10.45 0 0112 4.91c5 0 9.27 3.11 11 7.5a11.47 11.47 0 01-4.12 5.09M6.61 6.61A11.44 11.44 0 001 12.41a11.45 11.45 0 005.2 5.89A10.39 10.39 0 0012 20.09c1.47 0 2.87-.3 4.13-.84" />
+                        </svg>
+                      ) : (
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.46 12C3.73 7.94 7.52 5 12 5s8.27 2.94 9.54 7c-1.27 4.06-5.06 7-9.54 7s-8.27-2.94-9.54-7z" />
+                          <circle cx="12" cy="12" r="3" strokeWidth={1.8} />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => setFormOpen(false)}
-                  className="rounded-lg border border-slate-700/60 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:border-slate-600/80 transition-all duration-200"
+                  onClick={() => {
+                    setFormOpen(false);
+                    setShowPassword(false);
+                  }}
+                  className="w-full rounded-lg border border-slate-700/60 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:border-slate-600/80 transition-all duration-200 sm:w-auto"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex items-center rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-60 transition-all duration-200"
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-60 transition-all duration-200 sm:w-auto"
                 >
                   {submitting
                     ? formMode === "create"
@@ -537,7 +566,7 @@ export default function UsersAdminPage() {
 
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-          <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-950/95 p-6 shadow-2xl">
+          <div className="w-full max-h-[90vh] max-w-sm overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/95 p-5 shadow-2xl sm:p-6">
             <h3 className="text-base font-semibold text-slate-50 mb-1">Delete User</h3>
             {user?.id === deleteTarget.id ? (
               <div className="rounded-lg bg-red-500/10 border border-red-500/40 px-4 py-3 mb-4">
@@ -555,12 +584,12 @@ export default function UsersAdminPage() {
               </p>
             )}
             <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 mb-4">
-              <div className="text-sm font-semibold text-slate-100 mb-1">
+              <div className="text-sm font-semibold text-slate-100 mb-1 wrap-break-word">
                 {deleteTarget.first_name || deleteTarget.last_name
                   ? `${deleteTarget.first_name || ""} ${deleteTarget.last_name || ""}`.trim()
                   : "(No name)"}
               </div>
-              <div className="text-xs text-slate-400 mb-2">{deleteTarget.email}</div>
+              <div className="text-xs text-slate-400 mb-2 break-all">{deleteTarget.email}</div>
               <span
                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                   deleteTarget.role === "admin"

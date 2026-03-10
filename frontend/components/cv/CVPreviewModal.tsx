@@ -29,7 +29,7 @@ type EditingSection =
   | "languages";
 
 // Basic front-end validation for the editable CV structure (generic rules)
-function validateStructuredCV(cv: StructuredCVPayload): string | null {
+function validateStructuredCV(): string | null {
   // Validation disabled - allow export regardless of data completeness
   return null;
 }
@@ -41,6 +41,53 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
   const [exporting, setExporting] = useState<"cv" | "competence" | null>(null);
   const [editingSection, setEditingSection] = useState<EditingSection | null>(null);
   const [cpStatus, setCpStatus] = useState<string>("");
+  const [initiallyVisibleSections, setInitiallyVisibleSections] = useState<Record<EditingSection, boolean> | null>(null);
+
+  const sectionHasContent = useCallback((cv: StructuredCVPayload, section: EditingSection) => {
+    switch (section) {
+      case "profile":
+        return typeof cv.profile === "string" && cv.profile.trim() !== "";
+      case "skills":
+        return Array.isArray(cv.skills) && cv.skills.some((s) => s.trim() !== "");
+      case "core_skills":
+        return Array.isArray(cv.core_skills) && cv.core_skills.some((s) => s.trim() !== "");
+      case "soft_skills":
+        return Array.isArray(cv.soft_skills) && cv.soft_skills.some((s) => s.trim() !== "");
+      case "work_experience":
+        return Array.isArray(cv.work_experience) && cv.work_experience.length > 0;
+      case "education":
+        return Array.isArray(cv.education) && cv.education.length > 0;
+      case "projects":
+        return Array.isArray(cv.projects) && cv.projects.length > 0;
+      case "certifications":
+        return Array.isArray(cv.certifications) && cv.certifications.some((c) => c.trim() !== "");
+      case "courses":
+        return Array.isArray(cv.courses) && cv.courses.some((c) => c.trim() !== "");
+      case "languages":
+        return (
+          Array.isArray(cv.languages) &&
+          cv.languages.some((l) => (l.name || "").trim() !== "" || (l.level || "").trim() !== "")
+        );
+      default:
+        return false;
+    }
+  }, []);
+
+  const buildInitialVisibility = useCallback(
+    (cv: StructuredCVPayload): Record<EditingSection, boolean> => ({
+      profile: sectionHasContent(cv, "profile"),
+      skills: sectionHasContent(cv, "skills"),
+      core_skills: sectionHasContent(cv, "core_skills"),
+      soft_skills: sectionHasContent(cv, "soft_skills"),
+      work_experience: sectionHasContent(cv, "work_experience"),
+      education: sectionHasContent(cv, "education"),
+      projects: sectionHasContent(cv, "projects"),
+      certifications: sectionHasContent(cv, "certifications"),
+      courses: sectionHasContent(cv, "courses"),
+      languages: sectionHasContent(cv, "languages"),
+    }),
+    [sectionHasContent]
+  );
 
   // Update local state when cached CV changes
   useEffect(() => {
@@ -109,12 +156,27 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
     }
   }, [isOpen, cvId, token, loadStructuredCV]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setInitiallyVisibleSections(null);
+      return;
+    }
+    if (structuredCV && !initiallyVisibleSections) {
+      setInitiallyVisibleSections(buildInitialVisibility(structuredCV));
+    }
+  }, [isOpen, structuredCV, initiallyVisibleSections, buildInitialVisibility]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setInitiallyVisibleSections(null);
+  }, [cvId, isOpen]);
+
 
   const handleExport = async (type: "cv" | "competence" = "cv") => {
     if (!structuredCV || !token) return;
 
     // Validate before exporting
-    const validationError = validateStructuredCV(structuredCV);
+    const validationError = validateStructuredCV();
     if (validationError) {
       setError(validationError);
       return;
@@ -172,22 +234,31 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
     }
   };
 
-  const showProfile = structuredCV?.profile !== undefined && structuredCV?.profile !== null && structuredCV.profile.trim() !== "";
-  const showSkills = Array.isArray(structuredCV?.skills) && structuredCV.skills.length > 0;
-  const showCoreSkills = Array.isArray(structuredCV?.core_skills) && structuredCV.core_skills.length > 0;
-  const showSoftSkills = Array.isArray(structuredCV?.soft_skills) && structuredCV.soft_skills.length > 0;
-  const showWorkExperience = Array.isArray(structuredCV?.work_experience) && structuredCV.work_experience.length > 0;
-  const showEducation = Array.isArray(structuredCV?.education) && structuredCV.education.length > 0;
-  const showCertifications = Array.isArray(structuredCV?.certifications) && structuredCV.certifications.length > 0;
-  const showProjects = Array.isArray(structuredCV?.projects) && structuredCV.projects.length > 0;
-  const showCourses = Array.isArray(structuredCV?.courses) && structuredCV.courses.length > 0;
-  const showLanguages = Array.isArray(structuredCV?.languages) && structuredCV.languages.length > 0;
+  const isSectionVisible = (section: EditingSection) => {
+    if (!structuredCV) return false;
+    return (
+      editingSection === section ||
+      sectionHasContent(structuredCV, section) ||
+      initiallyVisibleSections?.[section] === true
+    );
+  };
+
+  const showProfile = isSectionVisible("profile");
+  const showCoreSkills = isSectionVisible("core_skills");
+  const showSoftSkills = isSectionVisible("soft_skills");
+  const showWorkExperience = isSectionVisible("work_experience");
+  const showEducation = isSectionVisible("education");
+  const showCertifications = isSectionVisible("certifications");
+  const showProjects = isSectionVisible("projects");
+  const showCourses = isSectionVisible("courses");
+  const showLanguages = isSectionVisible("languages");
+  const hasOpenSection = editingSection !== null;
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="w-full max-h-[85vh] max-w-4xl rounded-xl border border-slate-800/60 bg-slate-950/95 p-5 shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-2 sm:px-4">
+      <div className="w-full max-h-[90vh] max-w-4xl rounded-xl border border-slate-800/60 bg-slate-950/95 p-3 sm:p-5 shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="mb-4 flex items-start justify-between border-b border-slate-800/60 pb-4">
           <div className="flex-1">
@@ -210,7 +281,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
         {error && (
           <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/40 px-4 py-3 text-sm text-red-200">
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span>{error}</span>
@@ -219,7 +290,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 sm:pr-2">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16">
               <div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent mb-4"></div>
@@ -232,6 +303,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 <Section
                   title="Profile"
                   isEditing={editingSection === "profile"}
+                  isInactive={editingSection !== null && editingSection !== "profile"}
                   onEdit={() => {
                     // When leaving edit mode for Profile, do not allow it to be empty
                     if (editingSection === "profile" && structuredCV && typeof structuredCV.profile === "string") {
@@ -268,7 +340,13 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-200">{structuredCV.profile}</p>
+                    <p className="text-sm text-slate-200">
+                      {structuredCV.profile && structuredCV.profile.trim() ? (
+                        structuredCV.profile
+                      ) : (
+                        <span className="text-slate-500 italic">No content</span>
+                      )}
+                    </p>
                   )}
                 </Section>
               )}
@@ -277,6 +355,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 <Section
                   title="Core Skills"
                   isEditing={editingSection === "core_skills"}
+                  isInactive={editingSection !== null && editingSection !== "core_skills"}
                   onEdit={() => {
                     if (editingSection === "core_skills" && structuredCV && Array.isArray(structuredCV.core_skills)) {
                       for (let i = 0; i < structuredCV.core_skills.length; i++) {
@@ -295,7 +374,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   {editingSection === "core_skills" ? (
                     <div className="space-y-2">
                       {(structuredCV.core_skills || []).map((skill, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div key={idx} className="flex items-stretch gap-2 sm:items-center">
                           <input
                             type="text"
                             value={skill}
@@ -311,38 +390,45 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               const newSkills = (structuredCV.core_skills || []).filter((_, i) => i !== idx);
                               updateSection("core_skills", newSkills);
                             }}
-                            className="text-red-400 hover:text-red-300 text-sm"
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
+                            aria-label="Remove core skill"
                           >
-                            Remove
+                            <span className="sm:hidden">X</span>
+                            <span className="hidden sm:inline">Remove</span>
                           </button>
                         </div>
                       ))}
                       <button
                         onClick={() => updateSection("core_skills", [...(structuredCV.core_skills || []), ""])}
-                        className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                        className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                       >
                         + Add Core Skill
                       </button>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {(structuredCV.core_skills || [])
-                        .filter((s) => s.trim())
-                        .slice(0, 3)
-                        .map((skill, idx) => (
-                          <span
-                            key={`core-skill-${idx}`}
-                            className="rounded-full bg-blue-500/10 border border-blue-500/40 px-2 py-1 text-xs text-blue-200"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      {(structuredCV.core_skills || []).filter((s) => s.trim()).length > 3 && (
-                        <span className="rounded-full bg-slate-700/60 border border-slate-600/40 px-2 py-1 text-xs text-slate-400">
-                          +{(structuredCV.core_skills || []).filter((s) => s.trim()).length - 3} more
-                        </span>
-                      )}
-                    </div>
+                    (() => {
+                      const coreSkills = (structuredCV.core_skills || []).filter((s) => s.trim());
+                      if (coreSkills.length === 0) {
+                        return <span className="text-sm text-slate-500 italic">No content</span>;
+                      }
+                      return (
+                        <div className="flex flex-wrap gap-2">
+                          {coreSkills.slice(0, 3).map((skill, idx) => (
+                            <span
+                              key={`core-skill-${idx}`}
+                              className="rounded-full bg-blue-500/10 border border-blue-500/40 px-2 py-1 text-xs text-blue-200"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                          {coreSkills.length > 3 && (
+                            <span className="rounded-full bg-slate-700/60 border border-slate-600/40 px-2 py-1 text-xs text-slate-400">
+                              +{coreSkills.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()
                   )}
                 </Section>
               )}
@@ -351,6 +437,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 <Section
                   title="Soft Skills"
                   isEditing={editingSection === "soft_skills"}
+                  isInactive={editingSection !== null && editingSection !== "soft_skills"}
                   onEdit={() => {
                     if (editingSection === "soft_skills" && structuredCV && Array.isArray(structuredCV.soft_skills)) {
                       for (let i = 0; i < structuredCV.soft_skills.length; i++) {
@@ -369,7 +456,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   {editingSection === "soft_skills" ? (
                     <div className="space-y-2">
                       {(structuredCV.soft_skills || []).map((skill, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div key={idx} className="flex items-stretch gap-2 sm:items-center">
                           <input
                             type="text"
                             value={skill}
@@ -385,32 +472,40 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               const newSkills = (structuredCV.soft_skills || []).filter((_, i) => i !== idx);
                               updateSection("soft_skills", newSkills);
                             }}
-                            className="text-red-400 hover:text-red-300 text-sm"
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
+                            aria-label="Remove soft skill"
                           >
-                            Remove
+                            <span className="sm:hidden">X</span>
+                            <span className="hidden sm:inline">Remove</span>
                           </button>
                         </div>
                       ))}
                       <button
                         onClick={() => updateSection("soft_skills", [...(structuredCV.soft_skills || []), ""])}
-                        className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                        className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                       >
                         + Add Soft Skill
                       </button>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {(structuredCV.soft_skills || [])
-                        .filter((s) => s.trim())
-                        .map((skill, idx) => (
-                          <span
-                            key={`soft-skill-${idx}`}
-                            className="rounded-full bg-purple-500/10 border border-purple-500/40 px-2 py-1 text-xs text-purple-200"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                    </div>
+                    (() => {
+                      const softSkills = (structuredCV.soft_skills || []).filter((s) => s.trim());
+                      if (softSkills.length === 0) {
+                        return <span className="text-sm text-slate-500 italic">No content</span>;
+                      }
+                      return (
+                        <div className="flex flex-wrap gap-2">
+                          {softSkills.map((skill, idx) => (
+                            <span
+                              key={`soft-skill-${idx}`}
+                              className="rounded-full bg-purple-500/10 border border-purple-500/40 px-2 py-1 text-xs text-purple-200"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()
                   )}
                 </Section>
               )}
@@ -419,6 +514,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 <Section
                   title="Work Experience"
                   isEditing={editingSection === "work_experience"}
+                  isInactive={editingSection !== null && editingSection !== "work_experience"}
                   onEdit={() => {
                     setError(null);
                     setEditingSection(
@@ -452,7 +548,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                             }}
                             className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
                           />
-                          <div className="flex gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row">
                             <input
                               type="text"
                               placeholder="From (YYYY-MM-DD)"
@@ -464,7 +560,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               }}
                               className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
                             />
-                            <div className="flex-1 flex items-center gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center">
                               <input
                                 type="text"
                                 placeholder="To (YYYY-MM-DD)"
@@ -525,9 +621,11 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                                     newExp[idx].bullets = (newExp[idx].bullets || []).filter((_, i) => i !== bIdx);
                                     updateSection("work_experience", newExp);
                                   }}
-                                  className="text-red-400 hover:text-red-300 text-xs mt-1"
+                                  className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
+                                  aria-label="Remove bullet"
                                 >
-                                  Remove
+                                  <span className="sm:hidden">X</span>
+                                  <span className="hidden sm:inline">Remove</span>
                                 </button>
                               </div>
                             ))}
@@ -537,7 +635,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                                 newExp[idx].bullets = [...(newExp[idx].bullets || []), ""];
                                 updateSection("work_experience", newExp);
                               }}
-                              className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                              className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                             >
                               + Add Bullet
                             </button>
@@ -547,9 +645,11 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               const newExp = (structuredCV.work_experience || []).filter((_, i) => i !== idx);
                               updateSection("work_experience", newExp);
                             }}
-                            className="text-red-400 hover:text-red-300 text-xs font-medium"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-xs sm:font-medium sm:text-red-400 sm:hover:text-red-300"
+                            aria-label="Remove experience entry"
                           >
-                            Remove Entry
+                            <span className="sm:hidden">X</span>
+                            <span className="hidden sm:inline">Remove Entry</span>
                           </button>
                         </div>
                       ))}
@@ -560,35 +660,39 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                             { from: "", to: "", title: "", company: "", location: "", bullets: [] },
                           ])
                         }
-                        className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                        className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                       >
                         + Add Experience
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-3 text-sm">
-                      {(structuredCV.work_experience || []).map((job, idx) => (
-                        <div key={idx} className="border-l-2 border-emerald-500/30 pl-3 space-y-1">
-                          <div className="text-slate-200">
-                            <span className="font-semibold">{job.title}</span>
-                            {job.company && <span> at {job.company}</span>}
-                          </div>
-                          {(job.from || job.to) && (
-                            <div className="text-xs text-slate-400">
-                              {job.from} - {job.to}
-                              {job.location && <span> · {job.location}</span>}
+                    (structuredCV.work_experience || []).length === 0 ? (
+                      <span className="text-sm text-slate-500 italic">No content</span>
+                    ) : (
+                      <div className="space-y-3 text-sm">
+                        {(structuredCV.work_experience || []).map((job, idx) => (
+                          <div key={idx} className="border-l-2 border-emerald-500/30 pl-3 space-y-1">
+                            <div className="text-slate-200">
+                              <span className="font-semibold">{job.title}</span>
+                              {job.company && <span> at {job.company}</span>}
                             </div>
-                          )}
-                          {job.bullets && job.bullets.length > 0 && (
-                            <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
-                              {job.bullets.map((bullet, bIdx) => (
-                                <li key={bIdx}>• {bullet}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                            {(job.from || job.to) && (
+                              <div className="text-xs text-slate-400">
+                                {job.from} - {job.to}
+                                {job.location && <span> · {job.location}</span>}
+                              </div>
+                            )}
+                            {job.bullets && job.bullets.length > 0 && (
+                              <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
+                                {job.bullets.map((bullet, bIdx) => (
+                                  <li key={bIdx}>• {bullet}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
                   )}
                 </Section>
               )}
@@ -597,6 +701,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 <Section
                   title="Education"
                   isEditing={editingSection === "education"}
+                  isInactive={editingSection !== null && editingSection !== "education"}
                   onEdit={() => {
                     setError(null);
                     setEditingSection(editingSection === "education" ? null : "education");
@@ -628,7 +733,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                             }}
                             className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
                           />
-                          <div className="flex gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row">
                             <input
                               type="text"
                               placeholder="From (YYYY-MM)"
@@ -657,9 +762,11 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               const newEdu = (structuredCV.education || []).filter((_, i) => i !== idx);
                               updateSection("education", newEdu);
                             }}
-                            className="text-red-400 hover:text-red-300 text-xs font-medium"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-xs sm:font-medium sm:text-red-400 sm:hover:text-red-300"
+                            aria-label="Remove education entry"
                           >
-                            Remove
+                            <span className="sm:hidden">X</span>
+                            <span className="hidden sm:inline">Remove</span>
                           </button>
                         </div>
                       ))}
@@ -670,25 +777,29 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                             { from: "", to: "", degree: "", institution: "" },
                           ])
                         }
-                        className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                        className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                       >
                         + Add Education
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-2 text-sm">
-                      {(structuredCV.education || []).map((edu, idx) => (
-                        <div key={idx} className="text-slate-300">
-                          <div className="font-semibold text-slate-200">{edu.degree}</div>
-                          <div className="text-xs">{edu.institution}</div>
-                          {(edu.from || edu.to) && (
-                            <div className="text-xs text-slate-400">
-                              {edu.from} - {edu.to}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    (structuredCV.education || []).length === 0 ? (
+                      <span className="text-sm text-slate-500 italic">No content</span>
+                    ) : (
+                      <div className="space-y-2 text-sm">
+                        {(structuredCV.education || []).map((edu, idx) => (
+                          <div key={idx} className="text-slate-300">
+                            <div className="font-semibold text-slate-200">{edu.degree}</div>
+                            <div className="text-xs">{edu.institution}</div>
+                            {(edu.from || edu.to) && (
+                              <div className="text-xs text-slate-400">
+                                {edu.from} - {edu.to}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
                   )}
                 </Section>
               )}
@@ -698,6 +809,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 <Section
                   title="Certifications"
                   isEditing={editingSection === "certifications"}
+                  isInactive={editingSection !== null && editingSection !== "certifications"}
                   onEdit={() => {
                     // When leaving edit mode for Certifications, ensure no blank rows.
                     if (editingSection === "certifications" && structuredCV && Array.isArray(structuredCV.certifications)) {
@@ -720,7 +832,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   {editingSection === "certifications" ? (
                     <div className="space-y-2">
                       {(structuredCV.certifications || []).map((cert, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div key={idx} className="flex items-stretch gap-2 sm:items-center">
                           <input
                             type="text"
                             value={cert}
@@ -736,9 +848,11 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               const newCerts = (structuredCV.certifications || []).filter((_, i) => i !== idx);
                               updateSection("certifications", newCerts);
                             }}
-                            className="text-red-400 hover:text-red-300 text-sm"
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
+                            aria-label="Remove certification"
                           >
-                            Remove
+                            <span className="sm:hidden">X</span>
+                            <span className="hidden sm:inline">Remove</span>
                           </button>
                         </div>
                       ))}
@@ -746,19 +860,23 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                         onClick={() =>
                           updateSection("certifications", [...(structuredCV.certifications || []), ""])
                         }
-                        className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                        className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                       >
                         + Add Certification
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-1 text-sm">
-                      {(structuredCV.certifications || []).map((cert, idx) => (
-                        <div key={`cert-${idx}`} className="text-slate-300">
-                          • {cert}
-                        </div>
-                      ))}
-                    </div>
+                    (structuredCV.certifications || []).length === 0 ? (
+                      <span className="text-sm text-slate-500 italic">No content</span>
+                    ) : (
+                      <div className="space-y-1 text-sm">
+                        {(structuredCV.certifications || []).map((cert, idx) => (
+                          <div key={`cert-${idx}`} className="text-slate-300">
+                            • {cert}
+                          </div>
+                        ))}
+                      </div>
+                    )
                   )}
                 </Section>
               )}
@@ -767,6 +885,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 <Section
                   title="Projects"
                   isEditing={editingSection === "projects"}
+                  isInactive={editingSection !== null && editingSection !== "projects"}
                   onEdit={() => {
                     setError(null);
                     setEditingSection(editingSection === "projects" ? null : "projects");
@@ -798,7 +917,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                             }}
                             className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
                           />
-                          <div className="flex gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row">
                             <input
                               type="text"
                               placeholder="From (YYYY-MM-DD)"
@@ -810,7 +929,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               }}
                               className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
                             />
-                            <div className="flex-1 flex items-center gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-1 sm:flex-row sm:items-center">
                               <input
                                 type="text"
                                 placeholder="To (YYYY-MM-DD)"
@@ -871,9 +990,11 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                                     newProjects[idx].bullets = (newProjects[idx].bullets || []).filter((_, i) => i !== bIdx);
                                     updateSection("projects", newProjects);
                                   }}
-                                  className="text-red-400 hover:text-red-300 text-xs mt-1"
+                                  className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
+                                  aria-label="Remove bullet"
                                 >
-                                  Remove
+                                  <span className="sm:hidden">X</span>
+                                  <span className="hidden sm:inline">Remove</span>
                                 </button>
                               </div>
                             ))}
@@ -883,7 +1004,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                                 newProjects[idx].bullets = [...(newProjects[idx].bullets || []), ""];
                                 updateSection("projects", newProjects);
                               }}
-                              className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                              className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                             >
                               + Add Bullet
                             </button>
@@ -893,9 +1014,11 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               const newProjects = (structuredCV.projects || []).filter((_, i) => i !== idx);
                               updateSection("projects", newProjects);
                             }}
-                            className="text-red-400 hover:text-red-300 text-xs font-medium"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-xs sm:font-medium sm:text-red-400 sm:hover:text-red-300"
+                            aria-label="Remove project entry"
                           >
-                            Remove Entry
+                            <span className="sm:hidden">X</span>
+                            <span className="hidden sm:inline">Remove Entry</span>
                           </button>
                         </div>
                       ))}
@@ -906,35 +1029,39 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                             { from: "", to: "", title: "", company: "", location: "", bullets: [] },
                           ])
                         }
-                        className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                        className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                       >
                         + Add Project
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-3 text-sm">
-                      {(structuredCV.projects || []).map((project, idx) => (
-                        <div key={idx} className="border-l-2 border-emerald-500/30 pl-3 space-y-1">
-                          <div className="text-slate-200">
-                            <span className="font-semibold">{project.title}</span>
-                            {project.company && <span> at {project.company}</span>}
-                          </div>
-                          {(project.from || project.to) && (
-                            <div className="text-xs text-slate-400">
-                              {project.from} - {project.to}
-                              {project.location && <span> · {project.location}</span>}
+                    (structuredCV.projects || []).length === 0 ? (
+                      <span className="text-sm text-slate-500 italic">No content</span>
+                    ) : (
+                      <div className="space-y-3 text-sm">
+                        {(structuredCV.projects || []).map((project, idx) => (
+                          <div key={idx} className="border-l-2 border-emerald-500/30 pl-3 space-y-1">
+                            <div className="text-slate-200">
+                              <span className="font-semibold">{project.title}</span>
+                              {project.company && <span> at {project.company}</span>}
                             </div>
-                          )}
-                          {project.bullets && project.bullets.length > 0 && (
-                            <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
-                              {project.bullets.map((bullet, bIdx) => (
-                                <li key={bIdx}>• {bullet}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                            {(project.from || project.to) && (
+                              <div className="text-xs text-slate-400">
+                                {project.from} - {project.to}
+                                {project.location && <span> · {project.location}</span>}
+                              </div>
+                            )}
+                            {project.bullets && project.bullets.length > 0 && (
+                              <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
+                                {project.bullets.map((bullet, bIdx) => (
+                                  <li key={bIdx}>• {bullet}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
                   )}
                 </Section>
               )}
@@ -943,6 +1070,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 <Section
                   title="Courses"
                   isEditing={editingSection === "courses"}
+                  isInactive={editingSection !== null && editingSection !== "courses"}
                   onEdit={() => {
                     setError(null);
                     setEditingSection(editingSection === "courses" ? null : "courses");
@@ -951,7 +1079,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                   {editingSection === "courses" ? (
                     <div className="space-y-2">
                       {(structuredCV.courses || []).map((course, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div key={idx} className="flex items-stretch gap-2 sm:items-center">
                           <input
                             type="text"
                             value={course}
@@ -967,113 +1095,131 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                               const newCourses = (structuredCV.courses || []).filter((_, i) => i !== idx);
                               updateSection("courses", newCourses);
                             }}
-                            className="text-red-400 hover:text-red-300 text-sm"
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
+                            aria-label="Remove course"
                           >
-                            Remove
+                            <span className="sm:hidden">X</span>
+                            <span className="hidden sm:inline">Remove</span>
                           </button>
                         </div>
                       ))}
                       <button
                         onClick={() => updateSection("courses", [...(structuredCV.courses || []), ""])}
-                        className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                        className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                       >
                         + Add Course
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-1 text-sm">
-                      {(structuredCV.courses || []).map((course, idx) => (
-                        <div key={`course-${idx}`} className="text-slate-300">
-                          • {course}
-                        </div>
-                      ))}
-                    </div>
+                    (structuredCV.courses || []).length === 0 ? (
+                      <span className="text-sm text-slate-500 italic">No content</span>
+                    ) : (
+                      <div className="space-y-1 text-sm">
+                        {(structuredCV.courses || []).map((course, idx) => (
+                          <div key={`course-${idx}`} className="text-slate-300">
+                            • {course}
+                          </div>
+                        ))}
+                      </div>
+                    )
                   )}
                 </Section>
               )}
 
               {/* Languages */}
-              <Section
-                title="Languages"
-                isEditing={editingSection === "languages"}
-                onEdit={() => {
-                  setError(null);
-                  setEditingSection(editingSection === "languages" ? null : "languages");
-                }}
-              >
-                {editingSection === "languages" ? (
-                  <div className="space-y-2">
-                    {(structuredCV?.languages || []).map((lang, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          placeholder="Language"
-                          value={lang.name}
-                          onChange={(e) => {
-                            const newLangs = [...(structuredCV?.languages || [])];
-                            newLangs[idx].name = e.target.value;
-                            updateSection("languages", newLangs);
-                          }}
-                          className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Level"
-                          value={lang.level}
-                          onChange={(e) => {
-                            const newLangs = [...(structuredCV?.languages || [])];
-                            newLangs[idx].level = e.target.value;
-                            updateSection("languages", newLangs);
-                          }}
-                          className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
-                        />
-                        <button
-                          onClick={() => {
-                            const newLangs = (structuredCV?.languages || []).filter((_, i) => i !== idx);
-                            updateSection("languages", newLangs);
-                          }}
-                          className="text-red-400 hover:text-red-300 text-sm"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() =>
-                        updateSection("languages", [
-                          ...(structuredCV?.languages || []),
-                          { name: "", level: "" },
-                        ])
-                      }
-                      className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
-                    >
-                      + Add Language
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-1 text-sm">
-                    {Array.isArray(structuredCV?.languages) && structuredCV.languages.length > 0 ? (
-                      structuredCV.languages.map((lang, idx) => (
-                        <div key={idx} className="text-slate-300">
-                          • {lang.name} ({lang.level})
+              {showLanguages && (
+                <Section
+                  title="Languages"
+                  isEditing={editingSection === "languages"}
+                  isInactive={editingSection !== null && editingSection !== "languages"}
+                  onEdit={() => {
+                    setError(null);
+                    setEditingSection(editingSection === "languages" ? null : "languages");
+                  }}
+                >
+                  {editingSection === "languages" ? (
+                    <div className="space-y-2">
+                      {(structuredCV?.languages || []).map((lang, idx) => (
+                        <div key={idx} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <input
+                            type="text"
+                            placeholder="Language"
+                            value={lang.name}
+                            onChange={(e) => {
+                              const newLangs = [...(structuredCV?.languages || [])];
+                              newLangs[idx].name = e.target.value;
+                              updateSection("languages", newLangs);
+                            }}
+                            className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Level"
+                            value={lang.level}
+                            onChange={(e) => {
+                              const newLangs = [...(structuredCV?.languages || [])];
+                              newLangs[idx].level = e.target.value;
+                              updateSection("languages", newLangs);
+                            }}
+                            className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                          />
+                          <button
+                            onClick={() => {
+                              const newLangs = (structuredCV?.languages || []).filter((_, i) => i !== idx);
+                              updateSection("languages", newLangs);
+                            }}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
+                            aria-label="Remove language"
+                          >
+                            <span className="sm:hidden">X</span>
+                            <span className="hidden sm:inline">Remove</span>
+                          </button>
                         </div>
-                      ))
-                    ) : (
-                      <span className="text-slate-500">—</span>
-                    )}
-                  </div>
-                )}
-              </Section>
+                      ))}
+                      <button
+                        onClick={() =>
+                          updateSection("languages", [
+                            ...(structuredCV?.languages || []),
+                            { name: "", level: "" },
+                          ])
+                        }
+                        className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
+                      >
+                        + Add Language
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-sm">
+                      {Array.isArray(structuredCV?.languages) && structuredCV.languages.length > 0 ? (
+                        structuredCV.languages.map((lang, idx) => (
+                          <div key={idx} className="text-slate-300">
+                            • {lang.name} ({lang.level})
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-slate-500 italic">No content</span>
+                      )}
+                    </div>
+                  )}
+                </Section>
+              )}
 
               {/* Category — CP status badge selector */}
-              <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm hover:border-slate-700/80 transition-all duration-200">
+              <div
+                className={`rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm transition-all duration-200 ${
+                  hasOpenSection
+                    ? "opacity-45 border-slate-900/80 bg-slate-950/70"
+                    : "hover:border-slate-700/80"
+                }`}
+              >
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="font-bold text-slate-100 text-sm">Category</h3>
                 </div>
                 <select
                   value={cpStatus}
                   onChange={(e) => setCpStatus(e.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  disabled={hasOpenSection}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">— Select status —</option>
                   <option value="borek_assessed">Borek Assessed</option>
@@ -1099,14 +1245,15 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
           >
             Cancel
           </button> */}
-          <div className="flex gap-2.5">
+          <div className="flex flex-col gap-2.5 sm:flex-row">
             <button
               onClick={() => handleExport("competence")}
               disabled={
                 exporting !== null ||
+                editingSection !== null ||
                 !structuredCV
               }
-              className="inline-flex items-center rounded-lg border border-blue-500/50 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-200 hover:bg-blue-500/20 hover:border-blue-500/70 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="inline-flex w-full items-center justify-center rounded-lg border border-blue-500/50 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-200 hover:bg-blue-500/20 hover:border-blue-500/70 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 sm:w-auto"
             >
               {exporting === "competence" ? (
                 <>
@@ -1124,9 +1271,10 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
               onClick={() => handleExport("cv")}
               disabled={
                 exporting !== null ||
+                editingSection !== null ||
                 !structuredCV
               }
-              className="inline-flex items-center rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/40"
+              className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/40 sm:w-auto"
             >
               {exporting === "cv" ? (
                 <>
@@ -1150,26 +1298,34 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
 interface SectionProps {
   title: string;
   isEditing: boolean;
+  isInactive?: boolean;
   onEdit: () => void;
   children: React.ReactNode;
 }
 
-function Section({ title, isEditing, onEdit, children }: SectionProps) {
+function Section({ title, isEditing, isInactive = false, onEdit, children }: SectionProps) {
   return (
-    <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm hover:border-slate-700/80 transition-all duration-200">
+    <div
+      className={`min-w-0 rounded-lg border p-3 shadow-sm transition-all duration-200 sm:p-4 ${
+        isInactive
+          ? "border-slate-900/80 bg-slate-950/70 opacity-45"
+          : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700/80"
+      }`}
+    >
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-bold text-slate-100 text-sm">{title}</h3>
         <button
           onClick={onEdit}
-          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${isEditing
-            ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30"
-            : "border border-slate-700/60 text-slate-300 hover:bg-slate-800/60 hover:border-slate-600/80 hover:text-slate-100"
+          disabled={isInactive}
+          className={`inline-flex min-w-[88px] items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${isEditing
+            ? "border border-amber-400/40 bg-amber-400/15 text-amber-200 hover:bg-amber-400/20"
+            : "border border-slate-700/60 text-slate-300 hover:bg-slate-800/60 hover:border-slate-600/80 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             }`}
         >
-          {isEditing ? "Done" : "Edit"}
+          {isEditing ? "Close" : "Edit"}
         </button>
       </div>
-      <div className="text-slate-200">{children}</div>
+      <div className={`min-w-0 text-slate-200 ${isInactive ? "pointer-events-none" : ""}`}>{children}</div>
     </div>
   );
 }

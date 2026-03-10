@@ -870,20 +870,20 @@ export function RecruiterVoiceAssistant({
   })();
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 backdrop-blur-md px-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-800/70 bg-gradient-to-b from-slate-950/95 to-slate-950/90 p-6 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 backdrop-blur-md px-3 sm:px-4">
+      <div className="w-full max-h-[90vh] max-w-2xl overflow-y-auto rounded-2xl border border-slate-800/70 bg-gradient-to-b from-slate-950/95 to-slate-950/90 p-4 shadow-2xl sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
             <div className="h-11 w-11 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center">
               <svg className="w-5 h-5 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 10v2a7 7 0 01-14 0v-2M12 17v4m0 0H9m3 0h3" />
               </svg>
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-xs uppercase tracking-widest text-emerald-300/80">Recruiter Voice Assistant</p>
-              <h2 className="text-lg font-semibold text-slate-100">Interview Verification</h2>
-              <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+              <h2 className="text-lg font-semibold text-slate-100 sm:text-xl">Interview Verification</h2>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
                 <span className="rounded-full bg-slate-800/70 px-2 py-0.5 text-slate-300">
                   {status === "finished" ? "Section: Complete" : `Section: ${sectionLabel}`}
                 </span>
@@ -897,7 +897,7 @@ export function RecruiterVoiceAssistant({
             <button
               onClick={handleEnd}
               disabled={isGeneratingPaper}
-              className="rounded-lg bg-red-500/90 hover:bg-red-600 text-xs font-semibold text-white px-3 py-2 shadow-lg shadow-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="self-start rounded-lg bg-red-500/90 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-red-500/30 transition-colors hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed sm:self-auto"
             >
               End Session
             </button>
@@ -906,7 +906,7 @@ export function RecruiterVoiceAssistant({
 
         {/* 1. Generating: professional screen (min 2s), then final screen */}
         {(status === "generating" || isGeneratingPaper) && (
-          <div className="mt-6 rounded-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-8 text-center">
+          <div className="mt-6 rounded-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-5 text-center sm:p-8">
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-400/20 px-3 py-1.5 mb-4">
               <span className="text-xs font-medium text-emerald-300">Preparing your report</span>
             </div>
@@ -922,7 +922,7 @@ export function RecruiterVoiceAssistant({
 
         {/* 2. Finished: single final screen — section completed, only Open paper (to conversation-competence-summaries) */}
         {status === "finished" && (
-          <div className="mt-6 rounded-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-8 text-center">
+          <div className="mt-6 rounded-xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 p-5 text-center sm:p-8">
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-400/20 px-3 py-1.5 mb-4">
               <span className="text-xs font-medium text-emerald-300">All sections completed</span>
             </div>
@@ -949,8 +949,8 @@ export function RecruiterVoiceAssistant({
 
         {/* 3. Live session: listening, speaking, thinking */}
         {status !== "finished" && status !== "generating" && !isGeneratingPaper && (
-          <div className="mt-6 rounded-xl border border-slate-800/60 bg-slate-950/60 p-6">
-            <div className="flex items-center justify-between">
+          <div className="mt-6 rounded-xl border border-slate-800/60 bg-slate-950/60 p-4 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <div className="h-16 w-16 rounded-full bg-emerald-500/10 border border-emerald-400/30 flex items-center justify-center">
@@ -965,7 +965,7 @@ export function RecruiterVoiceAssistant({
                   <p className="text-xs text-slate-400">Audio I/O is active while listening or speaking.</p>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
                 {Array.from({ length: 6 }).map((_, idx) => (
                   <span
                     key={idx}

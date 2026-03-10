@@ -183,11 +183,15 @@ export function CVTable({ refreshTrigger }: Props) {
         </div>
       ) : (
         <div className="overflow-x-auto -mx-6 px-6">
-          <div className="space-y-2 min-w-max">
+          <div
+            className={`space-y-2 min-w-max ${
+              filtered.length > 10 ? "max-h-[700px] overflow-y-auto pr-1" : ""
+            }`}
+          >
             {filtered.map((cv) => (
               <div
                 key={cv.id}
-                className="flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200 w-full"
+                className="flex min-w-[760px] items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200"
               >
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-sm font-semibold text-slate-100">
@@ -231,7 +235,7 @@ export function CVTable({ refreshTrigger }: Props) {
           <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-950/95 p-6 shadow-2xl">
             <h3 className="text-base font-semibold text-slate-50 mb-1">Delete CV</h3>
             <p className="text-sm text-slate-400 leading-relaxed mb-4">
-              Are you sure you want to delete <span className="font-medium text-slate-300">"{deleteModal.original_filename}"</span>? This action cannot be undone.
+              Are you sure you want to delete <span className="font-medium text-slate-300 break-all">"{deleteModal.original_filename}"</span>? This action cannot be undone.
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button

@@ -65,6 +65,15 @@ export default function ConversationCompetenceSummariesPage() {
     setSectionContents(updated);
   };
 
+  const isEmptySectionContent = (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return true;
+    return trimmed
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .every((line) => line === "" || line === "-" || line === "•");
+  };
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -251,6 +260,8 @@ export default function ConversationCompetenceSummariesPage() {
     }
   };
 
+  const hasOpenSection = editingSection !== null;
+
   if (!mounted) {
     return (
       <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-6 shadow-sm">
@@ -396,14 +407,14 @@ export default function ConversationCompetenceSummariesPage() {
 
       {/* View Paper Modal */}
       {viewModalOpen && selectedPaper && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-          <div className="w-full max-w-4xl max-h-[90vh] rounded-xl border border-slate-800 bg-slate-950/95 p-6 shadow-2xl flex flex-col">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-slate-50 mb-2">Conversation Competence Paper</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-2 sm:px-4">
+          <div className="w-full max-h-[90vh] max-w-4xl rounded-xl border border-slate-800/60 bg-slate-950/95 p-3 sm:p-5 shadow-2xl flex flex-col overflow-hidden">
+            <div className="mb-4 flex items-start justify-between border-b border-slate-800/60 pb-4">
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-slate-50 mb-1 tracking-tight">Conversation Competence Paper</h3>
                 <div className="space-y-1">
                   <p className="text-sm text-slate-300">
-                    <span className="text-slate-400 font-medium">CV:</span> <span className="text-slate-200">{selectedPaper.cv_filename}</span>
+                    <span className="text-slate-400 font-medium">CV:</span> <span className="text-slate-200 break-all">{selectedPaper.cv_filename}</span>
                   </p>
                   <p className="text-sm text-slate-300">
                     <span className="text-slate-400 font-medium">Created:</span> <span className="text-slate-200">{new Date(selectedPaper.created_at).toLocaleString()}</span>
@@ -417,20 +428,25 @@ export default function ConversationCompetenceSummariesPage() {
               </div>
               <button
                 onClick={() => setViewModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 transition-colors"
+                className="ml-4 rounded-lg p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 transition-all duration-200"
+                aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto pr-2 mb-4 space-y-4">
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 sm:pr-2">
               {/* Section-based editing UI */}
               {Object.keys(sectionContents).length > 0 ? (
                 Object.entries(sectionContents).map(([sectionName, sectionContent]) => (
                   <div
                     key={sectionName}
-                    className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm hover:border-slate-700/80 transition-all duration-200"
+                    className={`min-w-0 rounded-lg border p-3 shadow-sm transition-all duration-200 sm:p-4 ${
+                      editingSection !== null && editingSection !== sectionName
+                        ? "border-slate-900/80 bg-slate-950/70 opacity-45"
+                        : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700/80"
+                    }`}
                   >
                     <div className="mb-3 flex items-center justify-between">
                       <h3 className="font-bold text-slate-100 text-sm">{sectionName}</h3>
@@ -450,25 +466,26 @@ export default function ConversationCompetenceSummariesPage() {
                             setEditingSection(sectionName);
                           }
                         }}
-                        className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
+                        disabled={editingSection !== null && editingSection !== sectionName}
+                        className={`inline-flex min-w-[88px] items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
                           editingSection === sectionName
-                            ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30"
-                            : "border border-slate-700/60 text-slate-300 hover:bg-slate-800/60 hover:border-slate-600/80 hover:text-slate-100"
+                            ? "border border-amber-400/40 bg-amber-400/15 text-amber-200 hover:bg-amber-400/20"
+                            : "border border-slate-700/60 text-slate-300 hover:bg-slate-800/60 hover:border-slate-600/80 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                         }`}
                       >
-                        {editingSection === sectionName ? "Done" : "Edit"}
+                        {editingSection === sectionName ? "Close" : "Edit"}
                       </button>
                     </div>
-                    <div className="text-slate-200">
+                    <div className={`min-w-0 text-slate-200 ${editingSection !== null && editingSection !== sectionName ? "pointer-events-none" : ""}`}>
                       {editingSection === sectionName ? (
                         listSections.has(sectionName) ? (
                           <div className="space-y-2">
                             {(parseListItems(sectionContents[sectionName] || "").length
                               ? parseListItems(sectionContents[sectionName] || "")
                               : [""]).map((item, index) => (
-                              <div key={`${sectionName}-${index}`} className="flex items-center gap-2">
+                              <div key={`${sectionName}-${index}`} className="flex min-w-0 items-center gap-2">
                                 <input
-                                  className="flex-1 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
+                                  className="min-w-0 flex-1 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
                                   placeholder="Add item"
                                   value={item}
                                   onChange={(e) => {
@@ -480,27 +497,29 @@ export default function ConversationCompetenceSummariesPage() {
                                 />
                                 <button
                                   type="button"
-                                  className="rounded-lg border border-slate-700/60 px-2.5 py-2 text-xs text-slate-300 hover:bg-slate-800/60"
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
                                   onClick={() => {
                                     const items = parseListItems(sectionContents[sectionName] || "");
                                     const nextItems = items.length ? [...items] : [""];
                                     nextItems.splice(index, 1);
                                     updateSectionItems(sectionName, nextItems);
                                   }}
+                                  aria-label="Remove item"
                                 >
-                                  Remove
+                                  <span className="sm:hidden">X</span>
+                                  <span className="hidden sm:inline">Remove</span>
                                 </button>
                               </div>
                             ))}
                             <button
                               type="button"
-                              className="rounded-lg border border-slate-700/60 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800/60"
+                              className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
                               onClick={() => {
                                 const items = parseListItems(sectionContents[sectionName] || "");
                                 updateSectionItems(sectionName, [...items, ""]);
                               }}
                             >
-                              Add item
+                              + Add Item
                             </button>
                           </div>
                         ) : (
@@ -516,7 +535,11 @@ export default function ConversationCompetenceSummariesPage() {
                         )
                       ) : (
                         <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans">
-                          {sectionContent || <span className="text-slate-500 italic">No content</span>}
+                          {isEmptySectionContent(sectionContent) ? (
+                            <span className="text-slate-500 italic">No content</span>
+                          ) : (
+                            sectionContent
+                          )}
                         </pre>
                       )}
                     </div>
@@ -525,14 +548,14 @@ export default function ConversationCompetenceSummariesPage() {
               ) : (
                 // Fallback to full textarea if sections can't be parsed
                 <textarea
-                  className="w-full min-h-[320px] rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
+                  className="w-full min-h-80 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 font-mono whitespace-pre-wrap leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/70"
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
                 />
               )}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-800">
-              <div className="flex gap-2">
+            <div className="mt-4 border-t border-slate-800/60 pt-4">
+              <div className="mb-2.5 flex">
                 <button
                   onClick={() => router.push(`/cv/${selectedPaper.cv_id}`)}
                   className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
@@ -540,11 +563,11 @@ export default function ConversationCompetenceSummariesPage() {
                   View CV
                 </button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:justify-end">
                 <button
                   onClick={handleDownloadPdf}
-                  disabled={downloadingPdf}
-                  className="rounded-lg border border-slate-600 bg-slate-800/40 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-100 hover:bg-slate-800/70 hover:border-slate-500 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  disabled={downloadingPdf || hasOpenSection}
+                  className="inline-flex w-full items-center justify-center rounded-lg border border-slate-600 bg-slate-800/40 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-100 hover:bg-slate-800/70 hover:border-slate-500 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto"
                 >
                   {downloadingPdf ? (
                     <>
@@ -580,17 +603,11 @@ export default function ConversationCompetenceSummariesPage() {
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  disabled={savingEdit}
-                  className="rounded-lg bg-emerald-500 px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-500/40 disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={savingEdit || hasOpenSection}
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-500/40 disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto"
                 >
                   {savingEdit ? "Saving..." : "Save Changes"}
                 </button>
-                {/* <button
-                  onClick={() => setViewModalOpen(false)}
-                  className="rounded-lg border border-slate-700/60 px-4 py-2 text-xs sm:text-sm font-medium text-slate-300 hover:bg-slate-900/70 hover:border-slate-600 transition-all"
-                >
-                  Close
-                </button> */}
               </div>
             </div>
           </div>
@@ -606,9 +623,11 @@ export default function ConversationCompetenceSummariesPage() {
               Are you sure you want to delete this conversation competence paper? This action cannot be undone.
             </p>
             <div className="bg-slate-900/50 rounded-lg p-3 mb-4">
-              <p className="text-sm text-slate-200 font-medium">{paperToDelete.cv_filename}</p>
+              <p className="text-xs text-slate-400 mb-1">From CV:</p>
+              <p className="text-sm text-slate-200 font-medium break-all">{paperToDelete.cv_filename}</p>
               {paperToDelete.user_name && (
-                <div className="mt-1">
+                <div className="mt-2">
+                  <p className="text-xs text-slate-400 mb-1">User:</p>
                   <p className="text-sm text-slate-200">{paperToDelete.user_name}</p>
                 </div>
               )}

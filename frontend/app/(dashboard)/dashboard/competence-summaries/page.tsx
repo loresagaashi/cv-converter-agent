@@ -333,7 +333,7 @@ export default function CompetenceSummariesPage() {
               </p>
               <div className="bg-slate-900/50 rounded-lg p-3 mb-4">
                 <p className="text-xs text-slate-400 mb-1">From CV:</p>
-                <p className="text-sm text-slate-200 font-medium">{paperToDelete.cv_filename}</p>
+                <p className="text-sm text-slate-200 font-medium break-all">{paperToDelete.cv_filename}</p>
                 {paperToDelete.user_name && (
                   <>
                     <p className="text-xs text-slate-400 mb-1 mt-2">User:</p>
