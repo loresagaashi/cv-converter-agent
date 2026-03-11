@@ -180,11 +180,16 @@ async function fetchWithAuthRetry(
   const fetchOptions = { ...options };
   delete (fetchOptions as any).retryCount;
 
-  // Refresh Authorization header from cookie before each attempt
+  // Always derive auth from the latest cookie state so stale in-memory tokens
+  // don't keep requests authenticated after the cookie is removed.
   const token = getAccessTokenFromCookie();
-  if (token && fetchOptions.headers && typeof fetchOptions.headers === 'object') {
-    (fetchOptions.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  const headers = new Headers(fetchOptions.headers || undefined);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  } else {
+    headers.delete("Authorization");
   }
+  fetchOptions.headers = headers;
 
   let res = await fetch(url, fetchOptions);
 
@@ -790,7 +795,7 @@ export async function updateConversationCompetencePaper(
   return handleAuthenticatedResponse<ConversationCompetencePaperWithCV>(
     `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/edit/`,
     {
-      method: "PATCH",
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,

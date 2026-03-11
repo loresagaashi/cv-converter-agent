@@ -6,9 +6,11 @@ import json
 from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 
 from apps.interview.models import ConversationSession
 from apps.llm.services import (
@@ -21,7 +23,60 @@ from apps.llm.services import (
 logger = logging.getLogger(__name__)
 
 
-class RecruiterAssistantQuestionView(APIView):
+class VoiceToQuestionRequestSerializer(serializers.Serializer):
+    audio = serializers.FileField()
+    session_id = serializers.IntegerField()
+    history = serializers.CharField(required=False, default="[]")
+    section = serializers.CharField(required=False, default="core_skills")
+
+
+class VoiceToQuestionResponseSerializer(serializers.Serializer):
+    transcription = serializers.CharField(allow_blank=True)
+    question_data = serializers.JSONField(allow_null=True)
+
+
+class RecruiterAssistantQuestionRequestSerializer(serializers.Serializer):
+    session_id = serializers.IntegerField()
+    history = serializers.JSONField(required=False)
+    section = serializers.CharField(required=False, default="core_skills")
+
+
+class TextToSpeechRequestSerializer(serializers.Serializer):
+    text = serializers.CharField()
+
+
+class TranscribeAudioRequestSerializer(serializers.Serializer):
+    audio = serializers.FileField()
+
+
+class TranscribeAudioResponseSerializer(serializers.Serializer):
+    text = serializers.CharField()
+    language = serializers.CharField()
+
+
+class SchemaFallbackSerializer(serializers.Serializer):
+    pass
+
+
+class DocumentedAPIView(APIView):
+    serializer_class = SchemaFallbackSerializer
+
+
+@extend_schema_view(
+    post=extend_schema(
+        summary="Recruiter assistant next question",
+        tags=["LLM"],
+        request=RecruiterAssistantQuestionRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Next question generated."),
+            400: OpenApiResponse(description="Validation error."),
+            403: OpenApiResponse(description="Permission denied."),
+            409: OpenApiResponse(description="Conversation not active."),
+            500: OpenApiResponse(description="Generation failed."),
+        },
+    )
+)
+class RecruiterAssistantQuestionView(DocumentedAPIView):
     """
     Generate the next spoken verification question for the recruiter assistant.
 
@@ -110,6 +165,16 @@ class RecruiterAssistantQuestionView(APIView):
         return Response(result, status=200)
 
 
+@extend_schema(
+    summary="Text to speech",
+    tags=["LLM"],
+    request=TextToSpeechRequestSerializer,
+    responses={
+        200: OpenApiResponse(description="Audio/mpeg binary response."),
+        400: OpenApiResponse(description="Missing text."),
+        500: OpenApiResponse(description="TTS generation failed."),
+    },
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def text_to_speech(request):
@@ -143,6 +208,16 @@ def text_to_speech(request):
         )
 
 
+@extend_schema(
+    summary="Transcribe audio",
+    tags=["LLM"],
+    request=TranscribeAudioRequestSerializer,
+    responses={
+        200: TranscribeAudioResponseSerializer,
+        400: OpenApiResponse(description="Missing/invalid audio or language validation failed."),
+        500: OpenApiResponse(description="Transcription failed."),
+    },
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def transcribe_audio(request):
@@ -188,6 +263,19 @@ def transcribe_audio(request):
         )
 
 
+@extend_schema(
+    summary="Voice to question",
+    description="Transcribe uploaded audio and generate the next recruiter question.",
+    tags=["LLM"],
+    request=VoiceToQuestionRequestSerializer,
+    responses={
+        200: VoiceToQuestionResponseSerializer,
+        400: OpenApiResponse(description="Validation or language error."),
+        403: OpenApiResponse(description="Permission denied."),
+        409: OpenApiResponse(description="Conversation session is not active."),
+        500: OpenApiResponse(description="Server processing error."),
+    },
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def voice_to_question(request):
@@ -305,7 +393,20 @@ def _stream_voice_to_question_sse(audio_file, cv_text, competence_text, history,
         yield f"data: {json.dumps(chunk)}\n\n"
 
 
-class VoiceToQuestionStreamView(APIView):
+@extend_schema_view(
+    post=extend_schema(
+        summary="Voice to question stream",
+        tags=["LLM"],
+        request=VoiceToQuestionRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="SSE stream response."),
+            400: OpenApiResponse(description="Validation error."),
+            403: OpenApiResponse(description="Permission denied."),
+            409: OpenApiResponse(description="Conversation not active."),
+        },
+    )
+)
+class VoiceToQuestionStreamView(DocumentedAPIView):
     """
     SSE streaming: transcribe audio then generate next question.
     Yields transcription first (so UI can show it and "Thinking" immediately), then question_data.

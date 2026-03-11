@@ -68,10 +68,11 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
+    'drf_spectacular',
     'apps.cv',
     'apps.users',
     'apps.llm',
-    'apps.api',
+    'apps.api.apps.ApiConfig',
     'apps.interview',
 ]
 
@@ -206,7 +207,39 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 } 
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Swagger - CV Converter Agent API',
+    'DESCRIPTION': 'Interactive API documentation for CV Converter Agent. Use Authorize with Bearer JWT to test protected endpoints.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SORT_OPERATIONS': False,
+    'PREPROCESSING_HOOKS': [
+        'apps.api.schema_hooks.order_endpoints_with_delete_last',
+    ],
+    'POSTPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.postprocess_schema_enums',
+        'apps.api.schema_hooks.group_operations_by_top_level_tag',
+    ],
+    'TAGS': [
+        {'name': 'Users', 'description': 'Authentication and user management endpoints.'},
+        {'name': 'CV', 'description': 'CV upload, conversion and export endpoints.'},
+        {'name': 'Interview', 'description': 'Interview and competence paper endpoints.'},
+        {'name': 'LLM', 'description': 'Voice, transcription and assistant endpoints.'},
+    ],
+    'APPEND_COMPONENTS': {
+        'securitySchemes': {
+            'BearerAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            },
+        },
+    },
+    'SECURITY': [{'BearerAuth': []}],
+}
 
 # CORS Configuration for Vercel Proxy Setup
 # Frontend uses Vercel rewrites to proxy /api/* to backend

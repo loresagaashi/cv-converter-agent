@@ -10,10 +10,13 @@ from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 
 from .serializers import (
     AdminUserSerializer,
+    AuthResponseSerializer,
     LoginSerializer,
+    RenewAccessTokenResponseSerializer,
     SignupSerializer,
     UserSerializer,
 )
@@ -57,6 +60,17 @@ class SignupView(generics.CreateAPIView):
     serializer_class = SignupSerializer
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Create account",
+        description="Register a new user account and return JWT access token in response and cookie.",
+        tags=["Users"],
+        request=SignupSerializer,
+        responses={
+            201: AuthResponseSerializer,
+            400: OpenApiResponse(description="Validation error."),
+        },
+    )
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -92,6 +106,17 @@ class LoginView(APIView):
     # token-based login from the SPA frontend.
     authentication_classes: list = []
 
+    @extend_schema(
+        summary="Login",
+        description="Authenticate with email/password and receive JWT access token.",
+        tags=["Users"],
+        request=LoginSerializer,
+        responses={
+            200: AuthResponseSerializer,
+            400: OpenApiResponse(description="Missing fields or invalid credentials."),
+        },
+    )
+
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -124,6 +149,17 @@ class LoginView(APIView):
         return response
 
 
+@extend_schema_view(
+    post=extend_schema(
+        summary="Logout",
+        description="Invalidate refresh token and clear auth cookies.",
+        tags=["Users"],
+        request=None,
+        responses={
+            204: OpenApiResponse(description="Logged out successfully."),
+        },
+    )
+)
 class LogoutView(APIView):
     permission_classes = [AllowAny]
     authentication_classes: list = []
@@ -157,6 +193,18 @@ class LogoutView(APIView):
         return response
 
 
+@extend_schema_view(
+    post=extend_schema(
+        summary="Renew access token",
+        description="Issue a fresh access token using refresh token cookie.",
+        tags=["Users"],
+        request=None,
+        responses={
+            200: RenewAccessTokenResponseSerializer,
+            401: OpenApiResponse(description="Missing/invalid/expired refresh token."),
+        },
+    )
+)
 class RenewAccessTokenView(APIView):
     """
     Refresh endpoint: validates refresh_token from cookie and issues new access_token.
@@ -232,6 +280,16 @@ class CurrentUserView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Current user",
+        description="Get profile data for the currently authenticated user.",
+        tags=["Users"],
+        responses={
+            200: UserSerializer,
+            401: OpenApiResponse(description="Authentication required."),
+        },
+    )
 
     def get(self, request):
         serializer = UserSerializer(request.user, context={"request": request})

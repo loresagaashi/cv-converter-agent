@@ -35,3 +35,6 @@ whitenoise==6.8.2
 
 #JWT
 PyJWT>=2.7.0
+
+# API documentation (Swagger/OpenAPI)
+drf-spectacular==0.27.2
