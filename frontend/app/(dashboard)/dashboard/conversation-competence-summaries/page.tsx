@@ -11,7 +11,12 @@ import {
   downloadConversationCompetencePaperPdf,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { getCachedConversationPapers, setCachedConversationPapers } from "@/lib/dashboardListCache";
+import { Pagination } from "@/components/pagination/Pagination";
+import {
+  clearCachedConversationPapers,
+  getCachedConversationPapers,
+  setCachedConversationPapers,
+} from "@/lib/dashboardListCache";
 
 export default function ConversationCompetenceSummariesPage() {
   const { token, user } = useAuth();
@@ -32,6 +37,11 @@ export default function ConversationCompetenceSummariesPage() {
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [sectionContents, setSectionContents] = useState<Record<string, string>>({});
   const [reloading, setReloading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalRecords, setTotalRecords] = useState(0);
+
+  const pageSize = 50;
 
   const listSections = new Set([
     "Core Skills",
@@ -82,9 +92,11 @@ export default function ConversationCompetenceSummariesPage() {
     if (!token) return;
 
     if (!force) {
-      const cached = getCachedConversationPapers();
+      const cached = getCachedConversationPapers(currentPage, pageSize);
       if (cached) {
-        setPapers(cached);
+        setPapers(cached.items);
+        setTotalPages(cached.totalPages);
+        setTotalRecords(cached.totalRecords);
         setError(null);
         setLoading(false);
         return;
@@ -99,20 +111,36 @@ export default function ConversationCompetenceSummariesPage() {
     }
 
     try {
-      const res = await getAllConversationCompetencePapers();
-      setPapers(res.papers);
-      setCachedConversationPapers(res.papers);
+      const res = await getAllConversationCompetencePapers(token, currentPage, pageSize);
+
+      if (res.totalPages > 0 && currentPage > res.totalPages) {
+        setCurrentPage(res.totalPages);
+        return;
+      }
+
+      setPapers(res.data);
+      setTotalPages(res.totalPages);
+      setTotalRecords(res.totalRecords);
+      setCachedConversationPapers(currentPage, pageSize, {
+        items: res.data,
+        totalPages: res.totalPages,
+        totalRecords: res.totalRecords,
+      });
     } catch (err: any) {
       setError(err?.message || "Failed to load conversation competence papers.");
     } finally {
       setLoading(false);
       setReloading(false);
     }
-  }, [token]);
+  }, [currentPage, pageSize, token]);
 
   useEffect(() => {
     void loadPapers(false);
   }, [loadPapers]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   // Filter papers based on search query
   const filteredPapers = useMemo(() => {
@@ -184,12 +212,9 @@ export default function ConversationCompetenceSummariesPage() {
     
     setDeleting(true);
     try {
+      clearCachedConversationPapers();
       await deleteConversationCompetencePaper(paperToDelete.id);
-      setPapers((prev) => {
-        const next = prev.filter((p) => p.id !== paperToDelete.id);
-        setCachedConversationPapers(next);
-        return next;
-      });
+      await loadPapers(true);
       setDeleteModalOpen(false);
       setPaperToDelete(null);
     } catch (err: any) {
@@ -223,16 +248,15 @@ export default function ConversationCompetenceSummariesPage() {
       }
       
       const updated = await updateConversationCompetencePaper(selectedPaper.id, contentToSave);
+      clearCachedConversationPapers();
       setSelectedPaper(updated);
       // Update editContent and sectionContents to reflect saved changes
       setEditContent(updated.content);
       const sections = parseContentIntoSections(updated.content);
       setSectionContents(sections);
-      setPapers((prev) => {
-        const next = prev.map((p) => (p.id === updated.id ? { ...p, content: updated.content } : p));
-        setCachedConversationPapers(next);
-        return next;
-      });
+      setPapers((prev) =>
+        prev.map((p) => (p.id === updated.id ? { ...p, content: updated.content } : p))
+      );
     } catch (err: any) {
       setError(err?.message || "Failed to save conversation competence paper.");
     } finally {
@@ -298,7 +322,7 @@ export default function ConversationCompetenceSummariesPage() {
             </svg>
           </div>
           <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
-            {filteredPapers.length} {filteredPapers.length === 1 ? "paper" : "papers"}
+            {filteredPapers.length} on page • {totalRecords} total
           </span>
           <button
             type="button"
@@ -337,16 +361,18 @@ export default function ConversationCompetenceSummariesPage() {
           <svg className="w-12 h-12 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          <p className="text-base font-semibold text-slate-300 mb-1">No conversation papers yet</p>
+          <p className="text-base font-semibold text-slate-300 mb-1">{totalRecords === 0 ? "No conversation papers yet" : "No results found on this page"}</p>
           <p className="text-sm text-slate-500">
-            Conversation-based competence papers will appear here after interviews are conducted
+            {totalRecords === 0
+              ? "Conversation-based competence papers will appear here after interviews are conducted"
+              : "Try adjusting your search terms"}
           </p>
         </div>
       ) : (
         <div className="overflow-x-auto md:overflow-x-visible -mx-6 px-6 md:mx-0 md:px-0">
           <div
             className={`space-y-2 min-w-max md:min-w-0 ${
-              filteredPapers.length > 10 ? "max-h-[42rem] overflow-y-auto pr-1" : ""
+              filteredPapers.length > 10 ? "max-h-168 overflow-y-auto pr-1" : ""
             }`}
           >
             {filteredPapers.map((paper) => (
@@ -381,7 +407,7 @@ export default function ConversationCompetenceSummariesPage() {
                   </div>
                 </div>
 
-                <div className="ml-4 flex items-center gap-2 flex-shrink-0">
+                <div className="ml-4 flex items-center gap-2 shrink-0">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -404,6 +430,15 @@ export default function ConversationCompetenceSummariesPage() {
           </div>
         </div>
       )}
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        hasNext={currentPage < totalPages}
+        hasPrevious={currentPage > 1}
+        onPageChange={setCurrentPage}
+        isLoading={loading || reloading}
+      />
 
       {/* View Paper Modal */}
       {viewModalOpen && selectedPaper && (
@@ -604,7 +639,7 @@ export default function ConversationCompetenceSummariesPage() {
                 <button
                   onClick={handleSaveEdit}
                   disabled={savingEdit || hasOpenSection}
-                  className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-500/40 disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto"
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto"
                 >
                   {savingEdit ? "Saving..." : "Save Changes"}
                 </button>

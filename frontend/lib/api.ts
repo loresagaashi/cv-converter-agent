@@ -1,4 +1,4 @@
-import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV } from "./types";
+import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV, PaginatedResponse } from "./types";
 
 function getAccessTokenFromCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -376,9 +376,10 @@ export interface AdminUserUpdatePayload {
   role?: UserRole;
 }
 
-export async function listUsers(token?: string): Promise<User[]> {
+export async function listUsers(token?: string, page: number = 1, pageSize: number = 50): Promise<PaginatedResponse<User>> {
   const accessToken = getAccessTokenFromCookie() || token;
-  return handleAuthenticatedResponse<User[]>(`${API_BASE_URL}/api/users/`, {
+  const params = new URLSearchParams({ page: page.toString(), page_size: pageSize.toString() });
+  return handleAuthenticatedResponse<PaginatedResponse<User>>(`${API_BASE_URL}/api/users/?${params}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -426,9 +427,10 @@ export async function deleteUser(id: number, token?: string): Promise<void> {
   });
 }
 
-export async function listCVs(token?: string): Promise<CV[]> {
+export async function listCVs(token?: string, page: number = 1, pageSize: number = 50): Promise<PaginatedResponse<CV>> {
   const accessToken = getAccessTokenFromCookie() || token;
-  return handleAuthenticatedResponse<CV[]>(`${API_BASE_URL}/api/cv/upload/`, {
+  const params = new URLSearchParams({ page: page.toString(), page_size: pageSize.toString() });
+  return handleAuthenticatedResponse<PaginatedResponse<CV>>(`${API_BASE_URL}/api/cv/upload/?${params}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -565,17 +567,21 @@ export interface CompetencePaperWithCV extends CompetencePaper {
   user_name?: string;
 }
 
+// Legacy response type (keeping for backward compatibility during migration)
 export interface AllCompetencePapersResponse {
   papers: CompetencePaperWithCV[];
   count: number;
 }
 
 export async function getAllCompetencePapers(
-  token?: string
-): Promise<AllCompetencePapersResponse> {
+  token?: string,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<PaginatedResponse<CompetencePaperWithCV>> {
   const accessToken = getAccessTokenFromCookie() || token;
-  return handleAuthenticatedResponse<AllCompetencePapersResponse>(
-    `${API_BASE_URL}/api/interview/competence-papers/`,
+  const params = new URLSearchParams({ page: page.toString(), page_size: pageSize.toString() });
+  return handleAuthenticatedResponse<PaginatedResponse<CompetencePaperWithCV>>(
+    `${API_BASE_URL}/api/interview/competence-papers/?${params}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -626,11 +632,14 @@ export interface AllConversationCompetencePapersResponse {
 }
 
 export async function getAllConversationCompetencePapers(
-  token?: string
-): Promise<AllConversationCompetencePapersResponse> {
+  token?: string,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<PaginatedResponse<ConversationCompetencePaperWithCV>> {
   const accessToken = getAccessTokenFromCookie() || token;
-  return handleAuthenticatedResponse<AllConversationCompetencePapersResponse>(
-    `${API_BASE_URL}/api/interview/conversation-competence-papers/`,
+  const params = new URLSearchParams({ page: page.toString(), page_size: pageSize.toString() });
+  return handleAuthenticatedResponse<PaginatedResponse<ConversationCompetencePaperWithCV>>(
+    `${API_BASE_URL}/api/interview/conversation-competence-papers/?${params}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,

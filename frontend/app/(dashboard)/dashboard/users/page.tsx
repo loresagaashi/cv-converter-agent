@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth/AuthContext";
@@ -14,7 +14,12 @@ import {
   UserRole,
 } from "@/lib/api";
 import type { User } from "@/lib/types";
-import { getCachedUsers, setCachedUsers } from "@/lib/dashboardListCache";
+import { Pagination } from "@/components/pagination/Pagination";
+import {
+  clearCachedUsers,
+  getCachedUsers,
+  setCachedUsers,
+} from "@/lib/dashboardListCache";
 
 type FormMode = "create" | "edit";
 
@@ -54,8 +59,62 @@ export default function UsersAdminPage() {
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reloading, setReloading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalRecords, setTotalRecords] = useState(0);
+
+  const pageSize = 50;
 
   const isAdmin = useMemo(() => user?.role === "admin", [user]);
+
+  const loadUsers = useCallback(
+    async (showReloadState = false) => {
+      if (!token || !isAdmin) return;
+
+      if (!showReloadState) {
+        const cached = getCachedUsers(currentPage, pageSize);
+        if (cached) {
+          setUsers(cached.items);
+          setTotalPages(cached.totalPages);
+          setTotalRecords(cached.totalRecords);
+          setError(null);
+          setLoading(false);
+          return;
+        }
+      }
+
+      setError(null);
+      if (showReloadState) {
+        setReloading(true);
+      } else {
+        setLoading(true);
+      }
+
+      try {
+        const response = await listUsers(token, currentPage, pageSize);
+
+        if (response.totalPages > 0 && currentPage > response.totalPages) {
+          setCurrentPage(response.totalPages);
+          return;
+        }
+
+        setUsers(response.data);
+        setTotalPages(response.totalPages);
+        setTotalRecords(response.totalRecords);
+        setCachedUsers(currentPage, pageSize, {
+          items: response.data,
+          totalPages: response.totalPages,
+          totalRecords: response.totalRecords,
+        });
+      } catch (err: any) {
+        setError(err?.message || "Unable to load users.");
+      } finally {
+        setLoading(false);
+        setReloading(false);
+      }
+    },
+    [currentPage, isAdmin, pageSize, token]
+  );
 
   useEffect(() => {
     if (!user || !token) return;
@@ -65,39 +124,12 @@ export default function UsersAdminPage() {
       return;
     }
 
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const cached = getCachedUsers();
-        if (cached) {
-          if (!cancelled) {
-            setUsers(cached);
-          }
-          return;
-        }
-        const data = await listUsers();
-        if (!cancelled) {
-          setUsers(data);
-          setCachedUsers(data);
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          setError(err?.message || "Unable to load users.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
+    void loadUsers(false);
+  }, [user, token, isAdmin, router, loadUsers]);
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, token, isAdmin, router]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
 
   if (!user || !token) {
     return null;
@@ -117,18 +149,7 @@ export default function UsersAdminPage() {
   }
 
   const handleReloadUsers = async () => {
-    if (!token || !isAdmin) return;
-    setError(null);
-    setReloading(true);
-    try {
-      const data = await listUsers();
-      setUsers(data);
-      setCachedUsers(data);
-    } catch (err: any) {
-      setError(err?.message || "Unable to load users.");
-    } finally {
-      setReloading(false);
-    }
+    await loadUsers(true);
   };
 
   const openCreateForm = () => {
@@ -174,12 +195,9 @@ export default function UsersAdminPage() {
           password: formState.password || undefined,
           role: formState.role,
         };
-        const created = await createUser(payload);
-        setUsers((prev) => {
-          const next = [...prev, created];
-          setCachedUsers(next);
-          return next;
-        });
+        clearCachedUsers();
+        await createUser(payload);
+        await loadUsers(true);
       } else if (formMode === "edit" && formState.id) {
         const payload: AdminUserUpdatePayload = {
           first_name: formState.first_name || undefined,
@@ -189,12 +207,9 @@ export default function UsersAdminPage() {
         if (formState.password) {
           payload.password = formState.password;
         }
+        clearCachedUsers();
         const updated = await updateUser(formState.id, payload);
-        setUsers((prev) => {
-          const next = prev.map((u) => (u.id === updated.id ? updated : u));
-          setCachedUsers(next);
-          return next;
-        });
+        setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       }
       setFormOpen(false);
       setFormState(emptyForm);
@@ -226,12 +241,9 @@ export default function UsersAdminPage() {
     setDeleting(true);
     setError(null);
     try {
+      clearCachedUsers();
       await deleteUser(deleteTarget.id);
-      setUsers((prev) => {
-        const next = prev.filter((u) => u.id !== deleteTarget.id);
-        setCachedUsers(next);
-        return next;
-      });
+      await loadUsers(true);
       setDeleteTarget(null);
     } catch (err: any) {
       setError(err?.message || "Unable to delete user.");
@@ -279,7 +291,7 @@ export default function UsersAdminPage() {
               </svg>
             </div>
             <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
-              {filteredUsers.length} {filteredUsers.length === 1 ? "user" : "users"}
+              {filteredUsers.length} on page • {totalRecords} total
             </span>
             <button
               type="button"
@@ -294,7 +306,7 @@ export default function UsersAdminPage() {
             </button>
             <button
               onClick={openCreateForm}
-              className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200"
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200"
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -330,14 +342,14 @@ export default function UsersAdminPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
             <p className="text-base font-semibold text-slate-300 mb-1">
-              {users.length === 0 ? "No users yet" : "No results found"}
+              {totalRecords === 0 ? "No users yet" : "No results found on this page"}
             </p>
             <p className="text-sm text-slate-500 mb-4">
-              {users.length === 0
+              {totalRecords === 0
                 ? 'Click "Add User" to create your first user'
                 : "Try adjusting your search terms"}
             </p>
-            {users.length === 0 && (
+            {totalRecords === 0 && (
               <button
                 onClick={openCreateForm}
                 className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 transition-all"
@@ -350,7 +362,7 @@ export default function UsersAdminPage() {
           <div className="overflow-x-auto -mx-6 px-6">
             <div
               className={`space-y-2 min-w-max ${
-                filteredUsers.length > 10 ? "max-h-[700px] overflow-y-auto pr-1" : ""
+                filteredUsers.length > 10 ? "max-h-168 overflow-y-auto pr-1" : ""
               }`}
             >
             {filteredUsers.map((u) => (
@@ -401,6 +413,15 @@ export default function UsersAdminPage() {
           </div>
         )}
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        hasNext={currentPage < totalPages}
+        hasPrevious={currentPage > 1}
+        onPageChange={setCurrentPage}
+        isLoading={loading || reloading}
+      />
 
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
@@ -548,7 +569,7 @@ export default function UsersAdminPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-60 transition-all duration-200 sm:w-auto"
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-60 transition-all duration-200 sm:w-auto"
                 >
                   {submitting
                     ? formMode === "create"

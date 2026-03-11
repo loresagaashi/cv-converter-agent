@@ -360,7 +360,7 @@ export default function DashboardLayout({
                   router.push("/login");
                   setShowLogoutModal(false);
                 }}
-                className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200 shadow-lg shadow-emerald-500/40"
+                className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200"
               >
                 Sign out
               </button>

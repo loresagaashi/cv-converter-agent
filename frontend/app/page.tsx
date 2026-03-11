@@ -15,7 +15,7 @@ export default function Home() {
         <div className="flex items-center justify-center pt-4">
           <a
             href="/login"
-            className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/40 hover:bg-emerald-400 transition-all hover:shadow-xl hover:shadow-emerald-500/50"
+            className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-400 transition-all"
           >
             Sign in
           </a>

@@ -19,6 +19,7 @@ from .serializers import (
 )
 from .models import RefreshToken
 from .permissions import RolePermission
+from apps.api.pagination import StandardPagination
 
 User = get_user_model()
 
@@ -248,6 +249,7 @@ class AdminUserListCreateView(generics.ListCreateAPIView):
     serializer_class = AdminUserSerializer
     permission_classes = [IsAuthenticated, RolePermission]
     required_roles = ["admin"]
+    pagination_class = StandardPagination
 
 
 class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):

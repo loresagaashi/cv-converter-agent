@@ -512,7 +512,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
 
               {showWorkExperience && (
                 <Section
-                  title="Work Experience"
+                  title="Project Experience"
                   isEditing={editingSection === "work_experience"}
                   isInactive={editingSection !== null && editingSection !== "work_experience"}
                   onEdit={() => {
@@ -1274,7 +1274,7 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                 editingSection !== null ||
                 !structuredCV
               }
-              className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-emerald-500/40 sm:w-auto"
+              className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 sm:w-auto"
             >
               {exporting === "cv" ? (
                 <>

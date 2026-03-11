@@ -14,13 +14,16 @@ export function CVRecentList() {
   const [error, setError] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
 
+  const recentPage = 1;
+  const recentPageSize = 10;
+
   const loadRecentCVs = async (force = false) => {
     if (!token) return;
 
     if (!force) {
-      const cached = getCachedCVs();
+      const cached = getCachedCVs(recentPage, recentPageSize);
       if (cached) {
-        setItems(cached);
+        setItems(cached.items);
         setError(null);
         setLoading(false);
         return;
@@ -35,10 +38,14 @@ export function CVRecentList() {
     }
 
     try {
-      const data = await listCVs();
-      const sorted = [...data].sort((a, b) => b.id - a.id);
+      const response = await listCVs(token, recentPage, recentPageSize);
+      const sorted = [...response.data].sort((a, b) => b.id - a.id);
       setItems(sorted);
-      setCachedCVs(sorted);
+      setCachedCVs(recentPage, recentPageSize, {
+        items: sorted,
+        totalPages: response.totalPages,
+        totalRecords: response.totalRecords,
+      });
     } catch (err: any) {
       setError(err?.message || "Failed to load recent CVs.");
     } finally {
@@ -120,7 +127,7 @@ export function CVRecentList() {
         </div>
       ) : (
         <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-          {items.slice(0, 5).map((cv) => (
+          {items.map((cv) => (
             <Link
               key={cv.id}
               href={`/cv/${cv.id}`}
@@ -140,7 +147,7 @@ export function CVRecentList() {
                   })}
                 </p>
               </div>
-              <svg className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 transition-colors ml-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="ml-3 h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Link>

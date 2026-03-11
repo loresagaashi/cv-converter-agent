@@ -6,10 +6,12 @@ from pathlib import Path
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import status
+from rest_framework import status, generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.api.pagination import StandardPagination
 
 logger = logging.getLogger(__name__)
 
@@ -90,21 +92,24 @@ class CompetencePaperDetailView(APIView):
 class AllCompetencePapersView(APIView):
     """
     List all stored competence papers for the authenticated user (across all CVs).
+    Supports pagination with ?page=1&page_size=50
     """
     
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     
     def get(self, request):
         # Get original competence papers using service function
         competence_papers = get_competence_papers_for_user(request.user)
         
-        # Serialize with full information (including CV and user details)
-        serializer = CompetencePaperSerializer(competence_papers, many=True)
+        # Apply pagination
+        paginator = self.pagination_class()
+        paginated_papers = paginator.paginate_queryset(competence_papers, request, self)
         
-        return Response({
-            "papers": serializer.data,
-            "count": len(serializer.data),
-        }, status=status.HTTP_200_OK)
+        # Serialize with full information (including CV and user details)
+        serializer = CompetencePaperSerializer(paginated_papers, many=True)
+        
+        return paginator.get_paginated_response(serializer.data)
 
 
 class CompetencePaperDeleteView(APIView):
@@ -135,21 +140,24 @@ class CompetencePaperDeleteView(APIView):
 class AllConversationCompetencePapersView(APIView):
     """
     List all conversation-based competence papers for the authenticated user (across all CVs).
+    Supports pagination with ?page=1&page_size=50
     """
     
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardPagination
     
     def get(self, request):
         # Get conversation-based competence papers using service function
         conversation_papers = get_conversation_competence_papers_for_user(request.user)
         
-        # Serialize with full information (including CV and user details)
-        serializer = ConversationCompetencePaperSerializer(conversation_papers, many=True)
+        # Apply pagination
+        paginator = self.pagination_class()
+        paginated_papers = paginator.paginate_queryset(conversation_papers, request, self)
         
-        return Response({
-            "papers": serializer.data,
-            "count": len(serializer.data),
-        }, status=status.HTTP_200_OK)
+        # Serialize with full information (including CV and user details)
+        serializer = ConversationCompetencePaperSerializer(paginated_papers, many=True)
+        
+        return paginator.get_paginated_response(serializer.data)
 
 
 class ConversationCompetencePaperDetailView(APIView):
