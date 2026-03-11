@@ -4,48 +4,115 @@ import type {
   ConversationCompetencePaperWithCV,
 } from "@/lib/api";
 
+type PaginatedCacheEntry<T> = {
+  items: T[];
+  totalPages: number;
+  totalRecords: number;
+};
+
+type PaginatedSectionCache<T> = Record<string, PaginatedCacheEntry<T>>;
+
 type DashboardListCache = {
-  cvs: CV[] | null;
-  competencePapers: CompetencePaperWithCV[] | null;
-  conversationPapers: ConversationCompetencePaperWithCV[] | null;
-  users: User[] | null;
+  cvs: PaginatedSectionCache<CV>;
+  competencePapers: PaginatedSectionCache<CompetencePaperWithCV>;
+  conversationPapers: PaginatedSectionCache<ConversationCompetencePaperWithCV>;
+  users: PaginatedSectionCache<User>;
 };
 
 const cache: DashboardListCache = {
-  cvs: null,
-  competencePapers: null,
-  conversationPapers: null,
-  users: null,
+  cvs: {},
+  competencePapers: {},
+  conversationPapers: {},
+  users: {},
 };
 
-export function getCachedCVs() {
-  return cache.cvs;
+function getPageKey(page: number, pageSize: number) {
+  return `${page}:${pageSize}`;
 }
 
-export function setCachedCVs(items: CV[]) {
-  cache.cvs = items;
+function getPaginatedCache<T>(
+  section: PaginatedSectionCache<T>,
+  page: number,
+  pageSize: number
+) {
+  return section[getPageKey(page, pageSize)] ?? null;
 }
 
-export function getCachedCompetencePapers() {
-  return cache.competencePapers;
+function setPaginatedCache<T>(
+  section: PaginatedSectionCache<T>,
+  page: number,
+  pageSize: number,
+  entry: PaginatedCacheEntry<T>
+) {
+  section[getPageKey(page, pageSize)] = entry;
 }
 
-export function setCachedCompetencePapers(items: CompetencePaperWithCV[]) {
-  cache.competencePapers = items;
+function clearPaginatedCache<T>(section: PaginatedSectionCache<T>) {
+  Object.keys(section).forEach((key) => {
+    delete section[key];
+  });
 }
 
-export function getCachedConversationPapers() {
-  return cache.conversationPapers;
+export function getCachedCVs(page: number, pageSize: number) {
+  return getPaginatedCache(cache.cvs, page, pageSize);
 }
 
-export function setCachedConversationPapers(items: ConversationCompetencePaperWithCV[]) {
-  cache.conversationPapers = items;
+export function setCachedCVs(
+  page: number,
+  pageSize: number,
+  entry: PaginatedCacheEntry<CV>
+) {
+  setPaginatedCache(cache.cvs, page, pageSize, entry);
 }
 
-export function getCachedUsers() {
-  return cache.users;
+export function clearCachedCVs() {
+  clearPaginatedCache(cache.cvs);
 }
 
-export function setCachedUsers(items: User[]) {
-  cache.users = items;
+export function getCachedCompetencePapers(page: number, pageSize: number) {
+  return getPaginatedCache(cache.competencePapers, page, pageSize);
+}
+
+export function setCachedCompetencePapers(
+  page: number,
+  pageSize: number,
+  entry: PaginatedCacheEntry<CompetencePaperWithCV>
+) {
+  setPaginatedCache(cache.competencePapers, page, pageSize, entry);
+}
+
+export function clearCachedCompetencePapers() {
+  clearPaginatedCache(cache.competencePapers);
+}
+
+export function getCachedConversationPapers(page: number, pageSize: number) {
+  return getPaginatedCache(cache.conversationPapers, page, pageSize);
+}
+
+export function setCachedConversationPapers(
+  page: number,
+  pageSize: number,
+  entry: PaginatedCacheEntry<ConversationCompetencePaperWithCV>
+) {
+  setPaginatedCache(cache.conversationPapers, page, pageSize, entry);
+}
+
+export function clearCachedConversationPapers() {
+  clearPaginatedCache(cache.conversationPapers);
+}
+
+export function getCachedUsers(page: number, pageSize: number) {
+  return getPaginatedCache(cache.users, page, pageSize);
+}
+
+export function setCachedUsers(
+  page: number,
+  pageSize: number,
+  entry: PaginatedCacheEntry<User>
+) {
+  setPaginatedCache(cache.users, page, pageSize, entry);
+}
+
+export function clearCachedUsers() {
+  clearPaginatedCache(cache.users);
 }

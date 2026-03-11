@@ -940,7 +940,7 @@ export function RecruiterVoiceAssistant({
             )}
             <a
               href="/dashboard/conversation-competence-summaries"
-              className="inline-flex items-center justify-center rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-sm font-semibold text-slate-950 px-6 py-3 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02]"
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-500/90 hover:bg-emerald-500 text-sm font-semibold text-slate-950 px-6 py-3 transition-all hover:scale-[1.02]"
             >
               Open paper
             </a>

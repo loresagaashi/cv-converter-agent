@@ -101,7 +101,7 @@ export default function CVDetailPage() {
           type="button"
           onClick={() => setPreviewModalOpen(true)}
           disabled={!convertData?.competence_summary || loadingConvert}
-          className="inline-flex items-center rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-6 py-3 text-sm font-bold text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-500/80 active:bg-emerald-500/15 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 whitespace-nowrap shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30"
+          className="inline-flex items-center rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-6 py-3 text-sm font-bold text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-500/80 active:bg-emerald-500/15 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 whitespace-nowrap"
         >
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

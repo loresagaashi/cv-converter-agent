@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { deleteCV, listCVs } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { CV } from "@/lib/types";
-import { getCachedCVs, setCachedCVs } from "@/lib/dashboardListCache";
+import { Pagination } from "@/components/pagination/Pagination";
+import {
+  clearCachedCVs,
+  getCachedCVs,
+  setCachedCVs,
+} from "@/lib/dashboardListCache";
 
 interface Props {
   refreshTrigger?: number;
@@ -23,6 +28,11 @@ export function CVTable({ refreshTrigger }: Props) {
   const [query, setQuery] = useState("");
   const [deleteModal, setDeleteModal] = useState<CV | null>(null);
   const [reloading, setReloading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalRecords, setTotalRecords] = useState(0);
+
+  const pageSize = 50;
 
   const applyHighlightFromQuery = () => {
     const highlight = searchParams.get("highlight");
@@ -31,13 +41,15 @@ export function CVTable({ refreshTrigger }: Props) {
     setTimeout(() => setHighlightId(null), 3000);
   };
 
-  const loadCVs = async (force = false) => {
+  const loadCVs = useCallback(async (showReloadState = false) => {
     if (!token) return;
 
-    if (!force) {
-      const cached = getCachedCVs();
+    if (!showReloadState) {
+      const cached = getCachedCVs(currentPage, pageSize);
       if (cached) {
-        setItems(cached);
+        setItems(cached.items);
+        setTotalPages(cached.totalPages);
+        setTotalRecords(cached.totalRecords);
         setError(null);
         setLoading(false);
         applyHighlightFromQuery();
@@ -46,17 +58,29 @@ export function CVTable({ refreshTrigger }: Props) {
     }
 
     setError(null);
-    if (force) {
+    if (showReloadState) {
       setReloading(true);
     } else {
       setLoading(true);
     }
 
     try {
-      const data = await listCVs();
-      const sorted = [...data].sort((a, b) => b.id - a.id);
+      const response = await listCVs(token, currentPage, pageSize);
+      const sorted = [...response.data].sort((a, b) => b.id - a.id);
+
+      if (response.totalPages > 0 && currentPage > response.totalPages) {
+        setCurrentPage(response.totalPages);
+        return;
+      }
+
       setItems(sorted);
-      setCachedCVs(sorted);
+      setTotalPages(response.totalPages);
+      setTotalRecords(response.totalRecords);
+      setCachedCVs(currentPage, pageSize, {
+        items: sorted,
+        totalPages: response.totalPages,
+        totalRecords: response.totalRecords,
+      });
       applyHighlightFromQuery();
     } catch (err: any) {
       setError(err?.message || "Failed to load CVs.");
@@ -64,11 +88,15 @@ export function CVTable({ refreshTrigger }: Props) {
       setLoading(false);
       setReloading(false);
     }
-  };
+  }, [currentPage, pageSize, searchParams, token]);
 
   useEffect(() => {
     void loadCVs(refreshTrigger !== undefined);
-  }, [token, refreshTrigger, searchParams]);
+  }, [loadCVs, refreshTrigger, searchParams, token]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query]);
 
   if (!token) {
     return null;
@@ -83,12 +111,9 @@ export function CVTable({ refreshTrigger }: Props) {
     setDeletingId(deleteModal.id);
     setError(null);
     try {
+      clearCachedCVs();
       await deleteCV(deleteModal.id);
-      setItems((prev) => {
-        const next = prev.filter((item) => item.id !== deleteModal.id);
-        setCachedCVs(next);
-        return next;
-      });
+      await loadCVs(true);
       setDeleteModal(null);
     } catch (err: any) {
       setError(err?.message || "Failed to delete CV.");
@@ -121,7 +146,7 @@ export function CVTable({ refreshTrigger }: Props) {
             </svg>
           </div>
           <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
-            {filtered.length} {filtered.length === 1 ? "file" : "files"}
+            {filtered.length} on page • {totalRecords} total
           </span>
           <button
             type="button"
@@ -155,7 +180,7 @@ export function CVTable({ refreshTrigger }: Props) {
             {error}
           </div>
         </div>
-      ) : items.length === 0 ? (
+      ) : totalRecords === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/30 px-6 py-12 text-center">
           <svg className="w-12 h-12 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -185,7 +210,7 @@ export function CVTable({ refreshTrigger }: Props) {
         <div className="overflow-x-auto -mx-6 px-6">
           <div
             className={`space-y-2 min-w-max ${
-              filtered.length > 10 ? "max-h-[700px] overflow-y-auto pr-1" : ""
+              filtered.length > 10 ? "max-h-168 overflow-y-auto pr-1" : ""
             }`}
           >
             {filtered.map((cv) => (
@@ -208,7 +233,7 @@ export function CVTable({ refreshTrigger }: Props) {
                     })}
                   </div>
                 </div>
-                <div className="ml-4 flex items-center gap-2 flex-shrink-0">
+                <div className="ml-4 flex items-center gap-2 shrink-0">
                   <Link
                     href={`/cv/${cv.id}`}
                     className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
@@ -229,6 +254,15 @@ export function CVTable({ refreshTrigger }: Props) {
           </div>
         </div>
       )}
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        hasNext={currentPage < totalPages}
+        hasPrevious={currentPage > 1}
+        onPageChange={setCurrentPage}
+        isLoading={loading || reloading}
+      />
 
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">

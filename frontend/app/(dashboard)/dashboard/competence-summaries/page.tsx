@@ -5,7 +5,12 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { getAllCompetencePapers, getCompetencePaper, deleteCompetencePaper, type CompetencePaperWithCV } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { RecruiterVoiceAssistant } from "@/components/ai/RecruiterVoiceAssistant";
-import { getCachedCompetencePapers, setCachedCompetencePapers } from "@/lib/dashboardListCache";
+import { Pagination } from "@/components/pagination/Pagination";
+import {
+  clearCachedCompetencePapers,
+  getCachedCompetencePapers,
+  setCachedCompetencePapers,
+} from "@/lib/dashboardListCache";
 
 export default function CompetenceSummariesPage() {
   const { token, user } = useAuth();
@@ -21,14 +26,21 @@ export default function CompetenceSummariesPage() {
   const [deleting, setDeleting] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [reloading, setReloading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalRecords, setTotalRecords] = useState(0);
+
+  const pageSize = 50;
 
   const loadPapers = useCallback(async (force = false) => {
     if (!token) return;
 
     if (!force) {
-      const cached = getCachedCompetencePapers();
+      const cached = getCachedCompetencePapers(currentPage, pageSize);
       if (cached) {
-        setPapers(cached);
+        setPapers(cached.items);
+        setTotalPages(cached.totalPages);
+        setTotalRecords(cached.totalRecords);
         setError(null);
         setLoading(false);
         return;
@@ -43,20 +55,36 @@ export default function CompetenceSummariesPage() {
     }
 
     try {
-      const res = await getAllCompetencePapers();
-      setPapers(res.papers);
-      setCachedCompetencePapers(res.papers);
+      const res = await getAllCompetencePapers(token, currentPage, pageSize);
+
+      if (res.totalPages > 0 && currentPage > res.totalPages) {
+        setCurrentPage(res.totalPages);
+        return;
+      }
+
+      setPapers(res.data);
+      setTotalPages(res.totalPages);
+      setTotalRecords(res.totalRecords);
+      setCachedCompetencePapers(currentPage, pageSize, {
+        items: res.data,
+        totalPages: res.totalPages,
+        totalRecords: res.totalRecords,
+      });
     } catch (err: any) {
       setError(err?.message || "Failed to load competence papers.");
     } finally {
       setLoading(false);
       setReloading(false);
     }
-  }, [token]);
+  }, [currentPage, pageSize, token]);
 
   useEffect(() => {
     void loadPapers(false);
   }, [loadPapers]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   // Filter papers based on search query
   const filteredPapers = useMemo(() => {
@@ -87,12 +115,9 @@ export default function CompetenceSummariesPage() {
     
     setDeleting(true);
     try {
+      clearCachedCompetencePapers();
       await deleteCompetencePaper(paperToDelete.id);
-      setPapers((prev) => {
-        const next = prev.filter((p) => p.id !== paperToDelete.id);
-        setCachedCompetencePapers(next);
-        return next;
-      });
+      await loadPapers(true);
       setDeleteModalOpen(false);
       setPaperToDelete(null);
     } catch (err: any) {
@@ -131,7 +156,7 @@ export default function CompetenceSummariesPage() {
             </svg>
           </div>
           <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
-            {filteredPapers.length} {filteredPapers.length === 1 ? "paper" : "papers"}
+            {filteredPapers.length} on page • {totalRecords} total
           </span>
           <button
             type="button"
@@ -170,16 +195,18 @@ export default function CompetenceSummariesPage() {
           <svg className="w-12 h-12 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <p className="text-base font-semibold text-slate-300 mb-1">No competence papers yet</p>
+          <p className="text-base font-semibold text-slate-300 mb-1">{totalRecords === 0 ? "No competence papers yet" : "No results found on this page"}</p>
           <p className="text-sm text-slate-500">
-            Competence papers will appear here after you export them from CV preview
+            {totalRecords === 0
+              ? "Competence papers will appear here after you export them from CV preview"
+              : "Try adjusting your search terms"}
           </p>
         </div>
       ) : (
         <div className="overflow-x-auto md:overflow-x-visible -mx-6 px-6 md:mx-0 md:px-0">
           <div
             className={`space-y-2 min-w-max md:min-w-0 ${
-              filteredPapers.length > 10 ? "max-h-[42rem] overflow-y-auto pr-1" : ""
+              filteredPapers.length > 10 ? "max-h-168 overflow-y-auto pr-1" : ""
             }`}
           >
             {filteredPapers.map((paper) => (
@@ -214,7 +241,7 @@ export default function CompetenceSummariesPage() {
                   </div>
                 </div>
 
-                <div className="ml-4 flex items-center gap-2 flex-shrink-0">
+                <div className="ml-4 flex items-center gap-2 shrink-0">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -237,6 +264,15 @@ export default function CompetenceSummariesPage() {
           </div>
         </div>
       )}
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        hasNext={currentPage < totalPages}
+        hasPrevious={currentPage > 1}
+        onPageChange={setCurrentPage}
+        isLoading={loading || reloading}
+      />
 
       {/* View Paper Modal */}
       {viewModalOpen && selectedPaper && (

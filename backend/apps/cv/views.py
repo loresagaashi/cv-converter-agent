@@ -19,6 +19,7 @@ from .serializers import CVSerializer
 from .services import read_cv_file
 from apps.llm.services import generate_structured_cv
 from apps.interview.models import CompetencePaper, ConversationSession
+from apps.api.pagination import StandardPagination
 
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class CVUploadView(generics.ListCreateAPIView):
     serializer_class = CVSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
+    pagination_class = StandardPagination
 
     def get_queryset(self):
         # Admins can see all CVs; regular users only see their own

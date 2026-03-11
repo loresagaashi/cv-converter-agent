@@ -86,4 +86,14 @@ export interface StructuredCV {
   languages: LanguageItem[];
 }
 
+// Pagination response wrapper
+export interface PaginatedResponse<T> {
+  data: T[];
+  totalRecords: number;
+  currentPage: number;
+  pageSize: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
 
