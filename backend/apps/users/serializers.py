@@ -1,4 +1,4 @@
-from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
@@ -41,8 +41,15 @@ class SignupSerializer(serializers.ModelSerializer):
         fields = ("id", "email", "first_name", "last_name", "password")
         read_only_fields = ("id",)
 
+    def validate_email(self, value: str) -> str:
+        email = value.strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError(_("A user with this email already exists."))
+        return email
+
     def create(self, validated_data):
         password = validated_data.pop("password")
+        validated_data["email"] = validated_data["email"].lower()
         # New signups are regular users by default (non-admin).
         return User.objects.create_user(password=password, **validated_data)
 
@@ -52,14 +59,11 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     def validate(self, attrs):
-        email = attrs.get("email")
+        email = (attrs.get("email") or "").strip().lower()
         password = attrs.get("password")
-        user = authenticate(
-            request=self.context.get("request"),
-            email=email,
-            password=password,
-        )
-        if not user:
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user or not user.check_password(password):
             raise serializers.ValidationError(
                 _("Unable to log in with provided credentials."),
                 code="authorization",
@@ -69,8 +73,25 @@ class LoginSerializer(serializers.Serializer):
                 _("User account is disabled."), code="authorization"
             )
 
+        attrs["email"] = email
         attrs["user"] = user
         return attrs
+
+
+class AuthResponseSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    email = serializers.EmailField()
+    first_name = serializers.CharField(allow_blank=True)
+    last_name = serializers.CharField(allow_blank=True)
+    date_joined = serializers.DateTimeField()
+    role = serializers.CharField()
+    access_token = serializers.CharField()
+
+
+class RenewAccessTokenResponseSerializer(serializers.Serializer):
+    access_token = serializers.CharField()
+    user_id = serializers.IntegerField()
+    email = serializers.EmailField()
 
 
 class AdminUserSerializer(serializers.ModelSerializer):

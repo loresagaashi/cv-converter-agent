@@ -7,13 +7,23 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, generics
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, extend_schema_view
 
 from apps.api.pagination import StandardPagination
 
 logger = logging.getLogger(__name__)
+
+
+class SchemaFallbackSerializer(serializers.Serializer):
+    pass
+
+
+class DocumentedAPIView(APIView):
+    serializer_class = SchemaFallbackSerializer
 
 from apps.cv.models import CV
 from apps.interview.models import (
@@ -40,7 +50,10 @@ from apps.interview.services import (
 from apps.llm.services import classify_recruiter_answer
 
 
-class CompetencePaperListView(APIView):
+@extend_schema_view(
+    get=extend_schema(operation_id="api_interview_competence_papers_by_cv_retrieve")
+)
+class CompetencePaperListView(DocumentedAPIView):
     """
     List all stored competence papers for a CV.
     """
@@ -68,7 +81,7 @@ class CompetencePaperListView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class CompetencePaperDetailView(APIView):
+class CompetencePaperDetailView(DocumentedAPIView):
     """
     Retrieve a specific stored competence paper by ID.
     """
@@ -89,7 +102,10 @@ class CompetencePaperDetailView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class AllCompetencePapersView(APIView):
+@extend_schema_view(
+    get=extend_schema(operation_id="api_interview_competence_papers_all_retrieve")
+)
+class AllCompetencePapersView(DocumentedAPIView):
     """
     List all stored competence papers for the authenticated user (across all CVs).
     Supports pagination with ?page=1&page_size=50
@@ -112,7 +128,7 @@ class AllCompetencePapersView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-class CompetencePaperDeleteView(APIView):
+class CompetencePaperDeleteView(DocumentedAPIView):
     """
     Delete a specific stored competence paper by ID.
     """
@@ -137,7 +153,7 @@ class CompetencePaperDeleteView(APIView):
         )
 
 
-class AllConversationCompetencePapersView(APIView):
+class AllConversationCompetencePapersView(DocumentedAPIView):
     """
     List all conversation-based competence papers for the authenticated user (across all CVs).
     Supports pagination with ?page=1&page_size=50
@@ -160,7 +176,7 @@ class AllConversationCompetencePapersView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-class ConversationCompetencePaperDetailView(APIView):
+class ConversationCompetencePaperDetailView(DocumentedAPIView):
     """
     Retrieve a specific conversation-based competence paper by ID.
     """
@@ -181,7 +197,7 @@ class ConversationCompetencePaperDetailView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class ConversationCompetencePaperDeleteView(APIView):
+class ConversationCompetencePaperDeleteView(DocumentedAPIView):
     """
     Delete a specific conversation-based competence paper by ID.
     """
@@ -206,7 +222,7 @@ class ConversationCompetencePaperDeleteView(APIView):
         )
 
 
-class ConversationSessionStartView(APIView):
+class ConversationSessionStartView(DocumentedAPIView):
     """
     Start a new ConversationSession for the given CV + original competence paper.
 
@@ -256,7 +272,7 @@ class ConversationSessionStartView(APIView):
         )
 
 
-class ConversationTurnView(APIView):
+class ConversationTurnView(DocumentedAPIView):
     """
     Store a single conversation turn (question + answer) for a session,
     and classify the recruiter answer.
@@ -433,7 +449,7 @@ class ConversationTurnView(APIView):
         )
 
 
-class ConversationSessionGeneratePaperView(APIView):
+class ConversationSessionGeneratePaperView(DocumentedAPIView):
     """
     Generate a conversation-based competence paper for a session.
 
@@ -1128,7 +1144,7 @@ class ConversationSessionGeneratePaperView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class ConversationSessionEndView(APIView):
+class ConversationSessionEndView(DocumentedAPIView):
     """
     End a conversation session early (user manually stops the interview).
     """
@@ -1161,14 +1177,14 @@ class ConversationSessionEndView(APIView):
         )
 
 
-class ConversationCompetencePaperUpdateView(APIView):
+class ConversationCompetencePaperUpdateView(DocumentedAPIView):
     """
     Allow editing of a conversation-based competence paper's content.
     """
 
     permission_classes = [IsAuthenticated]
 
-    def patch(self, request, paper_id):
+    def put(self, request, paper_id):
         conversation_paper = get_object_or_404(ConversationCompetencePaper, pk=paper_id)
 
         if not can_user_access_conversation_paper(request.user, conversation_paper):
@@ -1191,7 +1207,7 @@ class ConversationCompetencePaperUpdateView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class ConversationCompetencePaperPDFView(APIView):
+class ConversationCompetencePaperPDFView(DocumentedAPIView):
     """
     Generate a simple PDF from the stored ConversationCompetencePaper content.
     """

@@ -8,6 +8,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
+from rest_framework import serializers
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -23,6 +24,14 @@ from apps.api.pagination import StandardPagination
 
 
 logger = logging.getLogger(__name__)
+
+
+class SchemaFallbackSerializer(serializers.Serializer):
+    pass
+
+
+class DocumentedAPIView(APIView):
+    serializer_class = SchemaFallbackSerializer
 
 
 class CVUploadView(generics.ListCreateAPIView):
@@ -115,7 +124,7 @@ class CVDetailView(generics.DestroyAPIView):
         return CV.objects.filter(user=self.request.user)
 
 
-class CVTextView(APIView):
+class CVTextView(DocumentedAPIView):
     """
     Read-only endpoint returning the extracted plain text for a single CV.
 
@@ -158,7 +167,7 @@ class CVTextView(APIView):
         )
 
 
-class FormattedCVView(APIView):
+class FormattedCVView(DocumentedAPIView):
     """
     Generate and return a formatted CV PDF for a given uploaded CV.
 
@@ -231,7 +240,7 @@ class FormattedCVView(APIView):
         return response
 
 
-class StructuredCVView(APIView):
+class StructuredCVView(DocumentedAPIView):
     """
     Return the LLM-generated structured CV for a given CV.
     This allows the frontend to show an editable preview and POST back with edits.

@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework import serializers
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -11,7 +12,15 @@ from apps.llm.services import generate_competence_cv
 from apps.interview.models import CompetencePaper
 
 
-class ConvertCVView(APIView):
+class SchemaFallbackSerializer(serializers.Serializer):
+    pass
+
+
+class DocumentedAPIView(APIView):
+    serializer_class = SchemaFallbackSerializer
+
+
+class ConvertCVView(DocumentedAPIView):
     """
     Conversion endpoint:
 
