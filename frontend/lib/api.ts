@@ -1,4 +1,4 @@
-import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV, PaginatedResponse } from "./types";
+import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV, PaginatedResponse, UserSession } from "./types";
 
 function getAccessTokenFromCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -255,7 +255,7 @@ async function handleAuthenticatedBlobResponse(
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
-  console.log("🔥 LOGIN CALLED - API_BASE_URL:", API_BASE_URL);
+  //console.log("🔥 LOGIN CALLED - API_BASE_URL:", API_BASE_URL);
   const res = await fetch(`${API_BASE_URL}/api/users/login/`, {
     method: "POST",
     headers: {
@@ -265,7 +265,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
     body: JSON.stringify({ email, password }),
   });
 
-  console.log("📥 Login response status:", res.status, res.statusText);
+  //console.log("📥 Login response status:", res.status, res.statusText);
   
   if (!res.ok) {
     console.log("❌ Login failed with status:", res.status);
@@ -430,6 +430,41 @@ export async function deleteUser(id: number, token?: string): Promise<void> {
       Authorization: `Bearer ${accessToken}`,
     },
   });
+}
+
+export async function listUserSessions(
+  token?: string,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<PaginatedResponse<UserSession>> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  const params = new URLSearchParams({
+    page: page.toString(),
+    page_size: pageSize.toString(),
+  });
+  return handleAuthenticatedResponse<PaginatedResponse<UserSession>>(
+    `${API_BASE_URL}/api/users/sessions/?${params}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+}
+
+export async function clearExpiredUserSessions(
+  token?: string
+): Promise<{ deleted_count: number }> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<{ deleted_count: number }>(
+    `${API_BASE_URL}/api/users/sessions/clear-expired/`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 }
 
 export async function listCVs(token?: string, page: number = 1, pageSize: number = 50): Promise<PaginatedResponse<CV>> {

@@ -369,65 +369,59 @@ export default function ConversationCompetenceSummariesPage() {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto md:overflow-x-visible -mx-6 px-6 md:mx-0 md:px-0">
-          <div
-            className={`space-y-2 min-w-max md:min-w-0 ${
-              filteredPapers.length > 10 ? "max-h-168 overflow-y-auto pr-1" : ""
-            }`}
-          >
-            {filteredPapers.map((paper) => (
-              <div
-                key={paper.id}
-                onClick={() => handleViewPaper(paper)}
-                className="flex min-w-[760px] md:min-w-0 items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200 cursor-pointer"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="mb-1.5 flex items-center gap-3">
-                    <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">
-                      CONVERSATION BASED
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(paper.created_at).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                  <p className="truncate text-sm font-semibold text-slate-100">
-                    {paper.cv_filename}
-                  </p>
-                  <div className="mt-1 block max-w-[52ch] text-xs text-slate-500 truncate">
-                    {user?.role === "admin" && paper.user_name ? (
-                      <span>{paper.user_name} • </span>
-                    ) : null}
-                    {paper.preview || paper.content.substring(0, 120)}
-                  </div>
-                </div>
-
-                <div className="ml-4 flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleViewPaper(paper);
-                    }}
-                    className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
-                  >
-                    View
-                  </button>
-                  <button
-                    onClick={(e) => handleDeleteClick(e, paper)}
-                    className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 transition-all duration-200"
-                    title="Delete paper"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="overflow-x-auto rounded-lg border border-slate-800/60">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-900/90">
+              <tr className="text-xs uppercase tracking-wide text-slate-400">
+                <th className="px-3 py-2.5 text-left font-semibold">CV File</th>
+                {user?.role === "admin" && (
+                  <th className="px-3 py-2.5 text-left font-semibold">User</th>
+                )}
+                <th className="px-3 py-2.5 text-left font-semibold">Created</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 bg-slate-950/30">
+              {filteredPapers.map((paper) => (
+                <tr
+                  key={paper.id}
+                  onClick={() => handleViewPaper(paper)}
+                  className="hover:bg-slate-900/40 transition-colors cursor-pointer"
+                >
+                  <td className="px-3 py-2.5 text-slate-100 font-medium max-w-60 truncate">{paper.cv_filename}</td>
+                  {user?.role === "admin" && (
+                    <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">{paper.user_name || "—"}</td>
+                  )}
+                  <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
+                    {new Date(paper.created_at).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleViewPaper(paper); }}
+                        className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteClick(e, paper)}
+                        className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 transition-all duration-200"
+                        title="Delete paper"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

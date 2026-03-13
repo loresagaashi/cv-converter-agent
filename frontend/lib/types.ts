@@ -97,3 +97,13 @@ export interface PaginatedResponse<T> {
   hasPrevious: boolean;
 }
 
+export interface UserSession {
+  id: number;
+  user_id: number;
+  user_email: string;
+  user_first_name: string;
+  user_last_name: string;
+  created_at: string;
+  expires_at: string;
+}
+

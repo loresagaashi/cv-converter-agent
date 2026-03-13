@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
+from .models import RefreshToken
+
 User = get_user_model()
 
 
@@ -167,4 +169,28 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+
+class AdminRefreshTokenSessionSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    user_first_name = serializers.CharField(source="user.first_name", read_only=True)
+    user_last_name = serializers.CharField(source="user.last_name", read_only=True)
+
+    class Meta:
+        model = RefreshToken
+        fields = (
+            "id",
+            "user_id",
+            "user_email",
+            "user_first_name",
+            "user_last_name",
+            "created_at",
+            "expires_at",
+        )
+        read_only_fields = fields
+
+
+class ClearExpiredRefreshTokensResponseSerializer(serializers.Serializer):
+    deleted_count = serializers.IntegerField()
 

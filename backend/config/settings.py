@@ -67,7 +67,6 @@ INSTALLED_APPS = [
     'cloudinary',  # Add cloudinary app
     'corsheaders',
     'rest_framework',
-    'rest_framework.authtoken',
     'drf_spectacular',
     'apps.cv',
     'apps.users',

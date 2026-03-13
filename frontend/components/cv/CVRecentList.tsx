@@ -126,32 +126,40 @@ export function CVRecentList() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-          {items.map((cv) => (
-            <Link
-              key={cv.id}
-              href={`/cv/${cv.id}`}
-              className="flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200 group"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-100 group-hover:text-slate-50">
-                  {cv.original_filename}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {new Date(cv.uploaded_at).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
-              <svg className="ml-3 h-4 w-4 shrink-0 text-slate-500 transition-colors group-hover:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          ))}
+        <div className="overflow-x-auto rounded-lg border border-slate-800/60">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-900/90">
+              <tr className="text-xs uppercase tracking-wide text-slate-400">
+                <th className="px-3 py-2.5 text-left font-semibold">Filename</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Uploaded</th>
+                <th className="px-3 py-2.5 text-right font-semibold"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 bg-slate-950/30">
+              {items.map((cv) => (
+                <tr key={cv.id} className="hover:bg-slate-900/40 transition-colors group">
+                  <td className="px-3 py-2.5 text-slate-100 font-medium truncate max-w-60">{cv.original_filename}</td>
+                  <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">
+                    {new Date(cv.uploaded_at).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <Link
+                      href={`/cv/${cv.id}`}
+                      className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                    >
+                      View
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
