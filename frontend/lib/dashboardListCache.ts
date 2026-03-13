@@ -1,4 +1,4 @@
-import type { CV, User } from "@/lib/types";
+import type { CV, User, UserSession } from "@/lib/types";
 import type {
   CompetencePaperWithCV,
   ConversationCompetencePaperWithCV,
@@ -17,6 +17,7 @@ type DashboardListCache = {
   competencePapers: PaginatedSectionCache<CompetencePaperWithCV>;
   conversationPapers: PaginatedSectionCache<ConversationCompetencePaperWithCV>;
   users: PaginatedSectionCache<User>;
+  userSessions: PaginatedSectionCache<UserSession>;
 };
 
 const cache: DashboardListCache = {
@@ -24,6 +25,7 @@ const cache: DashboardListCache = {
   competencePapers: {},
   conversationPapers: {},
   users: {},
+  userSessions: {},
 };
 
 function getPageKey(page: number, pageSize: number) {
@@ -115,4 +117,20 @@ export function setCachedUsers(
 
 export function clearCachedUsers() {
   clearPaginatedCache(cache.users);
+}
+
+export function getCachedUserSessions(page: number, pageSize: number) {
+  return getPaginatedCache(cache.userSessions, page, pageSize);
+}
+
+export function setCachedUserSessions(
+  page: number,
+  pageSize: number,
+  entry: PaginatedCacheEntry<UserSession>
+) {
+  setPaginatedCache(cache.userSessions, page, pageSize, entry);
+}
+
+export function clearCachedUserSessions() {
+  clearPaginatedCache(cache.userSessions);
 }

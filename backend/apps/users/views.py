@@ -13,8 +13,10 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 
 from .serializers import (
+    AdminRefreshTokenSessionSerializer,
     AdminUserSerializer,
     AuthResponseSerializer,
+    ClearExpiredRefreshTokensResponseSerializer,
     LoginSerializer,
     RenewAccessTokenResponseSerializer,
     SignupSerializer,
@@ -321,3 +323,51 @@ class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AdminUserSerializer
     permission_classes = [IsAuthenticated, RolePermission]
     required_roles = ["admin"]
+
+
+class AdminRefreshTokenSessionListView(generics.ListAPIView):
+    """
+    Admin-only endpoint to list refresh token sessions.
+
+    Returns sessions with owner information and start/end timestamps.
+    """
+
+    queryset = RefreshToken.objects.select_related("user").order_by("-created_at")
+    serializer_class = AdminRefreshTokenSessionSerializer
+    permission_classes = [IsAuthenticated, RolePermission]
+    required_roles = ["admin"]
+    pagination_class = StandardPagination
+
+    @extend_schema(
+        summary="List user sessions",
+        description=(
+            "List refresh-token sessions for all users. "
+            "Admin only."
+        ),
+        tags=["Users"],
+        responses={200: AdminRefreshTokenSessionSerializer(many=True)},
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+
+class AdminClearExpiredRefreshTokensView(APIView):
+    """
+    Admin-only endpoint to remove expired refresh token sessions.
+    """
+
+    permission_classes = [IsAuthenticated, RolePermission]
+    required_roles = ["admin"]
+
+    @extend_schema(
+        summary="Clear expired user sessions",
+        description="Delete only expired refresh-token sessions. Admin only.",
+        tags=["Users"],
+        request=None,
+        responses={200: ClearExpiredRefreshTokensResponseSerializer},
+    )
+    def post(self, request):
+        deleted_count, _ = RefreshToken.objects.filter(
+            expires_at__lt=timezone.now()
+        ).delete()
+        return Response({"deleted_count": deleted_count}, status=status.HTTP_200_OK)

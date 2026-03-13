@@ -96,16 +96,28 @@ export default function DashboardLayout({
             Conversation Summaries
           </button>
           {user.role === "admin" && (
-            <button
-              onClick={() => router.push("/dashboard/users")}
-              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                pathname === "/dashboard/users"
-                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
-                  : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
-              }`}
-            >
-              User Management
-            </button>
+            <>
+              <button
+                onClick={() => router.push("/dashboard/users")}
+                className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  pathname === "/dashboard/users"
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                    : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+                }`}
+              >
+                User Management
+              </button>
+              <button
+                onClick={() => router.push("/dashboard/user-sessions")}
+                className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  pathname === "/dashboard/user-sessions"
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                    : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+                }`}
+              >
+                User Sessions
+              </button>
+            </>
           )}
         </nav>
         <div className="mt-auto pt-6 space-y-4">
@@ -241,19 +253,34 @@ export default function DashboardLayout({
               Conversation Summaries
             </button>
             {user.role === "admin" && (
-              <button
-                onClick={() => {
-                  router.push("/dashboard/users");
-                  setSidebarOpen(false);
-                }}
-                className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                  pathname === "/dashboard/users"
-                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
-                    : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
-                }`}
-              >
-                User Management
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    router.push("/dashboard/users");
+                    setSidebarOpen(false);
+                  }}
+                  className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                    pathname === "/dashboard/users"
+                      ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                      : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+                  }`}
+                >
+                  User Management
+                </button>
+                <button
+                  onClick={() => {
+                    router.push("/dashboard/user-sessions");
+                    setSidebarOpen(false);
+                  }}
+                  className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                    pathname === "/dashboard/user-sessions"
+                      ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                      : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+                  }`}
+                >
+                  User Sessions
+                </button>
+              </>
             )}
           </nav>
           <div className="mt-auto pt-6 space-y-4">

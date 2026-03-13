@@ -207,23 +207,21 @@ export function CVTable({ refreshTrigger }: Props) {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto -mx-6 px-6">
-          <div
-            className={`space-y-2 min-w-max ${
-              filtered.length > 10 ? "max-h-168 overflow-y-auto pr-1" : ""
-            }`}
-          >
-            {filtered.map((cv) => (
-              <div
-                key={cv.id}
-                className="flex min-w-[760px] items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-100">
-                    {cv.original_filename}
-                  </p>
-                  <div className="text-xs text-slate-500 mt-1">
-                    <span>{cv.uploaded_by || "You"} • </span>
+        <div className="overflow-x-auto rounded-lg border border-slate-800/60">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-900/90">
+              <tr className="text-xs uppercase tracking-wide text-slate-400">
+                <th className="px-3 py-2.5 text-left font-semibold">Filename</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Uploaded</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 bg-slate-950/30">
+              {filtered.map((cv) => (
+                <tr key={cv.id} className="hover:bg-slate-900/40 transition-colors">
+                  <td className="px-3 py-2.5 text-slate-100 font-medium">{cv.original_filename}</td>
+                  <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">
+                    {cv.uploaded_by || "You"} •{" "}
                     {new Date(cv.uploaded_at).toLocaleString(undefined, {
                       month: "short",
                       day: "numeric",
@@ -231,27 +229,29 @@ export function CVTable({ refreshTrigger }: Props) {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
-                  </div>
-                </div>
-                <div className="ml-4 flex items-center gap-2 shrink-0">
-                  <Link
-                    href={`/cv/${cv.id}`}
-                    className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
-                  >
-                    View
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteModal(cv)}
-                    disabled={deletingId === cv.id}
-                    className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                  >
-                    {deletingId === cv.id ? "Deleting..." : "Delete"}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center gap-2">
+                      <Link
+                        href={`/cv/${cv.id}`}
+                        className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                      >
+                        View
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteModal(cv)}
+                        disabled={deletingId === cv.id}
+                        className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                      >
+                        {deletingId === cv.id ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

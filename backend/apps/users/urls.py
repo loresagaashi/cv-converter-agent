@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AdminClearExpiredRefreshTokensView,
+    AdminRefreshTokenSessionListView,
     AdminUserDetailView,
     AdminUserListCreateView,
     CurrentUserView,
@@ -19,6 +21,12 @@ urlpatterns = [
     path("renew/", RenewAccessTokenView.as_view(), name="renew"),
     path("me/", CurrentUserView.as_view(), name="me"),
     # Admin user management endpoints (RBAC-protected)
+    path("sessions/", AdminRefreshTokenSessionListView.as_view(), name="admin-session-list"),
+    path(
+        "sessions/clear-expired/",
+        AdminClearExpiredRefreshTokensView.as_view(),
+        name="admin-session-clear-expired",
+    ),
     path("", AdminUserListCreateView.as_view(), name="admin-user-list-create"),
     path("<int:pk>/", AdminUserDetailView.as_view(), name="admin-user-detail"),
 ]

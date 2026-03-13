@@ -359,57 +359,58 @@ export default function UsersAdminPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto -mx-6 px-6">
-            <div
-              className={`space-y-2 min-w-max ${
-                filteredUsers.length > 10 ? "max-h-168 overflow-y-auto pr-1" : ""
-              }`}
-            >
-            {filteredUsers.map((u) => (
-              <div
-                key={u.id}
-                className="flex min-w-[760px] items-center justify-between rounded-lg border border-slate-800/60 bg-slate-900/30 px-4 py-3.5 hover:bg-slate-900/50 hover:border-slate-700/80 transition-all duration-200"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3">
-                    <p className="text-sm font-semibold text-slate-100">
+          <div className="overflow-x-auto rounded-lg border border-slate-800/60">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-900/90">
+                <tr className="text-xs uppercase tracking-wide text-slate-400">
+                  <th className="px-3 py-2.5 text-left font-semibold">Name</th>
+                  <th className="px-3 py-2.5 text-left font-semibold">Email</th>
+                  <th className="px-3 py-2.5 text-left font-semibold">Role</th>
+                  <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 bg-slate-950/30">
+                {filteredUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-900/40 transition-colors">
+                    <td className="px-3 py-2.5 text-slate-100 font-medium whitespace-nowrap">
                       {u.first_name || u.last_name
                         ? `${u.first_name} ${u.last_name}`.trim()
                         : "—"}
-                    </p>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        u.role === "admin"
-                          ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
-                          : "bg-slate-700/50 text-slate-200 border border-slate-600/50"
-                      }`}
-                    >
-                      {u.role === "admin" ? "Admin" : "User"}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    {u.email}
-                  </div>
-                </div>
-                <div className="ml-4 flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => openEditForm(u)}
-                    className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => openDeleteModal(u)}
-                    disabled={user?.id === u.id}
-                    className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10 disabled:hover:border-red-500/40"
-                    title={user?.id === u.id ? "You cannot delete your own account" : "Delete user"}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-            </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-400">{u.email}</td>
+                    <td className="px-3 py-2.5">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          u.role === "admin"
+                            ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
+                            : "bg-slate-700/50 text-slate-200 border border-slate-600/50"
+                        }`}
+                      >
+                        {u.role === "admin" ? "Admin" : "User"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          onClick={() => openEditForm(u)}
+                          className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => openDeleteModal(u)}
+                          disabled={user?.id === u.id}
+                          className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10 disabled:hover:border-red-500/40"
+                          title={user?.id === u.id ? "You cannot delete your own account" : "Delete user"}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
