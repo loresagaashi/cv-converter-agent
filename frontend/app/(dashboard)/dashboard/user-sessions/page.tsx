@@ -30,6 +30,10 @@ export default function UserSessionsPage() {
 
   const pageSize = 50;
   const isAdmin = useMemo(() => user?.role === "admin", [user]);
+  const hasExpiredSessions = useMemo(
+    () => sessions.some((session) => new Date(session.expires_at).getTime() < Date.now()),
+    [sessions]
+  );
 
   const loadSessions = useCallback(
     async (showReloadState = false) => {
@@ -70,8 +74,9 @@ export default function UserSessionsPage() {
           totalPages: response.totalPages,
           totalRecords: response.totalRecords,
         });
-      } catch (err: any) {
-        setError(err?.message || "Unable to load user sessions.");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unable to load user sessions.";
+        setError(message);
       } finally {
         setLoading(false);
         setReloading(false);
@@ -112,8 +117,9 @@ export default function UserSessionsPage() {
       const result = await clearExpiredUserSessions(token);
       setMessage(`Deleted ${result.deleted_count} expired token(s).`);
       await loadSessions(true);
-    } catch (err: any) {
-      setError(err?.message || "Unable to clear expired tokens.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unable to clear expired tokens.";
+      setError(message);
     } finally {
       setClearingExpired(false);
     }
@@ -154,10 +160,11 @@ export default function UserSessionsPage() {
             <button
               type="button"
               onClick={() => void handleClearExpired()}
-              disabled={loading || reloading || clearingExpired}
+              disabled={loading || reloading || clearingExpired || !hasExpiredSessions}
               className="inline-flex items-center rounded-lg border border-amber-500/50 bg-amber-500/10 px-3.5 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 hover:border-amber-400/70 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+              title={hasExpiredSessions ? "Clear expired sessions" : "No expired sessions to clear"}
             >
-              {clearingExpired ? "Clearing..." : "Clear Expired Tokens"}
+              {clearingExpired ? "Clearing..." : "Clear expired sessions"}
             </button>
           </div>
         </div>
@@ -186,7 +193,11 @@ export default function UserSessionsPage() {
             <p className="text-sm text-slate-500">Sessions will appear here after users log in.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-800/60">
+          <div
+            className={`overflow-x-auto rounded-lg border border-slate-800/60 ${
+              sessions.length > 10 ? "max-h-149 overflow-y-auto" : ""
+            }`}
+          >
             <table className="min-w-full text-sm">
               <thead className="bg-slate-900/90">
                 <tr className="text-xs uppercase tracking-wide text-slate-400">
@@ -205,7 +216,7 @@ export default function UserSessionsPage() {
                   const isExpired = new Date(session.expires_at).getTime() < Date.now();
 
                   return (
-                    <tr key={session.id} className="hover:bg-slate-900/40 transition-colors">
+                    <tr key={session.id} className="h-10 hover:bg-slate-900/40 transition-colors">
                       <td className="px-3 py-2.5 text-slate-100 font-medium whitespace-nowrap">{displayName}</td>
                       <td className="px-3 py-2.5 text-slate-400">{session.user_email}</td>
                       <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">{formatDateTime(session.created_at)}</td>

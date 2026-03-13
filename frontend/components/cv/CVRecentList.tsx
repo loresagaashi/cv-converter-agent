@@ -126,7 +126,11 @@ export function CVRecentList() {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-800/60">
+        <div
+          className={`overflow-x-auto rounded-lg border border-slate-800/60 ${
+            items.length > 10 ? "max-h-155 overflow-y-auto" : ""
+          }`}
+        >
           <table className="min-w-full text-sm">
             <thead className="bg-slate-900/90">
               <tr className="text-xs uppercase tracking-wide text-slate-400">
@@ -137,7 +141,7 @@ export function CVRecentList() {
             </thead>
             <tbody className="divide-y divide-slate-800/60 bg-slate-950/30">
               {items.map((cv) => (
-                <tr key={cv.id} className="hover:bg-slate-900/40 transition-colors group">
+                <tr key={cv.id} className="h-10 hover:bg-slate-900/40 transition-colors group">
                   <td className="px-3 py-2.5 text-slate-100 font-medium truncate max-w-60">{cv.original_filename}</td>
                   <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">
                     {new Date(cv.uploaded_at).toLocaleString(undefined, {
@@ -151,8 +155,12 @@ export function CVRecentList() {
                   <td className="px-3 py-2.5 text-right">
                     <Link
                       href={`/cv/${cv.id}`}
-                      className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                      className="inline-flex items-center rounded-md border border-slate-700/60 bg-slate-800/40 px-2.5 py-1 text-[11px] font-semibold text-slate-100 leading-none hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
                     >
+                      <svg className="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.46 12C3.73 7.94 7.52 5 12 5s8.27 2.94 9.54 7c-1.27 4.06-5.06 7-9.54 7s-8.27-2.94-9.54-7z" />
+                        <circle cx="12" cy="12" r="3" strokeWidth={1.8} />
+                      </svg>
                       View
                     </Link>
                   </td>
