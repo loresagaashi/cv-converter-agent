@@ -359,7 +359,11 @@ export default function UsersAdminPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-800/60">
+          <div
+            className={`overflow-x-auto rounded-lg border border-slate-800/60 ${
+              filteredUsers.length > 10 ? "max-h-155 overflow-y-auto" : ""
+            }`}
+          >
             <table className="min-w-full text-sm">
               <thead className="bg-slate-900/90">
                 <tr className="text-xs uppercase tracking-wide text-slate-400">
@@ -371,7 +375,7 @@ export default function UsersAdminPage() {
               </thead>
               <tbody className="divide-y divide-slate-800/60 bg-slate-950/30">
                 {filteredUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-900/40 transition-colors">
+                  <tr key={u.id} className="h-10 hover:bg-slate-900/40 transition-colors">
                     <td className="px-3 py-2.5 text-slate-100 font-medium whitespace-nowrap">
                       {u.first_name || u.last_name
                         ? `${u.first_name} ${u.last_name}`.trim()
@@ -393,16 +397,22 @@ export default function UsersAdminPage() {
                       <div className="inline-flex items-center gap-2">
                         <button
                           onClick={() => openEditForm(u)}
-                          className="inline-flex items-center rounded-lg border border-slate-700/60 bg-slate-800/40 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                          className="inline-flex items-center rounded-md border border-slate-700/60 bg-slate-800/40 px-2.5 py-1 text-[11px] font-semibold text-slate-100 leading-none hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
                         >
+                          <svg className="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M16.5 3.5a2.121 2.121 0 113 3L12 14l-4 1 1-4 7.5-7.5z" />
+                          </svg>
                           Edit
                         </button>
                         <button
                           onClick={() => openDeleteModal(u)}
                           disabled={user?.id === u.id}
-                          className="inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:border-red-500/60 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10 disabled:hover:border-red-500/40"
+                          className="inline-flex items-center rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-200 leading-none hover:bg-red-500/20 hover:border-red-500/60 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10 disabled:hover:border-red-500/40"
                           title={user?.id === u.id ? "You cannot delete your own account" : "Delete user"}
                         >
+                          <svg className="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
                           Delete
                         </button>
                       </div>
