@@ -1,29 +1,17 @@
 import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV, PaginatedResponse, UserSession } from "./types";
 
-function getAccessTokenFromCookie(): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(
-    new RegExp(`(?:^|; )access_token=([^;]*)`)
-  );
-  return match ? decodeURIComponent(match[1]) : null;
+let inMemoryToken: string | null = null;
+
+export function setInMemoryAccessToken(token: string | null): void {
+  inMemoryToken = token;
 }
 
-function clearAuthCookies() {
-  if (typeof document === "undefined") return;
-  const cookieNames = ["access_token", "refresh_token"];
-  cookieNames.forEach((name) => {
-    document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
-  });
+export function getInMemoryAccessToken(): string | null {
+  return inMemoryToken;
 }
 
 function clearAllAuthState() {
-  // Clear cookies
-  clearAuthCookies();
-  
-  // Clear localStorage
-  if (typeof localStorage !== "undefined") {
-    localStorage.removeItem("user");
-  }
+  setInMemoryAccessToken(null);
 }
 
 function showSessionExpiredMessage() {
@@ -180,9 +168,8 @@ async function fetchWithAuthRetry(
   const fetchOptions = { ...options };
   delete (fetchOptions as any).retryCount;
 
-  // Always derive auth from the latest cookie state so stale in-memory tokens
-  // don't keep requests authenticated after the cookie is removed.
-  const token = getAccessTokenFromCookie();
+  // Always derive auth from in-memory state.
+  const token = getInMemoryAccessToken();
   const headers = new Headers(fetchOptions.headers || undefined);
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
@@ -281,7 +268,9 @@ export async function login(email: string, password: string): Promise<AuthRespon
     return handleResponse<AuthResponse>(newRes);
   }
 
-  return handleResponse<AuthResponse>(res);
+  const auth = await handleResponse<AuthResponse>(res);
+  setInMemoryAccessToken(auth.access_token);
+  return auth;
 }
 
 export async function signup(payload: {
@@ -299,10 +288,13 @@ export async function signup(payload: {
     body: JSON.stringify(payload),
   });
 
-  return handleResponse<AuthResponse>(res);
+  const auth = await handleResponse<AuthResponse>(res);
+  setInMemoryAccessToken(auth.access_token);
+  return auth;
 }
 
 export async function logout(): Promise<void> {
+  setInMemoryAccessToken(null);
   const res = await fetch(`${API_BASE_URL}/api/users/logout/`, {
     method: "POST",
     credentials: "include",
@@ -322,7 +314,8 @@ export async function logout(): Promise<void> {
   }
 }
 
-export async function renewAccessToken(): Promise<AuthResponse> {
+export async function renewAccessToken(options?: { silent?: boolean }): Promise<AuthResponse> {
+  const silent = options?.silent === true;
   const res = await fetch(`${API_BASE_URL}/api/users/renew/`, {
     method: "POST",
     credentials: "include",
@@ -340,19 +333,24 @@ export async function renewAccessToken(): Promise<AuthResponse> {
       // ignore JSON parsing errors
     }
 
-    // Show session expired message and redirect
-    showSessionExpiredMessage();
+    // For request-retry flows we show an expiration message; for boot hydration
+    // we fail silently and let AuthContext set user state to logged out.
+    if (!silent) {
+      showSessionExpiredMessage();
+    }
 
     const error = new Error(detail);
     (error as any).status = res.status;
     throw error;
   }
 
-  return handleResponse<AuthResponse>(res);
+  const auth = await handleResponse<AuthResponse>(res);
+  setInMemoryAccessToken(auth.access_token);
+  return auth;
 }
 
 export async function getCurrentUser(token?: string): Promise<User> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<User>(`${API_BASE_URL}/api/users/me/`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -382,7 +380,7 @@ export interface AdminUserUpdatePayload {
 }
 
 export async function listUsers(token?: string, page: number = 1, pageSize: number = 50): Promise<PaginatedResponse<User>> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   const params = new URLSearchParams({ page: page.toString(), page_size: pageSize.toString() });
   return handleAuthenticatedResponse<PaginatedResponse<User>>(`${API_BASE_URL}/api/users/?${params}`, {
     headers: {
@@ -395,7 +393,7 @@ export async function createUser(
   payload: AdminUserPayload,
   token?: string
 ): Promise<User> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<User>(`${API_BASE_URL}/api/users/`, {
     method: "POST",
     headers: {
@@ -411,7 +409,7 @@ export async function updateUser(
   payload: AdminUserUpdatePayload,
   token?: string
 ): Promise<User> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<User>(`${API_BASE_URL}/api/users/${id}/`, {
     method: "PATCH",
     headers: {
@@ -423,7 +421,7 @@ export async function updateUser(
 }
 
 export async function deleteUser(id: number, token?: string): Promise<void> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   await handleAuthenticatedResponse<void>(`${API_BASE_URL}/api/users/${id}/`, {
     method: "DELETE",
     headers: {
@@ -437,7 +435,7 @@ export async function listUserSessions(
   page: number = 1,
   pageSize: number = 50
 ): Promise<PaginatedResponse<UserSession>> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   const params = new URLSearchParams({
     page: page.toString(),
     page_size: pageSize.toString(),
@@ -455,7 +453,7 @@ export async function listUserSessions(
 export async function clearExpiredUserSessions(
   token?: string
 ): Promise<{ deleted_count: number }> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<{ deleted_count: number }>(
     `${API_BASE_URL}/api/users/sessions/clear-expired/`,
     {
@@ -468,7 +466,7 @@ export async function clearExpiredUserSessions(
 }
 
 export async function listCVs(token?: string, page: number = 1, pageSize: number = 50): Promise<PaginatedResponse<CV>> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   const params = new URLSearchParams({ page: page.toString(), page_size: pageSize.toString() });
   return handleAuthenticatedResponse<PaginatedResponse<CV>>(`${API_BASE_URL}/api/cv/upload/?${params}`, {
     headers: {
@@ -478,7 +476,7 @@ export async function listCVs(token?: string, page: number = 1, pageSize: number
 }
 
 export async function deleteCV(id: number, token?: string): Promise<void> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   await handleAuthenticatedResponse<void>(`${API_BASE_URL}/api/cv/${id}/`, {
     method: "DELETE",
     headers: {
@@ -488,7 +486,7 @@ export async function deleteCV(id: number, token?: string): Promise<void> {
 }
 
 export async function bulkDeleteCVs(ids: number[], token?: string): Promise<{ deleted_count: number }> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<{ deleted_count: number }>(`${API_BASE_URL}/api/cv/bulk-delete/`, {
     method: "DELETE",
     headers: {
@@ -503,7 +501,7 @@ export async function uploadCV(
   file: File,
   token?: string
 ): Promise<CV> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   const formData = new FormData();
   formData.append("file", file);
 
@@ -520,7 +518,7 @@ export async function getCVText(
   id: number,
   token?: string
 ): Promise<CVTextResponse> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<CVTextResponse>(`${API_BASE_URL}/api/cv/${id}/text/`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -532,7 +530,7 @@ export async function convertCV(
   id: number,
   token?: string
 ): Promise<ConvertCVResponse> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<ConvertCVResponse>(`${API_BASE_URL}/api/convert/`, {
     method: "POST",
     headers: {
@@ -547,7 +545,7 @@ export async function downloadFormattedCV(
   id: number,
   token?: string
 ): Promise<Blob> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedBlobResponse(`${API_BASE_URL}/api/cv/${id}/formatted/`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -559,7 +557,7 @@ export async function getStructuredCV(
   id: number,
   token?: string
 ): Promise<StructuredCV> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<StructuredCV>(`${API_BASE_URL}/api/cv/${id}/structured/`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -587,7 +585,7 @@ export async function getCompetencePapers(
   cvId: number,
   token?: string
 ): Promise<CompetencePaperListResponse> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<CompetencePaperListResponse>(
     `${API_BASE_URL}/api/interview/competence-papers/${cvId}/`,
     {
@@ -602,7 +600,7 @@ export async function getCompetencePaper(
   paperId: number,
   token?: string
 ): Promise<CompetencePaper> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<CompetencePaper>(
     `${API_BASE_URL}/api/interview/competence-paper/${paperId}/`,
     {
@@ -630,7 +628,7 @@ export async function getAllCompetencePapers(
   page: number = 1,
   pageSize: number = 50
 ): Promise<PaginatedResponse<CompetencePaperWithCV>> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   const params = new URLSearchParams({ page: page.toString(), page_size: pageSize.toString() });
   return handleAuthenticatedResponse<PaginatedResponse<CompetencePaperWithCV>>(
     `${API_BASE_URL}/api/interview/competence-papers/?${params}`,
@@ -646,7 +644,7 @@ export async function deleteCompetencePaper(
   paperId: number,
   token?: string
 ): Promise<void> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   await handleAuthenticatedResponse<void>(
     `${API_BASE_URL}/api/interview/competence-paper/${paperId}/delete/`,
     {
@@ -662,7 +660,7 @@ export async function bulkDeleteCompetencePapers(
   ids: number[],
   token?: string
 ): Promise<{ deleted_count: number }> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<{ deleted_count: number }>(
     `${API_BASE_URL}/api/interview/competence-papers/bulk-delete/`,
     {
@@ -706,7 +704,7 @@ export async function getAllConversationCompetencePapers(
   page: number = 1,
   pageSize: number = 50
 ): Promise<PaginatedResponse<ConversationCompetencePaperWithCV>> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   const params = new URLSearchParams({ page: page.toString(), page_size: pageSize.toString() });
   return handleAuthenticatedResponse<PaginatedResponse<ConversationCompetencePaperWithCV>>(
     `${API_BASE_URL}/api/interview/conversation-competence-papers/?${params}`,
@@ -722,7 +720,7 @@ export async function getConversationCompetencePaper(
   paperId: number,
   token?: string
 ): Promise<ConversationCompetencePaper> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<ConversationCompetencePaper>(
     `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/`,
     {
@@ -737,7 +735,7 @@ export async function deleteConversationCompetencePaper(
   paperId: number,
   token?: string
 ): Promise<void> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   await handleAuthenticatedResponse<void>(
     `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/delete/`,
     {
@@ -753,7 +751,7 @@ export async function bulkDeleteConversationCompetencePapers(
   ids: number[],
   token?: string
 ): Promise<{ deleted_count: number }> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<{ deleted_count: number }>(
     `${API_BASE_URL}/api/interview/conversation-competence-papers/bulk-delete/`,
     {
@@ -775,7 +773,7 @@ export async function exportEditedCV(
   type: "cv" | "competence" = "cv",
   status?: string
 ): Promise<Blob> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedBlobResponse(`${API_BASE_URL}/api/cv/${id}/structured/`, {
     method: "POST",
     headers: {
@@ -805,7 +803,7 @@ export async function startConversationSession(
   paperId: number,
   token?: string
 ): Promise<ConversationSessionStartResponse> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<ConversationSessionStartResponse>(
     `${API_BASE_URL}/api/interview/conversation-session/start/`,
     {
@@ -839,7 +837,7 @@ export async function createConversationTurn(
   payload: ConversationTurnPayload,
   token?: string
 ): Promise<ConversationTurnResponse> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<ConversationTurnResponse>(
     `${API_BASE_URL}/api/interview/conversation-session/turn/`,
     {
@@ -857,7 +855,7 @@ export async function generateConversationCompetencePaper(
   sessionId: number,
   token?: string
 ): Promise<ConversationCompetencePaperWithCV> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<ConversationCompetencePaperWithCV>(
     `${API_BASE_URL}/api/interview/conversation-session/${sessionId}/generate-paper/`,
     {
@@ -874,7 +872,7 @@ export async function updateConversationCompetencePaper(
   content: string,
   token?: string
 ): Promise<ConversationCompetencePaperWithCV> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<ConversationCompetencePaperWithCV>(
     `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/edit/`,
     {
@@ -892,7 +890,7 @@ export async function downloadConversationCompetencePaperPdf(
   paperId: number,
   token?: string
 ): Promise<Blob> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedBlobResponse(
     `${API_BASE_URL}/api/interview/conversation-competence-paper/${paperId}/pdf/`,
     {
@@ -912,7 +910,7 @@ export async function playTextToSpeech(
   signal?: AbortSignal,
   token?: string
 ): Promise<HTMLAudioElement> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   const res = await fetchWithAuthRetry(`${API_BASE_URL}/api/llm/tts/`, {
     method: "POST",
     headers: {
@@ -947,7 +945,7 @@ export async function endConversationSession(
   sessionId: number,
   token?: string
 ): Promise<{ detail: string; status: string }> {
-  const accessToken = getAccessTokenFromCookie() || token;
+  const accessToken = getInMemoryAccessToken() || token;
   return handleAuthenticatedResponse<{ detail: string; status: string }>(
     `${API_BASE_URL}/api/interview/conversation-session/${sessionId}/end/`,
     {
@@ -958,4 +956,5 @@ export async function endConversationSession(
     }
   );
 }
+
 
