@@ -64,7 +64,7 @@ class SignupView(generics.CreateAPIView):
 
     @extend_schema(
         summary="Create account",
-        description="Register a new user account and return JWT access token in response and cookie.",
+        description="Register a new user account and return JWT access token in response.",
         tags=["Users"],
         request=SignupSerializer,
         responses={
@@ -83,14 +83,6 @@ class SignupView(generics.CreateAPIView):
         data["access_token"] = access_token
         headers = self.get_success_headers(data)
         response = Response(data, status=status.HTTP_201_CREATED, headers=headers)
-        response.set_cookie(
-            "access_token",
-            access_token,
-            max_age=ACCESS_TOKEN_TTL_MINUTES * 60,
-            httponly=False,
-            secure=True,
-            samesite=REFRESH_TOKEN_COOKIE_SAMESITE,
-        )
         response.set_cookie(
             REFRESH_TOKEN_COOKIE_NAME,
             refresh_token,
@@ -132,14 +124,6 @@ class LoginView(APIView):
         data["access_token"] = access_token
 
         response = Response(data, status=status.HTTP_200_OK)
-        response.set_cookie(
-            "access_token",
-            access_token,
-            max_age=ACCESS_TOKEN_TTL_MINUTES * 60,
-            httponly=False,
-            secure=True,
-            samesite=REFRESH_TOKEN_COOKIE_SAMESITE,
-        )
         response.set_cookie(
             REFRESH_TOKEN_COOKIE_NAME,
             refresh_token,
@@ -258,19 +242,7 @@ class RenewAccessTokenView(APIView):
             "user_id": user.id,
             "email": user.email,
         }
-        response = Response(data, status=status.HTTP_200_OK)
-
-        # Set new access token in cookie (frontend will read from cookie)
-        response.set_cookie(
-            "access_token",
-            new_access_token,
-            max_age=ACCESS_TOKEN_TTL_MINUTES * 60,
-            httponly=False,
-            secure=True,
-            samesite=REFRESH_TOKEN_COOKIE_SAMESITE,
-        )
-
-        return response
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class CurrentUserView(APIView):
