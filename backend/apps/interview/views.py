@@ -153,6 +153,36 @@ class CompetencePaperDeleteView(DocumentedAPIView):
         )
 
 
+class CompetencePaperBulkDeleteView(DocumentedAPIView):
+    """
+    Bulk-delete multiple competence papers.
+    Only papers the requesting user owns (or all, if admin) will be deleted.
+
+    DELETE body: {"ids": [1, 2, 3]}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list) or len(ids) == 0:
+            return Response(
+                {"detail": "A non-empty list of ids is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if getattr(request.user, 'is_staff', False):
+            qs = CompetencePaper.objects.filter(id__in=ids)
+        else:
+            qs = CompetencePaper.objects.filter(id__in=ids, cv__user=request.user)
+
+        deleted_count, _ = qs.delete()
+        return Response(
+            {"deleted_count": deleted_count},
+            status=status.HTTP_200_OK,
+        )
+
+
 class AllConversationCompetencePapersView(DocumentedAPIView):
     """
     List all conversation-based competence papers for the authenticated user (across all CVs).
@@ -219,6 +249,39 @@ class ConversationCompetencePaperDeleteView(DocumentedAPIView):
         return Response(
             {"detail": "Conversation competence paper deleted successfully."},
             status=status.HTTP_200_OK
+        )
+
+
+class ConversationCompetencePaperBulkDeleteView(DocumentedAPIView):
+    """
+    Bulk-delete multiple conversation-based competence papers.
+    Only papers the requesting user owns (or all, if admin) will be deleted.
+
+    DELETE body: {"ids": [1, 2, 3]}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list) or len(ids) == 0:
+            return Response(
+                {"detail": "A non-empty list of ids is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if getattr(request.user, 'is_staff', False):
+            qs = ConversationCompetencePaper.objects.filter(id__in=ids)
+        else:
+            qs = ConversationCompetencePaper.objects.filter(
+                id__in=ids,
+                conversation_session__cv__user=request.user,
+            )
+
+        deleted_count, _ = qs.delete()
+        return Response(
+            {"deleted_count": deleted_count},
+            status=status.HTTP_200_OK,
         )
 
 

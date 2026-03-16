@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import CVDetailView, CVTextView, CVUploadView, FormattedCVView, StructuredCVView
+from .views import CVBulkDeleteView, CVDetailView, CVTextView, CVUploadView, FormattedCVView, StructuredCVView
 
 app_name = "cv"
 
@@ -10,5 +10,6 @@ urlpatterns = [
     path("<int:pk>/text/", CVTextView.as_view(), name="text"),
     path("<int:pk>/structured/", StructuredCVView.as_view(), name="structured"),
     path("<int:pk>/formatted/", FormattedCVView.as_view(), name="formatted"),
+    path("bulk-delete/", CVBulkDeleteView.as_view(), name="bulk-delete"),
 ]
 

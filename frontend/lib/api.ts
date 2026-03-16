@@ -487,6 +487,18 @@ export async function deleteCV(id: number, token?: string): Promise<void> {
   });
 }
 
+export async function bulkDeleteCVs(ids: number[], token?: string): Promise<{ deleted_count: number }> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<{ deleted_count: number }>(`${API_BASE_URL}/api/cv/bulk-delete/`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export async function uploadCV(
   file: File,
   token?: string
@@ -646,6 +658,24 @@ export async function deleteCompetencePaper(
   );
 }
 
+export async function bulkDeleteCompetencePapers(
+  ids: number[],
+  token?: string
+): Promise<{ deleted_count: number }> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<{ deleted_count: number }>(
+    `${API_BASE_URL}/api/interview/competence-papers/bulk-delete/`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ ids }),
+    }
+  );
+}
+
 // Conversation-based competence papers
 export interface ConversationCompetencePaper {
   id: number;
@@ -715,6 +745,24 @@ export async function deleteConversationCompetencePaper(
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
+    }
+  );
+}
+
+export async function bulkDeleteConversationCompetencePapers(
+  ids: number[],
+  token?: string
+): Promise<{ deleted_count: number }> {
+  const accessToken = getAccessTokenFromCookie() || token;
+  return handleAuthenticatedResponse<{ deleted_count: number }>(
+    `${API_BASE_URL}/api/interview/conversation-competence-papers/bulk-delete/`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ ids }),
     }
   );
 }

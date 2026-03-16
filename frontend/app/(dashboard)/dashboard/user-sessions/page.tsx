@@ -143,9 +143,7 @@ export default function UserSessionsPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:block">
-              {sessions.length} on page • {totalRecords} total
-            </span>
+
             <button
               type="button"
               onClick={() => void loadSessions(true)}
@@ -239,16 +237,21 @@ export default function UserSessionsPage() {
             </table>
           </div>
         )}
+        <p className="mt-3 text-center text-xs text-slate-500">
+          {sessions.length} on page • {totalRecords} total
+        </p>
       </div>
 
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        hasNext={currentPage < totalPages}
-        hasPrevious={currentPage > 1}
-        onPageChange={setCurrentPage}
-        isLoading={loading || reloading || clearingExpired}
-      />
+      <div className="mt-3 flex flex-col items-center">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          hasNext={currentPage < totalPages}
+          hasPrevious={currentPage > 1}
+          onPageChange={setCurrentPage}
+          isLoading={loading || reloading || clearingExpired}
+        />
+      </div>
     </div>
   );
 }

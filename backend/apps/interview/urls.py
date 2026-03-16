@@ -3,9 +3,11 @@ from django.urls import path
 from .views import (
     AllCompetencePapersView,
     AllConversationCompetencePapersView,
+    CompetencePaperBulkDeleteView,
     CompetencePaperDeleteView,
     CompetencePaperDetailView,
     CompetencePaperListView,
+    ConversationCompetencePaperBulkDeleteView,
     ConversationCompetencePaperDeleteView,
     ConversationCompetencePaperDetailView,
     ConversationCompetencePaperPDFView,
@@ -40,9 +42,19 @@ urlpatterns = [
         name="all-competence-papers",
     ),
     path(
+        "competence-papers/bulk-delete/",
+        CompetencePaperBulkDeleteView.as_view(),
+        name="competence-papers-bulk-delete",
+    ),
+    path(
         "conversation-competence-papers/",
         AllConversationCompetencePapersView.as_view(),
         name="all-conversation-competence-papers",
+    ),
+    path(
+        "conversation-competence-papers/bulk-delete/",
+        ConversationCompetencePaperBulkDeleteView.as_view(),
+        name="conversation-competence-papers-bulk-delete",
     ),
     path(
         "conversation-competence-paper/<int:paper_id>/",
