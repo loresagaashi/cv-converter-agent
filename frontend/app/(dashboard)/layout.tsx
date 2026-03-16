@@ -358,6 +358,7 @@ export default function DashboardLayout({
               {pathname === "/dashboard/competence-summaries" && "Competence Summaries"}
               {pathname === "/dashboard/conversation-competence-summaries" && "Conversation Summaries"}
               {pathname === "/dashboard/users" && "User Management"}
+              {pathname === "/dashboard/user-sessions" && "User Sessions"}
               {pathname?.startsWith("/cv/") && "CV Details"}
             </h1>
           </div>

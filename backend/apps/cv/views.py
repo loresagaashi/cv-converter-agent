@@ -124,6 +124,37 @@ class CVDetailView(generics.DestroyAPIView):
         return CV.objects.filter(user=self.request.user)
 
 
+class CVBulkDeleteView(DocumentedAPIView):
+    """
+    Bulk-delete CVs by a list of IDs.
+    Admins can delete any CV; regular users can only delete their own.
+
+    DELETE body: {"ids": [1, 2, 3]}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list) or len(ids) == 0:
+            return Response(
+                {"detail": "A non-empty list of ids is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Scope to user-owned CVs unless admin
+        if getattr(request.user, 'is_staff', False):
+            qs = CV.objects.filter(id__in=ids)
+        else:
+            qs = CV.objects.filter(id__in=ids, user=request.user)
+
+        deleted_count, _ = qs.delete()
+        return Response(
+            {"deleted_count": deleted_count},
+            status=status.HTTP_200_OK,
+        )
+
+
 class CVTextView(DocumentedAPIView):
     """
     Read-only endpoint returning the extracted plain text for a single CV.
