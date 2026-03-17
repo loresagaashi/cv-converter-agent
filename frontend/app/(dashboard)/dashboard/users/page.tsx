@@ -67,6 +67,18 @@ export default function UsersAdminPage() {
 
   const isAdmin = useMemo(() => user?.role === "admin", [user]);
 
+  const getErrorMessage = useCallback((err: unknown, fallback: string) => {
+    if (err instanceof Error && err.message) return err.message;
+    return fallback;
+  }, []);
+
+  const formatLastLogin = useCallback((value?: string | null) => {
+    if (!value) return "Never";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Invalid date";
+    return parsed.toLocaleString();
+  }, []);
+
   const loadUsers = useCallback(
     async (showReloadState = false) => {
       if (!token || !isAdmin) return;
@@ -106,14 +118,14 @@ export default function UsersAdminPage() {
           totalPages: response.totalPages,
           totalRecords: response.totalRecords,
         });
-      } catch (err: any) {
-        setError(err?.message || "Unable to load users.");
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, "Unable to load users."));
       } finally {
         setLoading(false);
         setReloading(false);
       }
     },
-    [currentPage, isAdmin, pageSize, token]
+    [currentPage, getErrorMessage, isAdmin, pageSize, token]
   );
 
   useEffect(() => {
@@ -130,23 +142,6 @@ export default function UsersAdminPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [search]);
-
-  if (!user || !token) {
-    return null;
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="space-y-2">
-        <h1 className="text-xl font-semibold text-slate-50">
-          User Management
-        </h1>
-        <p className="text-sm text-slate-400">
-          You do not have permission to access this page.
-        </p>
-      </div>
-    );
-  }
 
   const handleReloadUsers = async () => {
     await loadUsers(true);
@@ -214,8 +209,8 @@ export default function UsersAdminPage() {
       setFormOpen(false);
       setFormState(emptyForm);
       setShowPassword(false);
-    } catch (err: any) {
-      setError(err?.message || "Unable to save user.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Unable to save user."));
     } finally {
       setSubmitting(false);
     }
@@ -245,8 +240,8 @@ export default function UsersAdminPage() {
       await deleteUser(deleteTarget.id);
       await loadUsers(true);
       setDeleteTarget(null);
-    } catch (err: any) {
-      setError(err?.message || "Unable to delete user.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Unable to delete user."));
     } finally {
       setDeleting(false);
     }
@@ -264,6 +259,23 @@ export default function UsersAdminPage() {
       );
     });
   }, [search, users]);
+
+  if (!user || !token) {
+    return null;
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="space-y-2">
+        <h1 className="text-xl font-semibold text-slate-50">
+          User Management
+        </h1>
+        <p className="text-sm text-slate-400">
+          You do not have permission to access this page.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -297,6 +309,7 @@ export default function UsersAdminPage() {
                 type="button"
                 onClick={() => void handleReloadUsers()}
                 disabled={loading || reloading}
+                aria-label="Reload users"
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-700/70 bg-slate-900/70 text-slate-200 hover:bg-slate-800/80 hover:border-slate-600/80 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
                 title="Reload user records"
               >
@@ -335,7 +348,7 @@ export default function UsersAdminPage() {
             {Array.from({ length: 4 }).map((_, idx) => (
               <div
                 key={idx}
-                className="h-16 rounded-lg bg-white/10 animate-pulse"
+                className="h-16 rounded-lg bg-white/10"
               />
             ))}
           </div>
@@ -372,6 +385,7 @@ export default function UsersAdminPage() {
                   <th className="px-3 py-2.5 text-left font-semibold">Name</th>
                   <th className="px-3 py-2.5 text-left font-semibold">Email</th>
                   <th className="px-3 py-2.5 text-left font-semibold">Role</th>
+                  <th className="px-3 py-2.5 text-left font-semibold">Last Login</th>
                   <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -393,6 +407,9 @@ export default function UsersAdminPage() {
                       >
                         {u.role === "admin" ? "Admin" : "User"}
                       </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">
+                      {formatLastLogin(u.last_login)}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-2">

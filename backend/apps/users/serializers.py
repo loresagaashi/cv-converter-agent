@@ -25,9 +25,10 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "date_joined",
+            "last_login",
             "role",
         )
-        read_only_fields = ("id", "email", "date_joined", "role")
+        read_only_fields = ("id", "email", "date_joined", "last_login", "role")
 
     def get_role(self, obj) -> str:
         return "admin" if getattr(obj, "is_staff", False) else "user"
@@ -119,9 +120,10 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "last_name",
             "password",
             "date_joined",
+            "last_login",
             "role",
         )
-        read_only_fields = ("id", "date_joined")
+        read_only_fields = ("id", "date_joined", "last_login")
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

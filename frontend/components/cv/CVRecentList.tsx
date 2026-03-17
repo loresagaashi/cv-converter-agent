@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { listCVs } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -17,7 +17,12 @@ export function CVRecentList() {
   const recentPage = 1;
   const recentPageSize = 10;
 
-  const loadRecentCVs = async (force = false) => {
+  const getErrorMessage = useCallback((err: unknown, fallback: string) => {
+    if (err instanceof Error && err.message) return err.message;
+    return fallback;
+  }, []);
+
+  const loadRecentCVs = useCallback(async (force = false) => {
     if (!token) return;
 
     if (!force) {
@@ -46,17 +51,17 @@ export function CVRecentList() {
         totalPages: response.totalPages,
         totalRecords: response.totalRecords,
       });
-    } catch (err: any) {
-      setError(err?.message || "Failed to load recent CVs.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to load recent CVs."));
     } finally {
       setLoading(false);
       setReloading(false);
     }
-  };
+  }, [getErrorMessage, recentPage, recentPageSize, token]);
 
   useEffect(() => {
     void loadRecentCVs(false);
-  }, [token]);
+  }, [loadRecentCVs]);
 
   if (!token) {
     return null;
@@ -67,7 +72,7 @@ export function CVRecentList() {
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-50 mb-1.5">Recent CVs</h2>
-          <p className="text-sm text-slate-400 leading-relaxed">
+          <p className="text-sm text-slate-300 leading-relaxed">
             Your most recently uploaded CVs
           </p>
         </div>
@@ -77,7 +82,8 @@ export function CVRecentList() {
             type="button"
             onClick={() => void loadRecentCVs(true)}
             disabled={loading || reloading}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/70 bg-slate-900/70 text-slate-200 hover:bg-slate-800/80 hover:border-slate-600/80 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+            aria-label="Reload recent CVs"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/70 bg-slate-900/70 text-slate-200 hover:bg-slate-800/80 hover:border-slate-600/80 disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-200"
             title="Reload recent CV records"
           >
             <svg className={`h-4 w-4 ${reloading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -87,7 +93,7 @@ export function CVRecentList() {
           {items.length > 0 && (
             <Link
               href="/dashboard/cvs"
-              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400/50 transition-all duration-200"
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400/50 transition-colors duration-200"
             >
               <span>View</span>
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -102,7 +108,7 @@ export function CVRecentList() {
           {Array.from({ length: 3 }).map((_, idx) => (
             <div
               key={idx}
-              className="h-14 rounded-lg bg-white/10 animate-pulse"
+              className="h-14 rounded-lg bg-white/10"
             />
           ))}
         </div>
@@ -121,7 +127,7 @@ export function CVRecentList() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           <p className="text-sm font-medium text-slate-300 mb-1">No CVs yet</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-400">
             Upload your first CV above to get started
           </p>
         </div>
@@ -143,7 +149,7 @@ export function CVRecentList() {
               {items.map((cv) => (
                 <tr key={cv.id} className="h-10 hover:bg-slate-900/40 transition-colors group">
                   <td className="px-3 py-2.5 text-slate-100 font-medium truncate max-w-60">{cv.original_filename}</td>
-                  <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">
+                  <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
                     {new Date(cv.uploaded_at).toLocaleString(undefined, {
                       month: "short",
                       day: "numeric",
@@ -155,7 +161,7 @@ export function CVRecentList() {
                   <td className="px-3 py-2.5 text-right">
                     <Link
                       href={`/cv/${cv.id}`}
-                      className="inline-flex items-center rounded-md border border-slate-700/60 bg-slate-800/40 px-2.5 py-1 text-[11px] font-semibold text-slate-100 leading-none hover:bg-slate-800/60 hover:border-slate-600/80 transition-all duration-200"
+                      className="inline-flex items-center rounded-md border border-slate-700/60 bg-slate-800/40 px-2.5 py-1 text-[11px] font-semibold text-slate-100 leading-none hover:bg-slate-800/60 hover:border-slate-600/80 transition-colors duration-200"
                     >
                       <svg className="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.46 12C3.73 7.94 7.52 5 12 5s8.27 2.94 9.54 7c-1.27 4.06-5.06 7-9.54 7s-8.27-2.94-9.54-7z" />

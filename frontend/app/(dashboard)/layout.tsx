@@ -30,8 +30,8 @@ export default function DashboardLayout({
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950" suppressHydrationWarning>
         <div className="text-center space-y-3" suppressHydrationWarning>
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent"></div>
-          <p className="text-sm text-slate-400">Loading your workspace...</p>
+          <div className="inline-block h-8 w-8 rounded-full border-4 border-solid border-emerald-500 border-r-transparent"></div>
+          <p className="text-sm text-slate-300">Loading your workspace...</p>
         </div>
       </div>
     );
@@ -57,7 +57,7 @@ export default function DashboardLayout({
         <nav className="space-y-1.5 flex-1">
           <button
             onClick={() => router.push("/dashboard")}
-            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
               pathname === "/dashboard"
                 ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                 : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -67,7 +67,7 @@ export default function DashboardLayout({
           </button>
           <button
             onClick={() => router.push("/dashboard/cvs")}
-            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
               pathname === "/dashboard/cvs"
                 ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                 : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -77,7 +77,7 @@ export default function DashboardLayout({
           </button>
           <button
             onClick={() => router.push("/dashboard/competence-summaries")}
-            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
               pathname === "/dashboard/competence-summaries"
                 ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                 : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -87,7 +87,7 @@ export default function DashboardLayout({
           </button>
           <button
             onClick={() => router.push("/dashboard/conversation-competence-summaries")}
-            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
               pathname === "/dashboard/conversation-competence-summaries"
                 ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                 : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -99,7 +99,7 @@ export default function DashboardLayout({
             <>
               <button
                 onClick={() => router.push("/dashboard/users")}
-                className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                   pathname === "/dashboard/users"
                     ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                     : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -109,7 +109,7 @@ export default function DashboardLayout({
               </button>
               <button
                 onClick={() => router.push("/dashboard/user-sessions")}
-                className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                   pathname === "/dashboard/user-sessions"
                     ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                     : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -123,7 +123,7 @@ export default function DashboardLayout({
         <div className="mt-auto pt-6 space-y-4">
           <button
             onClick={() => setShowLogoutModal(true)}
-            className="w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:text-slate-100 transition-all duration-200 flex items-center gap-2"
+            className="w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:text-slate-100 transition-colors duration-200 flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -132,7 +132,7 @@ export default function DashboardLayout({
           </button>
           <div className="border-t border-slate-800/60 pt-4">
             <div className="flex items-center gap-3">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+              <div className="shrink-0 w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
                 <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
@@ -143,7 +143,7 @@ export default function DashboardLayout({
                     ? `${user.first_name} ${user.last_name}`.trim()
                     : "User"}
                 </div>
-                <div className="text-slate-500 truncate text-xs">{user.email}</div>
+                <div className="text-slate-400 truncate text-xs">{user.email}</div>
               </div>
             </div>
           </div>
@@ -155,7 +155,7 @@ export default function DashboardLayout({
         {/* Backdrop overlay */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-30 bg-black/50 md:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
@@ -178,6 +178,7 @@ export default function DashboardLayout({
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}
+                aria-label="Close sidebar"
                 className="md:hidden p-1 rounded-lg hover:bg-slate-900/60 transition-colors"
               >
                 <svg
@@ -205,7 +206,7 @@ export default function DashboardLayout({
                 router.push("/dashboard");
                 setSidebarOpen(false);
               }}
-              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                 pathname === "/dashboard"
                   ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                   : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -218,7 +219,7 @@ export default function DashboardLayout({
                 router.push("/dashboard/cvs");
                 setSidebarOpen(false);
               }}
-              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                 pathname === "/dashboard/cvs"
                   ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                   : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -231,7 +232,7 @@ export default function DashboardLayout({
                 router.push("/dashboard/competence-summaries");
                 setSidebarOpen(false);
               }}
-              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                 pathname === "/dashboard/competence-summaries"
                   ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                   : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -244,7 +245,7 @@ export default function DashboardLayout({
                 router.push("/dashboard/conversation-competence-summaries");
                 setSidebarOpen(false);
               }}
-              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                 pathname === "/dashboard/conversation-competence-summaries"
                   ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                   : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -259,7 +260,7 @@ export default function DashboardLayout({
                     router.push("/dashboard/users");
                     setSidebarOpen(false);
                   }}
-                  className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                     pathname === "/dashboard/users"
                       ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                       : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -272,7 +273,7 @@ export default function DashboardLayout({
                     router.push("/dashboard/user-sessions");
                     setSidebarOpen(false);
                   }}
-                  className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
                     pathname === "/dashboard/user-sessions"
                       ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
                       : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
@@ -289,7 +290,7 @@ export default function DashboardLayout({
                 setShowLogoutModal(true);
                 setSidebarOpen(false);
               }}
-              className="w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:text-slate-100 transition-all duration-200 flex items-center gap-2"
+              className="w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:text-slate-100 transition-colors duration-200 flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -298,7 +299,7 @@ export default function DashboardLayout({
             </button>
             <div className="border-t border-slate-800/60 pt-4">
               <div className="flex items-center gap-3">
-                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+                <div className="shrink-0 w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
                   <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
@@ -309,7 +310,7 @@ export default function DashboardLayout({
                       ? `${user.first_name} ${user.last_name}`.trim()
                       : "User"}
                   </div>
-                  <div className="text-slate-500 truncate text-xs">{user.email}</div>
+                  <div className="text-slate-400 truncate text-xs">{user.email}</div>
                 </div>
               </div>
             </div>
@@ -318,11 +319,12 @@ export default function DashboardLayout({
       </>
 
       <div className="flex flex-1 flex-col overflow-hidden w-full">
-        <header className="flex items-center justify-between border-b border-slate-800/60 bg-slate-950/90 backdrop-blur-sm px-4 py-4 md:px-6 flex-shrink-0">
+        <header className="flex items-center justify-between border-b border-slate-800/60 bg-slate-950/90 px-4 py-4 md:px-6 shrink-0">
           <div className="flex items-center gap-3">
             {/* Hamburger Menu for Mobile */}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label={sidebarOpen ? "Close navigation menu" : "Open navigation menu"}
               className="md:hidden p-2 rounded-lg hover:bg-slate-900/60 transition-colors"
             >
               <svg
@@ -363,13 +365,13 @@ export default function DashboardLayout({
             </h1>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8 bg-gradient-to-b from-slate-950 to-slate-900">
+        <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8 bg-linear-to-b from-slate-950 to-slate-900">
           <div className="mx-auto max-w-5xl">{children}</div>
         </main>
       </div>
 
       {showLogoutModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
           <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-950/95 p-6 shadow-2xl">
             <h3 className="text-base font-semibold text-slate-50 mb-1">Sign out</h3>
             <p className="text-sm text-slate-400 leading-relaxed">
@@ -378,7 +380,7 @@ export default function DashboardLayout({
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setShowLogoutModal(false)}
-                className="rounded-lg border border-slate-700/60 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:border-slate-600/80 transition-all duration-200"
+                className="rounded-lg border border-slate-700/60 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900/60 hover:border-slate-600/80 transition-colors duration-200"
               >
                 Cancel
               </button>
@@ -388,7 +390,7 @@ export default function DashboardLayout({
                   router.push("/login");
                   setShowLogoutModal(false);
                 }}
-                className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-all duration-200"
+                className="rounded-lg bg-emerald-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-emerald-400 active:bg-emerald-500 transition-colors duration-200"
               >
                 Sign out
               </button>

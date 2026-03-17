@@ -4,6 +4,7 @@ export interface User {
   first_name: string;
   last_name: string;
   date_joined: string;
+  last_login?: string | null;
   /**
    * Simple role string derived from the backend:
    * - "admin"  -> full dashboard access and user management
