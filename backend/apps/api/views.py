@@ -1,8 +1,10 @@
+from django.conf import settings
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework import serializers
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -82,3 +84,29 @@ class ConvertCVView(DocumentedAPIView):
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class ProxyDebugHeadersView(APIView):
+    """Temporary endpoint to inspect proxy forwarding headers for throttle tuning."""
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    def get(self, request, *args, **kwargs):
+        if not settings.DEBUG:
+            raise Http404()
+
+        raw_x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        forwarded_chain = [
+            part.strip() for part in raw_x_forwarded_for.split(",") if part.strip()
+        ]
+
+        return Response(
+            {
+                "http_x_forwarded_for": raw_x_forwarded_for,
+                "remote_addr": request.META.get("REMOTE_ADDR"),
+                "forwarded_chain": forwarded_chain,
+                "forwarded_chain_count": len(forwarded_chain),
+            },
+            status=status.HTTP_200_OK,
+        )
