@@ -7,7 +7,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from drf_spectacular.utils import extend_schema
 from apps.cv.models import CV
 from apps.cv.services import read_cv_file
 from apps.llm.services import generate_competence_cv
@@ -85,7 +85,7 @@ class ConvertCVView(DocumentedAPIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
-
+@extend_schema(exclude=True)
 class ProxyDebugHeadersView(APIView):
     """Temporary endpoint to inspect proxy forwarding headers for throttle tuning."""
 
