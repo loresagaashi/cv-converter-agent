@@ -134,3 +134,11 @@ export function setCachedUserSessions(
 export function clearCachedUserSessions() {
   clearPaginatedCache(cache.userSessions);
 }
+
+export function clearAllDashboardCaches() {
+  clearCachedCVs();
+  clearCachedCompetencePapers();
+  clearCachedConversationPapers();
+  clearCachedUsers();
+  clearCachedUserSessions();
+}

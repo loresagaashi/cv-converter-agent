@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { AuthResponse, User } from "@/lib/types";
+import { clearAllDashboardCaches } from "@/lib/dashboardListCache";
 import {
   getCurrentUser,
   getInMemoryAccessToken,
@@ -58,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleAuthSuccess = useCallback(
     (auth: AuthResponse) => {
+      clearAllDashboardCaches();
       setToken(auth.access_token);
       setUser({
         id: auth.id,
@@ -86,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [handleAuthSuccess]);
 
   const logout = useCallback(() => {
+    clearAllDashboardCaches();
     setToken(null);
     setUser(null);
     apiLogout().catch(() => {
