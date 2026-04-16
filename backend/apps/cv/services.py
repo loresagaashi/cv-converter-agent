@@ -1,8 +1,14 @@
+import io
+import logging
 import mimetypes
 import os
+import time
 from typing import BinaryIO, Optional
 
 from django.core.files import File
+from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_text(text: str) -> str:
@@ -62,6 +68,7 @@ def read_pdf(file_obj: BinaryIO) -> str:
     except (AttributeError, OSError):
         pass
 
+    t_parse = time.monotonic()
     reader = PyPDF2.PdfReader(fp)
     text_chunks = []
 
@@ -74,7 +81,16 @@ def read_pdf(file_obj: BinaryIO) -> str:
         if page_text:
             text_chunks.append(page_text)
 
-    return _normalize_text("\n\n".join(text_chunks))
+    joined = "\n\n".join(text_chunks)
+    logger.info(
+        f"[TIMING] file={getattr(fp, 'name', 'stream')} stage=pdf_parse seconds={time.monotonic() - t_parse:.3f}"
+    )
+    t_norm = time.monotonic()
+    out = _normalize_text(joined)
+    logger.info(
+        f"[TIMING] file={getattr(fp, 'name', 'stream')} stage=pdf_text_cleanup seconds={time.monotonic() - t_norm:.3f}"
+    )
+    return out
 
 
 def read_docx(file_obj: BinaryIO) -> str:
@@ -105,10 +121,19 @@ def read_docx(file_obj: BinaryIO) -> str:
     except (AttributeError, OSError):
         pass
 
+    t_parse = time.monotonic()
     document = docx.Document(fp)
     paragraphs = [p.text for p in document.paragraphs if p.text]
-
-    return _normalize_text("\n".join(paragraphs))
+    joined = "\n".join(paragraphs)
+    logger.info(
+        f"[TIMING] file={getattr(fp, 'name', 'stream')} stage=docx_parse seconds={time.monotonic() - t_parse:.3f}"
+    )
+    t_norm = time.monotonic()
+    out = _normalize_text(joined)
+    logger.info(
+        f"[TIMING] file={getattr(fp, 'name', 'stream')} stage=docx_text_cleanup seconds={time.monotonic() - t_norm:.3f}"
+    )
+    return out
 
 
 def guess_file_type(
@@ -149,6 +174,45 @@ def guess_file_type(
     return None
 
 
+def get_or_extract_cv_text(cv_instance) -> str:
+    """
+    Return cached extracted text for a CV instance.
+    Falls back to read_cv_file() + persists on miss (first access after upload
+    for new CVs, or first access after deploy for pre-existing CVs).
+    """
+    try:
+        cv_instance.refresh_from_db(fields=["extracted_text", "text_extracted_at"])
+    except Exception:
+        pass
+
+    # Use text_extracted_at so legitimately empty extraction is still cached
+    # (truthy check on extracted_text alone would re-fetch forever for "").
+    if cv_instance.text_extracted_at is not None:
+        msg = (
+            f"[CV_TEXT_CACHE] cache_hit cv_id={cv_instance.id} "
+            f"chars={len(cv_instance.extracted_text or '')}"
+        )
+        logger.info(msg)
+        print(msg)
+        return cv_instance.extracted_text or ""
+
+    file_obj = cv_instance.file
+    content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
+    text = read_cv_file(
+        file_obj,
+        name=cv_instance.original_filename,
+        content_type=content_type,
+    )
+
+    cv_instance.extracted_text = text
+    cv_instance.text_extracted_at = timezone.now()
+    cv_instance.save(update_fields=["extracted_text", "text_extracted_at"])
+    msg = f"[CV_TEXT_CACHE] Populated extracted_text for cv_id={cv_instance.id} chars={len(text)}"
+    logger.info(msg)
+    print(msg)
+    return text
+
+
 def read_cv_file(file_obj: BinaryIO, *, name: Optional[str] = None, content_type: Optional[str] = None) -> str:
     """
     Convenience helper that:
@@ -160,6 +224,8 @@ def read_cv_file(file_obj: BinaryIO, *, name: Optional[str] = None, content_type
         cv = CV.objects.first()
         text = read_cv_file(cv.file, name=cv.original_filename, content_type=cv.file.file.content_type)
     """
+    file_label = name or "unknown"
+
     # --- LOGGING: Verify file source (Cloudinary vs local disk) ---
     try:
         # Try to get the URL if it exists (Cloudinary/S3 files have this)
@@ -170,15 +236,41 @@ def read_cv_file(file_obj: BinaryIO, *, name: Optional[str] = None, content_type
     except Exception as e:
         print(f"[FILE LOAD] Could not determine URL: {e}")
     # --------------------------------------------------------------
-    
+
+    t0 = time.monotonic()
     file_type = guess_file_type(name=name, content_type=content_type)
+    logger.info(
+        f"[TIMING] file={file_label!r} stage=guess_file_type seconds={time.monotonic() - t0:.3f}"
+    )
+
+    if file_type not in ("pdf", "docx"):
+        raise ValueError(
+            f"Unsupported or unknown CV file type for name={name!r}, content_type={content_type!r}"
+        )
+
+    t0 = time.monotonic()
+    if isinstance(file_obj, File):
+        fp = file_obj.open("rb") if file_obj.closed else file_obj
+    else:
+        fp = file_obj
+    try:
+        fp.seek(0)
+    except (AttributeError, OSError):
+        pass
+    logger.info(
+        f"[TIMING] file={file_label!r} stage=file_open seconds={time.monotonic() - t0:.3f}"
+    )
+
+    t0 = time.monotonic()
+    raw_bytes = fp.read()
+    logger.info(
+        f"[TIMING] file={file_label!r} stage=file_read bytes={len(raw_bytes)} seconds={time.monotonic() - t0:.3f}"
+    )
+    stream = io.BytesIO(raw_bytes)
 
     if file_type == "pdf":
-        return read_pdf(file_obj)
-    if file_type == "docx":
-        return read_docx(file_obj)
-
-    raise ValueError(f"Unsupported or unknown CV file type for name={name!r}, content_type={content_type!r}")
+        return read_pdf(stream)
+    return read_docx(stream)
 
 
 def read_cv_from_path(path: str) -> str:

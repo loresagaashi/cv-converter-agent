@@ -6,6 +6,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.http import HttpResponse
+from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework import serializers
@@ -17,7 +18,7 @@ from rest_framework.views import APIView
 from .models import CV
 from .pdf_renderer import render_structured_cv_to_pdf, _calculate_seniority_label
 from .serializers import CVSerializer
-from .services import read_cv_file
+from .services import get_or_extract_cv_text, read_cv_file
 from apps.llm.services import generate_structured_cv
 from apps.interview.models import CompetencePaper, ConversationSession
 from apps.api.pagination import StandardPagination
@@ -77,6 +78,29 @@ class CVUploadView(generics.ListCreateAPIView):
 
         print(f"[STORAGE] After upload - stored_in: {storage_type}, file.name: {file_name}, file.url: {file_url}")
         logger.info("[STORAGE] After upload", extra={"storage_type": storage_type, "file_name": file_name, "file_url": file_url})
+
+        try:
+            t0 = time.monotonic()
+            uploaded_file = request.FILES.get("file")
+            uploaded_file.seek(0)
+            extracted = read_cv_file(
+                uploaded_file,
+                name=cv_instance.original_filename,
+                content_type=getattr(uploaded_file, "content_type", None),
+            )
+            cv_instance.extracted_text = extracted
+            cv_instance.text_extracted_at = timezone.now()
+            cv_instance.save(update_fields=["extracted_text", "text_extracted_at"])
+            eager_msg = (
+                f"[CV_TEXT_CACHE] Eager extract on upload cv_id={cv_instance.id} "
+                f"chars={len(extracted)} seconds={time.monotonic() - t0:.3f}"
+            )
+            logger.info(eager_msg)
+            print(eager_msg)
+        except Exception as exc:
+            warn_msg = f"[CV_TEXT_CACHE] Eager extract failed cv_id={cv_instance.id}: {exc}"
+            logger.warning(warn_msg)
+            print(warn_msg)
 
         # Do not call LLM on upload; just persist the file and return metadata.
         competence_summary = ""
@@ -178,14 +202,7 @@ class CVTextView(DocumentedAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        file_obj = cv_instance.file
-        # Try to infer content type if available; it's safe to pass None.
-        content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
-        cv_text = read_cv_file(
-            file_obj,
-            name=cv_instance.original_filename,
-            content_type=content_type,
-        )
+        cv_text = get_or_extract_cv_text(cv_instance)
 
         return Response(
             {
@@ -219,14 +236,7 @@ class FormattedCVView(DocumentedAPIView):
         else:
             cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
 
-        # Extract text from the stored CV file.
-        file_obj = cv_instance.file
-        content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
-        cv_text = read_cv_file(
-            file_obj,
-            name=cv_instance.original_filename,
-            content_type=content_type,
-        )
+        cv_text = get_or_extract_cv_text(cv_instance)
 
         # Generate structured JSON via LLM.
         llm_start = time.monotonic()
@@ -280,32 +290,55 @@ class StructuredCVView(DocumentedAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        req_start = time.monotonic()
+        t_total = time.monotonic()
+        req_start = t_total
         # Admins can access any CV; regular users only their own
+        t = time.monotonic()
         if getattr(request.user, 'is_staff', False):
             cv_instance = get_object_or_404(CV, pk=pk)
         else:
             cv_instance = get_object_or_404(CV, pk=pk, user=request.user)
-
-        # Extract text from the stored CV file.
-        file_obj = cv_instance.file
-        content_type = getattr(getattr(file_obj, "file", None), "content_type", None)
-        cv_text = read_cv_file(
-            file_obj,
-            name=cv_instance.original_filename,
-            content_type=content_type,
+        print(
+            f"[TIMING_VIEW] cv_id={pk} stage=db_lookup seconds={time.monotonic() - t:.3f}"
         )
 
-        # Generate structured JSON via LLM.
-        llm_start = time.monotonic()
+        # DISABLED 2026-04-16: This block triggered a Cloudinary fetch (~21s cold-cache cost)
+        # via FieldFile.file access. No longer needed — get_or_extract_cv_text reads from
+        # cv.extracted_text cache. Kept commented for reference in case content_type is
+        # ever needed again.
+        # t = time.monotonic()
+        # file_obj = cv_instance.file
+        # getattr(getattr(file_obj, "file", None), "content_type", None)
+        # print(f"[TIMING_VIEW] cv_id={pk} stage=file_field seconds={time.monotonic() - t:.3f}")
+        t = time.monotonic()
+        cv_text = get_or_extract_cv_text(cv_instance)
+        print(
+            f"[TIMING_VIEW] cv_id={pk} stage=get_text seconds={time.monotonic() - t:.3f}"
+        )
+
+        t = time.monotonic()
         print(f"[LLM] structured start cv_id={cv_instance.id}")
+        print(
+            f"[TIMING_VIEW] cv_id={pk} stage=pre_llm seconds={time.monotonic() - t:.3f}"
+        )
+
+        t = time.monotonic()
         structured_cv = generate_structured_cv(cv_text)
-        llm_elapsed = time.monotonic() - llm_start
+        llm_elapsed = time.monotonic() - t
+        print(
+            f"[TIMING_VIEW] cv_id={pk} stage=llm_call seconds={llm_elapsed:.3f}"
+        )
         logger.info(
             "structured_cv_llm_completed",
             extra={"cv_id": cv_instance.id, "seconds": round(llm_elapsed, 3)},
         )
         print(f"[LLM] structured done cv_id={cv_instance.id} seconds={llm_elapsed:.3f}")
+
+        t = time.monotonic()
+        response = Response(structured_cv, status=status.HTTP_200_OK)
+        print(
+            f"[TIMING_VIEW] cv_id={pk} stage=response_build seconds={time.monotonic() - t:.3f}"
+        )
 
         total_elapsed = time.monotonic() - req_start
         logger.info(
@@ -313,7 +346,10 @@ class StructuredCVView(DocumentedAPIView):
             extra={"cv_id": cv_instance.id, "seconds": round(total_elapsed, 3)},
         )
         print(f"[REQ] structured get done cv_id={cv_instance.id} seconds={total_elapsed:.3f}")
-        return Response(structured_cv, status=status.HTTP_200_OK)
+        print(
+            f"[TIMING_VIEW] cv_id={pk} stage=TOTAL seconds={time.monotonic() - t_total:.3f}"
+        )
+        return response
 
     def post(self, request, pk):
         """

@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 from apps.cv.models import CV
-from apps.cv.services import read_cv_file
+from apps.cv.services import get_or_extract_cv_text, read_cv_file
 from apps.llm.services import generate_competence_cv
 from apps.interview.models import CompetencePaper
 
@@ -53,10 +53,8 @@ class ConvertCVView(DocumentedAPIView):
                 cv_instance = get_object_or_404(CV, pk=cv_id)
             else:
                 cv_instance = get_object_or_404(CV, pk=cv_id, user=request.user)
-            file_obj = cv_instance.file
             original_filename = cv_instance.original_filename
-            # For stored files, extension is usually enough for type detection.
-            cv_text = read_cv_file(file_obj, name=original_filename)
+            cv_text = get_or_extract_cv_text(cv_instance)
         else:
             file_obj = uploaded_file
             original_filename = getattr(uploaded_file, "name", None)

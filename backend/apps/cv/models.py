@@ -21,6 +21,8 @@ class CV(models.Model):
     )
     original_filename = models.CharField(max_length=255)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    extracted_text = models.TextField(blank=True, null=True)
+    text_extracted_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ('-uploaded_at',)

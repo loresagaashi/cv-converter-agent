@@ -562,13 +562,19 @@ def _ollama(prompt: str, *, model: str = OLLAMA_MODEL) -> str:
     """
     Minimal Ollama client.
     """
+    t_ollama = time.monotonic()
     headers = {}
     if OLLAMA_API_KEY:
         headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
 
+    logger.info(
+        f"[TIMING_LLM] stage=ollama_prep_headers seconds={time.monotonic() - t_ollama:.3f}"
+    )
+
     start = time.monotonic()
     logger.info("Calling Ollama", extra={"model": model, "url": OLLAMA_URL})
 
+    t_post = time.monotonic()
     response = requests.post(
         OLLAMA_URL,
         json={"model": model, "prompt": prompt},
@@ -577,8 +583,12 @@ def _ollama(prompt: str, *, model: str = OLLAMA_MODEL) -> str:
         timeout=300,
     )
     response.raise_for_status()
+    logger.info(
+        f"[TIMING_LLM] stage=ollama_requests_post_to_headers_ok seconds={time.monotonic() - t_post:.3f}"
+    )
 
     full_out = ""
+    t_stream = time.monotonic()
     for line in response.iter_lines():
         if not line:
             continue
@@ -587,12 +597,16 @@ def _ollama(prompt: str, *, model: str = OLLAMA_MODEL) -> str:
         except json.JSONDecodeError:
             continue
         full_out += data.get("response", "")
+    logger.info(
+        f"[TIMING_LLM] stage=ollama_stream_iter_lines seconds={time.monotonic() - t_stream:.3f}"
+    )
 
     elapsed = time.monotonic() - start
     logger.info(
         "Ollama call completed",
         extra={"model": model, "url": OLLAMA_URL, "chars": len(full_out), "seconds": round(elapsed, 3)},
     )
+    logger.info(f"[TIMING_LLM] stage=ollama_wall_total seconds={elapsed:.3f}")
     return full_out
 
 
@@ -729,8 +743,13 @@ def _build_structured_cv_prompt(cv_text: str) -> str:
     """
     Prompt for generating a normalized CV JSON.
     """
+    t0 = time.monotonic()
     example_json = json.dumps(_STRUCTURED_CV_SCHEMA_EXAMPLE, indent=2)
-    return f"""
+    logger.info(
+        f"[TIMING_LLM] structured_cv_prompt stage=schema_json_dump seconds={time.monotonic() - t0:.3f}"
+    )
+    t1 = time.monotonic()
+    built = f"""
 You are an AI CV formatter.
 
 TASK:
@@ -759,6 +778,10 @@ OUTPUT FORMAT:
 CV TEXT:
 {cv_text}
 """.strip()
+    logger.info(
+        f"[TIMING_LLM] structured_cv_prompt stage=prompt_fstring_build seconds={time.monotonic() - t1:.3f}"
+    )
+    return built
 
 
 def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
@@ -780,11 +803,23 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "certifications": [],
         }
 
+    t0 = time.monotonic()
     prompt = _build_structured_cv_prompt(cv_text)
-    
-    # No fallback, strict AI
+    logger.info(
+        f"[TIMING_LLM] structured_cv stage=prompt_build_total seconds={time.monotonic() - t0:.3f}"
+    )
+
+    t0 = time.monotonic()
     raw = _ollama(prompt)
+    logger.info(
+        f"[TIMING_LLM] structured_cv stage=llm_ollama_total seconds={time.monotonic() - t0:.3f}"
+    )
+
+    t0 = time.monotonic()
     data = _extract_first_json_object(raw)
+    logger.info(
+        f"[TIMING_LLM] structured_cv stage=json_extract seconds={time.monotonic() - t0:.3f}"
+    )
 
     if not isinstance(data, dict):
         return {
@@ -801,6 +836,7 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
             "certifications": [],
         }
 
+    t0 = time.monotonic()
     name = str(data.get("name") or "").strip()
     profile = str(data.get("profile") or "").strip()
     languages = data.get("languages") or []
@@ -858,7 +894,7 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
 
     skills_grouped: Dict[str, List[str]] = {}
 
-    return {
+    result = {
         "name": name,
         "profile": profile,
         "languages": languages,
@@ -872,6 +908,10 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
         "courses": courses,
         "certifications": certifications,
     }
+    logger.info(
+        f"[TIMING_LLM] structured_cv stage=postprocess_normalize seconds={time.monotonic() - t0:.3f}"
+    )
+    return result
 
 
 def _build_skill_grouping_prompt(skills: List[str]) -> str:
