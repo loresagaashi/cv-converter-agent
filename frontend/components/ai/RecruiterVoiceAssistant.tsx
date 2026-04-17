@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
-import { createConversationTurn, endConversationSession, generateConversationCompetencePaper, startConversationSession, playTextToSpeech } from "@/lib/api";
+import { createConversationTurn, endConversationSession, fetchWithAuthRetry, generateConversationCompetencePaper, getInMemoryAccessToken, playTextToSpeech, startConversationSession } from "@/lib/api";
 
 // MediaRecorder and AudioContext types are built-in to TypeScript
 
@@ -248,14 +248,11 @@ export function RecruiterVoiceAssistant({
             const formData = new FormData();
             formData.append('audio', audioBlob, 'recording.webm');
 
-            const response = await fetch(
+            const response = await fetchWithAuthRetry(
               `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL}/api/llm/transcribe-audio/`,
               {
                 method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  // Do NOT set Content-Type - let browser set it with boundary
-                },
+                // Do NOT set Content-Type - let browser set it with boundary
                 body: formData,
               }
             );
@@ -381,11 +378,10 @@ export function RecruiterVoiceAssistant({
             }
             streamAbortRef.current = new AbortController();
 
-            const response = await fetch(
+            const response = await fetchWithAuthRetry(
               `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL}/api/llm/voice-to-question-stream/`,
               {
                 method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
                 body: formData,
                 signal: streamAbortRef.current.signal,
               }
@@ -501,13 +497,12 @@ export function RecruiterVoiceAssistant({
 
     const activeSessionId = sessionIdRef.current ?? sessionId;
 
-    const res = await fetch(
+    const res = await fetchWithAuthRetry(
       `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL_LOCAL}/api/llm/recruiter-assistant/question/`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           session_id: activeSessionId,

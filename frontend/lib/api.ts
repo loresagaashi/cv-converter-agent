@@ -160,7 +160,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 let isRenewing = false;
 
-async function fetchWithAuthRetry(
+export async function fetchWithAuthRetry(
   url: string,
   options?: RequestInit & { retryCount?: number }
 ): Promise<Response> {
