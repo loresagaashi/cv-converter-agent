@@ -564,12 +564,12 @@ class StructuredCVView(DocumentedAPIView):
                     defaults=update_defaults,
                 )
                 # Only create a conversation session on the very first export.
-                if created:
-                    ConversationSession.objects.create(
-                        cv=cv_instance,
-                        original_competence_paper=competence_paper,
-                        status="pending",
-                    )
+                # if created:
+                #     ConversationSession.objects.create(
+                #         cv=cv_instance,
+                #         original_competence_paper=competence_paper,
+                #         status="pending",
+                #     )
 
         response = HttpResponse(
             pdf_bytes,
