@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'apps.llm',
     'apps.api.apps.ApiConfig',
     'apps.interview',
+    'apps.vector_search',
 ]
 
 MIDDLEWARE = [
@@ -227,6 +228,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'CV', 'description': 'CV upload, conversion and export endpoints.'},
         {'name': 'Interview', 'description': 'Interview and competence paper endpoints.'},
         {'name': 'LLM', 'description': 'Voice, transcription and assistant endpoints.'},
+        {'name': 'Vector Search', 'description': 'Resume ↔ job description matching via vector similarity.'},
     ],
     'APPEND_COMPONENTS': {
         'securitySchemes': {
