@@ -1,4 +1,4 @@
-import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV, PaginatedResponse, UserSession } from "./types";
+import { AuthResponse, CV, CVTextResponse, ConvertCVResponse, User, StructuredCV, PaginatedResponse, UserSession, VectorMatchResponse, VectorSearchStatus } from "./types";
 
 let inMemoryToken: string | null = null;
 
@@ -950,6 +950,92 @@ export async function endConversationSession(
     `${API_BASE_URL}/api/interview/conversation-session/${sessionId}/end/`,
     {
       method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+}
+
+// ── Vector Search ──
+
+export async function vectorSearchStatus(
+  token?: string
+): Promise<VectorSearchStatus> {
+  const accessToken = getInMemoryAccessToken() || token;
+  return handleAuthenticatedResponse<VectorSearchStatus>(
+    `${API_BASE_URL}/api/vector-search/status/`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+}
+
+export async function vectorSearchIndex(
+  cvId: number,
+  token?: string
+): Promise<{ indexed: boolean; profile_id?: string }> {
+  const accessToken = getInMemoryAccessToken() || token;
+  return handleAuthenticatedResponse<{ indexed: boolean; profile_id?: string }>(
+    `${API_BASE_URL}/api/vector-search/index/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ cv_id: cvId }),
+    }
+  );
+}
+
+export async function vectorSearchBulkIndex(
+  options: { cv_ids?: number[]; all?: boolean },
+  token?: string
+): Promise<{ indexed: number; failed: number; total: number }> {
+  const accessToken = getInMemoryAccessToken() || token;
+  return handleAuthenticatedResponse<{ indexed: number; failed: number; total: number }>(
+    `${API_BASE_URL}/api/vector-search/index/bulk/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(options),
+    }
+  );
+}
+
+export async function vectorSearchMatch(
+  request: { job_description: string; top_k: number; include_gap_analysis: boolean },
+  token?: string
+): Promise<VectorMatchResponse> {
+  const accessToken = getInMemoryAccessToken() || token;
+  return handleAuthenticatedResponse<VectorMatchResponse>(
+    `${API_BASE_URL}/api/vector-search/match/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(request),
+    }
+  );
+}
+
+export async function vectorSearchRemove(
+  cvId: number,
+  token?: string
+): Promise<{ removed: boolean }> {
+  const accessToken = getInMemoryAccessToken() || token;
+  return handleAuthenticatedResponse<{ removed: boolean }>(
+    `${API_BASE_URL}/api/vector-search/index/${cvId}/`,
+    {
+      method: "DELETE",
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },

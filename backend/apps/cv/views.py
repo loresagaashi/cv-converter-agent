@@ -102,6 +102,13 @@ class CVUploadView(generics.ListCreateAPIView):
             logger.warning(warn_msg)
             print(warn_msg)
 
+        # TODO: move to Celery task for async indexing
+        try:
+            from apps.vector_search.services import index_cv as vs_index_cv
+            vs_index_cv(cv_instance)
+        except Exception as exc:
+            logger.warning(f"[VECTOR_SEARCH] Index on upload failed cv_id={cv_instance.id}: {exc}")
+
         # Do not call LLM on upload; just persist the file and return metadata.
         competence_summary = ""
         skills = []
@@ -146,6 +153,15 @@ class CVDetailView(generics.DestroyAPIView):
         if getattr(self.request.user, 'is_staff', False):
             return CV.objects.all()
         return CV.objects.filter(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        cv_id = instance.id
+        super().perform_destroy(instance)
+        try:
+            from apps.vector_search.services import remove_cv_from_index
+            remove_cv_from_index(cv_id)
+        except Exception as exc:
+            logger.warning(f"[VECTOR_SEARCH] Cleanup on delete failed cv_id={cv_id}: {exc}")
 
 
 class CVBulkDeleteView(DocumentedAPIView):
