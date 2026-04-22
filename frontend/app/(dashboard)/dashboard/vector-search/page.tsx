@@ -106,10 +106,10 @@ export default function VectorSearchPage() {
                 <span className="text-emerald-300 font-medium">{status.indexed_count}</span>
                 {" / "}
                 <span>{status.total_cvs}</span> CVs indexed
-                {status.chroma_ready ? (
+                {status.vector_db_ready ? (
                   <span className="ml-2 text-emerald-400">Ready</span>
                 ) : (
-                  <span className="ml-2 text-red-400">ChromaDB unavailable</span>
+                  <span className="ml-2 text-red-400">Vector DB unavailable</span>
                 )}
               </p>
             ) : (

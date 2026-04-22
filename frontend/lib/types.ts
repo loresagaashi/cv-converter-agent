@@ -151,6 +151,6 @@ export interface VectorMatchResponse {
 export interface VectorSearchStatus {
   indexed_count: number;
   total_cvs: number;
-  chroma_ready: boolean;
+  vector_db_ready: boolean;
 }
 
