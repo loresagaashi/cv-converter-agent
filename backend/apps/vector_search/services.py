@@ -9,12 +9,10 @@ from apps.cv.models import CV
 from .core.embeddings import embed_text
 from .core.parsing import build_embedding_text
 from .core.vector_db import (
-    get_chroma_client,
-    get_or_create_collection,
     upsert_profile,
     remove_profile,
     get_collection_count,
-    is_chroma_ready,
+    is_vector_db_ready,
 )
 from .core.search import search_for_candidates, parse_jd_live
 from .core.gap_analysis import enrich_results_with_gap_analysis
@@ -147,5 +145,5 @@ def get_index_status(user=None) -> dict:
     return {
         "indexed_count": get_collection_count(),
         "total_cvs": total_cvs,
-        "chroma_ready": is_chroma_ready(),
+        "vector_db_ready": is_vector_db_ready(),
     }

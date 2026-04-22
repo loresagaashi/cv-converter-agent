@@ -9,7 +9,7 @@ import json
 from typing import Optional
 
 from .settings import (
-    OPENAI_API_KEY, TOP_K_RESULTS, LLM_MODEL, get_chroma_dir,
+    OPENAI_API_KEY, TOP_K_RESULTS, LLM_MODEL,
 )
 from .smart_matcher import SmartMatcher, MatchCandidate
 
@@ -165,15 +165,7 @@ def parse_jd_live(raw_text: str) -> dict:
 
 
 def get_matcher() -> SmartMatcher:
-    import chromadb
-    from chromadb.config import Settings
-
-    chroma_dir = get_chroma_dir()
-    client = chromadb.PersistentClient(
-        path=str(chroma_dir),
-        settings=Settings(anonymized_telemetry=False),
-    )
-    return SmartMatcher(client)
+    return SmartMatcher()
 
 
 def search_for_candidates(

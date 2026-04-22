@@ -1,6 +1,6 @@
 """
 Integration tests for vector search API endpoints.
-Uses unittest.mock.patch to stub the OpenAI and ChromaDB calls.
+Uses unittest.mock.patch to stub the OpenAI and pgvector calls.
 """
 
 from unittest.mock import patch, MagicMock
@@ -119,11 +119,11 @@ class TestStatusView(TestCase):
         self.client.force_authenticate(user=self.user)
 
     @patch("apps.vector_search.services.get_collection_count", return_value=42)
-    @patch("apps.vector_search.services.is_chroma_ready", return_value=True)
+    @patch("apps.vector_search.services.is_vector_db_ready", return_value=True)
     def test_status_returns_expected_shape(self, mock_ready, mock_count):
         response = self.client.get("/api/vector-search/status/")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("indexed_count", data)
         self.assertIn("total_cvs", data)
-        self.assertIn("chroma_ready", data)
+        self.assertIn("vector_db_ready", data)

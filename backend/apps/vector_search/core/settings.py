@@ -15,8 +15,6 @@ LLM_MODEL = os.environ.get("OPENAI_RECRUITER_MODEL", "gpt-4o-mini")
 LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 LOCAL_EMBEDDING_DIMENSIONS = 384
 
-CHROMA_COLLECTION_RESUMES = "employee_resumes"
-
 ALLOW_DUMMY_EMBEDDINGS = os.environ.get("ALLOW_DUMMY_EMBEDDINGS", "0") == "1"
 
 _mode = os.environ.get("EMBEDDING_MODE", "openai").lower()
@@ -31,9 +29,3 @@ COMPOSITE_WEIGHTS = {
     "competency_fit": 0.15,
     "tier_bonus": 0.10,
 }
-
-
-def get_chroma_dir():
-    """Return the ChromaDB persistent storage path."""
-    from pathlib import Path
-    return Path(__file__).resolve().parent.parent / "chroma_store"

@@ -1,40 +1,14 @@
 """
-ChromaDB setup — ported from vector-search MVP (05_vector_db_setup.py).
+Vector DB operations backed by pgvector in Postgres (via Django ORM).
 
-Provides get_chroma_client() and helpers for upserting/removing CV profiles.
+Provides helpers for upserting, removing, counting, and querying CV embeddings.
 """
 
 import logging
-from typing import Optional
 
-from .settings import CHROMA_COLLECTION_RESUMES, get_chroma_dir
+from ..models import CvEmbedding
 
 logger = logging.getLogger(__name__)
-
-
-def get_chroma_client():
-    """Create a persistent ChromaDB client."""
-    import chromadb
-    from chromadb.config import Settings
-
-    chroma_dir = get_chroma_dir()
-    chroma_dir.mkdir(parents=True, exist_ok=True)
-
-    return chromadb.PersistentClient(
-        path=str(chroma_dir),
-        settings=Settings(anonymized_telemetry=False),
-    )
-
-
-def get_or_create_collection(client=None, name: str = CHROMA_COLLECTION_RESUMES):
-    """Get or create the resume collection with cosine similarity."""
-    if client is None:
-        client = get_chroma_client()
-
-    return client.get_or_create_collection(
-        name=name,
-        metadata={"hnsw:space": "cosine"},
-    )
 
 
 def upsert_profile(
@@ -42,40 +16,66 @@ def upsert_profile(
     embedding: list[float],
     document: str,
     metadata: dict,
-    client=None,
 ) -> None:
-    """Upsert a single profile into the ChromaDB collection."""
-    collection = get_or_create_collection(client)
-    collection.upsert(
-        ids=[profile_id],
-        embeddings=[embedding],
-        metadatas=[metadata],
-        documents=[document],
+    """Upsert a single profile into the cv_embeddings table."""
+    CvEmbedding.objects.update_or_create(
+        profile_id=profile_id,
+        defaults={
+            "embedding": embedding,
+            "document": document,
+            "metadata": metadata,
+        },
     )
 
 
-def remove_profile(profile_id: str, client=None) -> None:
-    """Remove a single profile from the ChromaDB collection."""
+def remove_profile(profile_id: str) -> None:
+    """Remove a single profile from the cv_embeddings table."""
     try:
-        collection = get_or_create_collection(client)
-        collection.delete(ids=[profile_id])
+        CvEmbedding.objects.filter(profile_id=profile_id).delete()
     except Exception as e:
-        logger.warning(f"Failed to remove profile {profile_id} from ChromaDB: {e}")
+        logger.warning(f"Failed to remove profile {profile_id}: {e}")
 
 
-def get_collection_count(client=None) -> int:
-    """Return the number of documents in the resume collection."""
+def get_collection_count() -> int:
+    """Return the number of documents in the cv_embeddings table."""
     try:
-        collection = get_or_create_collection(client)
-        return collection.count()
+        return CvEmbedding.objects.count()
     except Exception:
         return 0
 
 
-def is_chroma_ready() -> bool:
-    """Check whether ChromaDB can be initialized."""
+def is_vector_db_ready() -> bool:
+    """Check whether the cv_embeddings table is accessible."""
     try:
-        get_chroma_client()
+        CvEmbedding.objects.count()
         return True
     except Exception:
         return False
+
+
+def query_similar(
+    query_embedding: list[float],
+    n_results: int = 200,
+) -> list[dict]:
+    """
+    Return the top-N most similar embeddings using pgvector cosine distance.
+
+    Each result dict contains: id, document, metadata, similarity (float 0..1).
+    """
+    from pgvector.django import CosineDistance
+
+    results = (
+        CvEmbedding.objects
+        .annotate(distance=CosineDistance("embedding", query_embedding))
+        .order_by("distance")[:n_results]
+    )
+
+    return [
+        {
+            "id": row.profile_id,
+            "document": row.document,
+            "metadata": row.metadata,
+            "similarity": 1 - row.distance,
+        }
+        for row in results
+    ]

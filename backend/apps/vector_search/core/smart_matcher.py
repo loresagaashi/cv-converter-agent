@@ -9,12 +9,13 @@ their title doesn't exactly match the JD.
 from dataclasses import dataclass
 
 from .settings import (
-    CHROMA_COLLECTION_RESUMES, TOP_K_RESULTS,
+    TOP_K_RESULTS,
     SIMILARITY_THRESHOLD, OPENAI_API_KEY, EMBEDDING_MODEL,
     EMBEDDING_DIMENSIONS, ALLOW_DUMMY_EMBEDDINGS,
     COMPOSITE_WEIGHTS, EMBEDDING_MODE,
     LOCAL_EMBEDDING_MODEL, LOCAL_EMBEDDING_DIMENSIONS,
 )
+from .vector_db import query_similar, get_collection_count
 
 # ── Seniority ladder ──
 
@@ -288,9 +289,7 @@ def compute_composite_score(
 # ── Smart Matcher ──
 
 class SmartMatcher:
-    def __init__(self, chroma_client, collection_name: str = CHROMA_COLLECTION_RESUMES):
-        self.client = chroma_client
-        self.collection = chroma_client.get_collection(collection_name)
+    def __init__(self):
         self._local_model = None
 
     def _get_local_model(self):
@@ -362,20 +361,18 @@ class SmartMatcher:
 
         all_candidates: dict[str, MatchCandidate] = {}
 
-        pool_size = min(max(top_k * 50, 200), self.collection.count())
-        tier1_results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=pool_size,
-            include=["metadatas", "documents", "distances"],
-        )
+        pool_size = min(max(top_k * 50, 200), get_collection_count())
+        if pool_size == 0:
+            return []
 
-        for i, (id_, meta, doc, dist) in enumerate(zip(
-            tier1_results["ids"][0],
-            tier1_results["metadatas"][0],
-            tier1_results["documents"][0],
-            tier1_results["distances"][0],
-        )):
-            similarity = 1 - dist
+        rows = query_similar(query_embedding, n_results=pool_size)
+
+        for row in rows:
+            id_ = row["id"]
+            meta = row["metadata"]
+            doc = row["document"]
+            similarity = row["similarity"]
+
             if similarity < SIMILARITY_THRESHOLD * 0.5:
                 continue
 
@@ -424,15 +421,8 @@ class SmartMatcher:
             )
             all_candidates[id_] = candidate
 
-        has_required_skills = bool(required_skills)
-        qualified = [
-            c for c in all_candidates.values()
-            if not has_required_skills
-            or c.skill_overlap.get("required_coverage", 0) > 0
-        ]
-
         sorted_candidates = sorted(
-            qualified,
+            all_candidates.values(),
             key=lambda c: c.composite_score,
             reverse=True,
         )

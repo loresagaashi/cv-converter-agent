@@ -40,5 +40,5 @@ PyJWT>=2.7.0
 drf-spectacular==0.27.2
 
 # Vector search
-chromadb>=0.5.0
+pgvector>=0.3.6
 openai>=1.0.0
