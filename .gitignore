@@ -27,6 +27,9 @@ backend/staticfiles/
 .env
 .env.local
 
+# Vector search ChromaDB store
+backend/apps/vector_search/chroma_store/
+
 # Test files
 test.pdf
 test_*.pdf

@@ -108,3 +108,49 @@ export interface UserSession {
   expires_at: string;
 }
 
+// Vector Search types
+export interface VectorMatchCandidate {
+  id: string;
+  name: string;
+  current_title: string;
+  stated_seniority: string;
+  inferred_competency: string;
+  years_of_experience: number;
+  vector_similarity: number;
+  skill_overlap: {
+    matched_required: string[];
+    missing_required: string[];
+    matched_preferred: string[];
+    required_coverage: number;
+    total_score: number;
+  };
+  composite_score: number;
+  search_tier: number;
+  competency_note: string;
+  gap_analysis?: string;
+}
+
+export interface VectorMatchRequest {
+  job_description: string;
+  top_k: number;
+  include_gap_analysis: boolean;
+}
+
+export interface VectorMatchResponse {
+  parsed_jd: {
+    title: string;
+    seniority: string;
+    required_skills: string[];
+    preferred_skills: string[];
+    min_years_experience: number;
+  };
+  candidates: VectorMatchCandidate[];
+  total_results: number;
+}
+
+export interface VectorSearchStatus {
+  indexed_count: number;
+  total_cvs: number;
+  chroma_ready: boolean;
+}
+

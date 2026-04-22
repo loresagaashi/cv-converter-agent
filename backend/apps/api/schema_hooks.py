@@ -8,6 +8,7 @@ TAG_NAME_MAP = {
     "cv": "CV",
     "interview": "Interview",
     "llm": "LLM",
+    "vector-search": "Vector Search",
 }
 
 METHOD_DEFAULT_RANK = 99

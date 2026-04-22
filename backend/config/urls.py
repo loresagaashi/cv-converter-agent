@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/', include('apps.api.urls')),
     path('api/interview/', include('apps.interview.urls')),
     path('api/llm/', include('apps.llm.urls')),
+    path('api/vector-search/', include('apps.vector_search.urls')),
 ]
 
 if settings.DEBUG:
