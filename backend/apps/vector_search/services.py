@@ -2,9 +2,11 @@
 Thin orchestration layer between the Django views and the core matching engine.
 """
 
+import re
 import logging
 
 from apps.cv.models import CV
+from apps.interview.models import CompetencePaper
 
 from .core.embeddings import embed_text
 from .core.parsing import build_embedding_text
@@ -20,25 +22,66 @@ from .core.gap_analysis import enrich_results_with_gap_analysis
 logger = logging.getLogger(__name__)
 
 
+def _parse_competence_metadata(content: str) -> dict:
+    """Extract structured metadata (skills, seniority) from competence paper content."""
+    skills = []
+    seniority = "mid"
+
+    for line in content.splitlines():
+        line = line.strip()
+
+        if line.lower().startswith("seniority:"):
+            raw = line.split(":", 1)[1].strip().lower()
+            for level in ("junior", "mid", "senior", "lead", "principal", "director"):
+                if level in raw:
+                    seniority = level
+                    break
+
+        if re.match(r"^•\s*.+:\s*.+,.+", line):
+            after_colon = line.split(":", 1)[1]
+            skills.extend(s.strip() for s in after_colon.split(",") if s.strip())
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("• ") and ":" not in stripped:
+            skill = stripped[2:].strip()
+            if skill and len(skill) < 60:
+                skills.append(skill)
+
+    return {
+        "seniority": seniority,
+        "skills": ", ".join(dict.fromkeys(skills)),
+    }
+
+
 def index_cv(cv_instance: CV) -> dict:
     """
-    Parse, embed, and upsert a single CV into the vector DB.
-    Returns {"indexed": True, "profile_id": "..."} on success.
+    Embed and upsert a single CV into the vector DB.
+    Prefers the competence paper content (structured, LLM-processed) when
+    available; falls back to raw extracted text otherwise.
     """
-    extracted_text = cv_instance.extracted_text or ""
-    if not extracted_text.strip():
-        return {"indexed": False, "error": "No extracted text available"}
-
-    name = ""
-    if hasattr(cv_instance, "user") and cv_instance.user:
-        u = cv_instance.user
-        name = f"{u.first_name} {u.last_name}".strip() or u.email
-
-    embedding_text = build_embedding_text(
-        extracted_text,
-        name=name,
-        title=cv_instance.original_filename,
+    cp = (
+        CompetencePaper.objects
+        .filter(cv=cv_instance)
+        .order_by("-created_at")
+        .first()
     )
+
+    if cp and cp.content.strip():
+        embedding_text = cp.content.strip()
+        source = "competence_paper"
+    else:
+        raw_text = cv_instance.extracted_text or ""
+        if not raw_text.strip():
+            return {"indexed": False, "error": "No extracted text or competence paper available"}
+
+        name = ""
+        if hasattr(cv_instance, "user") and cv_instance.user:
+            u = cv_instance.user
+            name = f"{u.first_name} {u.last_name}".strip() or u.email
+
+        embedding_text = build_embedding_text(raw_text, name=name, title=cv_instance.original_filename)
+        source = "extracted_text"
 
     embedding = embed_text(embedding_text)
     if embedding is None:
@@ -46,14 +89,30 @@ def index_cv(cv_instance: CV) -> dict:
 
     profile_id = f"cv-{cv_instance.id}"
 
-    metadata = {
-        "name": name or "Unknown",
-        "current_title": cv_instance.original_filename,
-        "seniority": "mid",
-        "years_of_experience": 0.0,
-        "skills": "",
-        "source_file": cv_instance.original_filename,
-    }
+    name = ""
+    if hasattr(cv_instance, "user") and cv_instance.user:
+        u = cv_instance.user
+        name = f"{u.first_name} {u.last_name}".strip() or u.email
+
+    if source == "competence_paper":
+        parsed = _parse_competence_metadata(embedding_text)
+        metadata = {
+            "name": name or "Unknown",
+            "current_title": cv_instance.original_filename,
+            "seniority": parsed["seniority"],
+            "years_of_experience": 0.0,
+            "skills": parsed["skills"],
+            "source_file": cv_instance.original_filename,
+        }
+    else:
+        metadata = {
+            "name": name or "Unknown",
+            "current_title": cv_instance.original_filename,
+            "seniority": "mid",
+            "years_of_experience": 0.0,
+            "skills": "",
+            "source_file": cv_instance.original_filename,
+        }
 
     upsert_profile(
         profile_id=profile_id,
@@ -62,8 +121,8 @@ def index_cv(cv_instance: CV) -> dict:
         metadata=metadata,
     )
 
-    logger.info(f"Indexed CV {cv_instance.id} as {profile_id}")
-    return {"indexed": True, "profile_id": profile_id}
+    logger.info(f"Indexed CV {cv_instance.id} as {profile_id} (source={source})")
+    return {"indexed": True, "profile_id": profile_id, "source": source}
 
 
 def remove_cv_from_index(cv_id: int) -> None:
@@ -135,10 +194,16 @@ def match_candidates(
 
 def get_index_status(user=None) -> dict:
     """Return indexing status for the dashboard health card."""
+    from django.db.models import Q, Exists, OuterRef
+
+    has_cp = Exists(CompetencePaper.objects.filter(cv=OuterRef("pk")))
+    has_text = Q(extracted_text__isnull=False) & ~Q(extracted_text="")
+    indexable = has_text | Q(pk__in=CV.objects.filter(has_cp).values("pk"))
+
     if user and getattr(user, "is_staff", False):
-        total_cvs = CV.objects.exclude(extracted_text__isnull=True).exclude(extracted_text="").count()
+        total_cvs = CV.objects.filter(indexable).distinct().count()
     elif user:
-        total_cvs = CV.objects.filter(user=user).exclude(extracted_text__isnull=True).exclude(extracted_text="").count()
+        total_cvs = CV.objects.filter(user=user).filter(indexable).distinct().count()
     else:
         total_cvs = 0
 
