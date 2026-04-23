@@ -24,8 +24,8 @@ TOP_K_RESULTS = 5
 SIMILARITY_THRESHOLD = 0.60
 
 COMPOSITE_WEIGHTS = {
-    "vector_similarity": 0.50,
-    "skill_coverage": 0.25,
+    "skill_coverage": 0.45,
+    "vector_similarity": 0.35,
     "competency_fit": 0.15,
-    "tier_bonus": 0.10,
+    "tier_bonus": 0.05,
 }

@@ -257,6 +257,8 @@ def compute_composite_score(
     min_years: float = 0,
 ) -> float:
     vec_score = candidate.vector_similarity
+    # Use required_coverage so the scoring matches the "Skill coverage %"
+    # shown to the user on each result card.
     skill_score = candidate.skill_overlap.get("required_coverage", 0)
 
     level_diff = candidate.inferred_level - required_level
@@ -279,7 +281,15 @@ def compute_composite_score(
         COMPOSITE_WEIGHTS["tier_bonus"] * tier_score
     )
 
-    if min_years > 0 and candidate.years_of_experience < min_years:
+    # Only apply the experience penalty when we actually have candidate years
+    # of experience. With the current indexing pipeline this is hardcoded to
+    # 0.0, so without this guard every candidate would receive a blanket -5%
+    # whenever the JD specified a min_years, flattening the distribution.
+    if (
+        min_years > 0
+        and candidate.years_of_experience > 0
+        and candidate.years_of_experience < min_years
+    ):
         shortfall = (min_years - candidate.years_of_experience) / min_years
         composite -= 0.05 * min(shortfall, 1.0)
 

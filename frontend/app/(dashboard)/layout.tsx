@@ -76,16 +76,6 @@ export default function DashboardLayout({
             My CVs
           </button>
           <button
-            onClick={() => router.push("/dashboard/vector-search")}
-            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
-              pathname === "/dashboard/vector-search"
-                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
-                : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
-            }`}
-          >
-            Vector Search
-          </button>
-          <button
             onClick={() => router.push("/dashboard/competence-summaries")}
             className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
               pathname === "/dashboard/competence-summaries"
@@ -129,6 +119,16 @@ export default function DashboardLayout({
               </button>
             </>
           )}
+          <button
+            onClick={() => router.push("/dashboard/vector-search")}
+            className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
+              pathname === "/dashboard/vector-search"
+                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+            }`}
+          >
+            Job Matching
+          </button>
         </nav>
         <div className="mt-auto pt-6 space-y-4">
           <button
@@ -239,19 +239,6 @@ export default function DashboardLayout({
             </button>
             <button
               onClick={() => {
-                router.push("/dashboard/vector-search");
-                setSidebarOpen(false);
-              }}
-              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
-                pathname === "/dashboard/vector-search"
-                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
-                  : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
-              }`}
-            >
-              Vector Search
-            </button>
-            <button
-              onClick={() => {
                 router.push("/dashboard/competence-summaries");
                 setSidebarOpen(false);
               }}
@@ -306,6 +293,19 @@ export default function DashboardLayout({
                 </button>
               </>
             )}
+            <button
+              onClick={() => {
+                router.push("/dashboard/vector-search");
+                setSidebarOpen(false);
+              }}
+              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-200 ${
+                pathname === "/dashboard/vector-search"
+                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                  : "text-slate-300 hover:bg-slate-900/60 hover:text-slate-100"
+              }`}
+            >
+              Job Matching
+            </button>
           </nav>
           <div className="mt-auto pt-6 space-y-4">
             <button
@@ -380,7 +380,7 @@ export default function DashboardLayout({
             <h1 className="text-lg font-bold text-slate-50 tracking-tight">
               {pathname === "/dashboard" && "Upload CV"}
               {pathname === "/dashboard/cvs" && "My CVs"}
-              {pathname === "/dashboard/vector-search" && "Vector Search"}
+              {pathname === "/dashboard/vector-search" && "Job Matching"}
               {pathname === "/dashboard/competence-summaries" && "Competence Summaries"}
               {pathname === "/dashboard/conversation-competence-summaries" && "Conversation Summaries"}
               {pathname === "/dashboard/users" && "User Management"}
