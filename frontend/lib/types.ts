@@ -109,6 +109,20 @@ export interface UserSession {
 }
 
 // Vector Search types
+export interface SkillTrainingEntry {
+  skill: string;
+  estimated_weeks: number;
+  reason: string;
+  first_step: string;
+}
+
+export interface TrainingPlan {
+  skills: SkillTrainingEntry[];
+  aggregate_ramp_up: string;
+  verdict: string;
+  experience_years_used: number;
+}
+
 export interface VectorMatchCandidate {
   id: string;
   name: string;
@@ -128,6 +142,7 @@ export interface VectorMatchCandidate {
   search_tier: number;
   competency_note: string;
   gap_analysis?: string;
+  training_plan?: TrainingPlan | null;
 }
 
 export interface VectorMatchRequest {

@@ -10,6 +10,7 @@ import type {
   VectorSearchStatus,
   VectorMatchResponse,
   VectorMatchCandidate,
+  TrainingPlan,
 } from "@/lib/types";
 
 function TierBadge({ tier }: { tier: number }) {
@@ -34,7 +35,6 @@ export default function VectorSearchPage() {
 
   const [jobDescription, setJobDescription] = useState("");
   const [topK, setTopK] = useState(5);
-  const [includeGapAnalysis, setIncludeGapAnalysis] = useState(false);
 
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -79,7 +79,7 @@ export default function VectorSearchPage() {
       const result = await vectorSearchMatch({
         job_description: jobDescription,
         top_k: topK,
-        include_gap_analysis: includeGapAnalysis,
+        include_gap_analysis: true,
       });
       setMatchResponse(result);
     } catch (err: unknown) {
@@ -155,21 +155,6 @@ export default function VectorSearchPage() {
             <span className="text-emerald-300 font-medium w-4 text-right">{topK}</span>
           </label>
 
-          <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-            <div
-              onClick={() => setIncludeGapAnalysis(!includeGapAnalysis)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                includeGapAnalysis ? "bg-emerald-500" : "bg-slate-700"
-              }`}
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                  includeGapAnalysis ? "translate-x-4" : "translate-x-0.5"
-                }`}
-              />
-            </div>
-            <span>Include AI screening notes</span>
-          </label>
         </div>
 
         <button
@@ -224,8 +209,6 @@ export default function VectorSearchPage() {
 }
 
 function CandidateCard({ candidate }: { candidate: VectorMatchCandidate }) {
-  const [expanded, setExpanded] = useState(false);
-
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-5">
       <div className="flex items-start justify-between gap-4">
@@ -244,7 +227,7 @@ function CandidateCard({ candidate }: { candidate: VectorMatchCandidate }) {
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+      <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
         <div>
           <span className="text-slate-500">Seniority</span>
           <p className="text-slate-300">
@@ -254,10 +237,6 @@ function CandidateCard({ candidate }: { candidate: VectorMatchCandidate }) {
         <div>
           <span className="text-slate-500">Experience</span>
           <p className="text-slate-300">{candidate.years_of_experience} yrs</p>
-        </div>
-        <div>
-          <span className="text-slate-500">Vector sim</span>
-          <p className="text-slate-300">{(candidate.vector_similarity * 100).toFixed(1)}%</p>
         </div>
         <div>
           <span className="text-slate-500">Skill coverage</span>
@@ -284,17 +263,94 @@ function CandidateCard({ candidate }: { candidate: VectorMatchCandidate }) {
 
       {candidate.gap_analysis && (
         <div className="mt-3">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-          >
-            {expanded ? "Hide" : "Show"} AI screening notes
-          </button>
-          {expanded && (
-            <p className="mt-2 text-xs text-slate-300 leading-relaxed border-l-2 border-emerald-500/30 pl-3">
-              {candidate.gap_analysis}
+          <h4 className="text-xs font-semibold text-emerald-400 mb-1.5">AI screening notes</h4>
+          <p className="text-xs text-slate-300 leading-relaxed border-l-2 border-emerald-500/30 pl-3">
+            {candidate.gap_analysis}
+          </p>
+        </div>
+      )}
+
+      {candidate.training_plan && <TrainingPlanSection plan={candidate.training_plan} yearsListed={candidate.years_of_experience} />}
+    </div>
+  );
+}
+
+
+function formatWeeks(weeks: number): string {
+  if (weeks <= 4) return `${weeks} week${weeks !== 1 ? "s" : ""}`;
+  const months = Math.round((weeks / 4.3) * 10) / 10;
+  return months === Math.floor(months)
+    ? `~${Math.floor(months)} month${Math.floor(months) !== 1 ? "s" : ""}`
+    : `~${months} months`;
+}
+
+function TrainingPlanSection({ plan, yearsListed }: { plan: TrainingPlan; yearsListed: number }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-4 border-t border-slate-800 pt-3">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+      >
+        <svg className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        Skill gap &amp; training plan
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          {yearsListed === 0 && plan.experience_years_used > 0 && (
+            <p className="text-xs text-slate-500 italic">
+              No experience listed on profile — estimated <span className="text-slate-300 font-medium">{Math.round(plan.experience_years_used)} years</span> from career history.
             </p>
           )}
+
+          <div className="space-y-2">
+            {plan.skills.map((entry) => (
+              <SkillEstimateRow key={entry.skill} entry={entry} />
+            ))}
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
+              <span className="text-xs text-amber-400 font-medium">Aggregate ramp-up</span>
+              <p className="text-sm font-bold text-amber-300">{plan.aggregate_ramp_up}</p>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed flex-1 border-l-2 border-amber-500/30 pl-3">
+              {plan.verdict}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SkillEstimateRow({ entry }: { entry: { skill: string; estimated_weeks: number; reason: string; first_step: string } }) {
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/50">
+      <button
+        onClick={() => setDetailOpen(!detailOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left"
+      >
+        <span className="text-xs text-slate-200">
+          <code className="rounded bg-slate-800 px-1.5 py-0.5 text-amber-300">{entry.skill}</code>
+        </span>
+        <span className="text-xs text-slate-400 shrink-0 ml-2">
+          {formatWeeks(entry.estimated_weeks)} to job-ready
+          <svg className={`inline-block ml-1 h-3 w-3 transition-transform ${detailOpen ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </span>
+      </button>
+      {detailOpen && (
+        <div className="px-3 pb-2 space-y-1 text-xs">
+          <p className="text-slate-400"><span className="text-slate-500">Why this estimate:</span> {entry.reason}</p>
+          <p className="text-slate-400"><span className="text-slate-500">First step:</span> {entry.first_step}</p>
         </div>
       )}
     </div>

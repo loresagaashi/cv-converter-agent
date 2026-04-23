@@ -21,6 +21,7 @@ from .core.search import (
     _extract_skills_by_keyword,
 )
 from .core.gap_analysis import enrich_results_with_gap_analysis
+from .core.skill_training_recommendations import generate_skill_training_recommendations
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,7 @@ def match_candidates(
 ) -> dict:
     """
     Run the full search pipeline: parse JD -> search -> optionally enrich with gap analysis.
+    Training plans are always generated for candidates with missing skills.
     """
     parsed_jd, results = search_for_candidates(job_description, top_k=top_k)
 
@@ -261,6 +263,10 @@ def match_candidates(
         candidates = enrich_results_with_gap_analysis(results, parsed_jd, max_to_analyze=top_k)
     else:
         candidates = [r.to_dict() for r in results]
+
+    for i, result in enumerate(results[:len(candidates)]):
+        training_plan = generate_skill_training_recommendations(result, parsed_jd)
+        candidates[i]["training_plan"] = training_plan
 
     return {
         "parsed_jd": {
