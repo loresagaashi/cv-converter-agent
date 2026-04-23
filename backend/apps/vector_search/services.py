@@ -2,7 +2,6 @@
 Thin orchestration layer between the Django views and the core matching engine.
 """
 
-import re
 import logging
 
 from apps.cv.models import CV
@@ -16,42 +15,112 @@ from .core.vector_db import (
     get_collection_count,
     is_vector_db_ready,
 )
-from .core.search import search_for_candidates, parse_jd_live
+from .core.search import (
+    search_for_candidates,
+    parse_jd_live,
+    _extract_skills_by_keyword,
+)
 from .core.gap_analysis import enrich_results_with_gap_analysis
 
 logger = logging.getLogger(__name__)
 
 
+# Section headers in the Competence Paper that contain skill-like bullets.
+# Everything outside these sections (Work Experience, Languages, Education,
+# Training & Certifications, Recommendation, ...) is ignored so we don't
+# pollute the skills metadata with job titles, degrees, or language levels.
+_CP_SKILL_SECTIONS = {
+    "soft skills",
+    "core skills",
+    "tech competencies",
+    "technical competencies",
+}
+
+_CP_KNOWN_SECTIONS = _CP_SKILL_SECTIONS | {
+    "name",
+    "seniority",
+    "recommendation",
+    "work experience",
+    "languages",
+    "education",
+    "training & certifications",
+    "trainings & certifications",
+}
+
+
 def _parse_competence_metadata(content: str) -> dict:
-    """Extract structured metadata (skills, seniority) from competence paper content."""
-    skills = []
+    """
+    Extract structured metadata (skills, seniority) from competence paper content.
+
+    Scans the CP line-by-line and only treats bullets inside the skill-carrying
+    sections as skills. Supports both single-item (`• Frontend: React`) and
+    multi-item (`• Backend: Python, Node.js`) tech-competency rows.
+    """
+    skills: list[str] = []
     seniority = "mid"
+    current_section: str | None = None
 
     for line in content.splitlines():
-        line = line.strip()
+        stripped = line.strip()
+        if not stripped:
+            continue
 
-        if line.lower().startswith("seniority:"):
-            raw = line.split(":", 1)[1].strip().lower()
+        if stripped.lower().startswith("seniority:"):
+            raw = stripped.split(":", 1)[1].strip().lower()
             for level in ("junior", "mid", "senior", "lead", "principal", "director"):
                 if level in raw:
                     seniority = level
                     break
+            continue
 
-        if re.match(r"^•\s*.+:\s*.+,.+", line):
-            after_colon = line.split(":", 1)[1]
+        # Section header detection: an unbulleted line ending with ":" whose
+        # label matches a known CP section switches context.
+        if not stripped.startswith("•") and not stripped.startswith("-") and stripped.endswith(":"):
+            header = stripped[:-1].strip().lower()
+            if header in _CP_KNOWN_SECTIONS:
+                current_section = header
+            else:
+                current_section = None
+            continue
+
+        if current_section not in _CP_SKILL_SECTIONS:
+            continue
+
+        if not stripped.startswith("• "):
+            continue
+
+        body = stripped[2:].strip()
+        if not body:
+            continue
+
+        if ":" in body:
+            after_colon = body.split(":", 1)[1]
             skills.extend(s.strip() for s in after_colon.split(",") if s.strip())
-
-    for line in content.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("• ") and ":" not in stripped:
-            skill = stripped[2:].strip()
-            if skill and len(skill) < 60:
-                skills.append(skill)
+        else:
+            if len(body) < 60:
+                skills.append(body)
 
     return {
         "seniority": seniority,
         "skills": ", ".join(dict.fromkeys(skills)),
     }
+
+
+def _merge_skills(*sources: str | list[str]) -> str:
+    """Merge multiple skill sources into a case-insensitive de-duplicated list."""
+    seen: dict[str, str] = {}
+    for src in sources:
+        if isinstance(src, str):
+            items = [s.strip() for s in src.split(",")]
+        else:
+            items = [str(s).strip() for s in (src or [])]
+        for item in items:
+            if not item:
+                continue
+            key = item.lower()
+            if key not in seen:
+                seen[key] = item
+    return ", ".join(seen.values())
 
 
 def index_cv(cv_instance: CV) -> dict:
@@ -94,23 +163,33 @@ def index_cv(cv_instance: CV) -> dict:
         u = cv_instance.user
         name = f"{u.first_name} {u.last_name}".strip() or u.email
 
+    raw_text_for_keywords = cv_instance.extracted_text or ""
+
     if source == "competence_paper":
         parsed = _parse_competence_metadata(embedding_text)
+        # Supplement the regex-parsed skills with a keyword sweep over both
+        # the CP content and the raw CV text, so the metadata is robust to
+        # CP formatting variations (single-item groups, missing sections, ...).
+        keyword_skills = _extract_skills_by_keyword(
+            embedding_text + "\n" + raw_text_for_keywords
+        )
+        merged_skills = _merge_skills(parsed["skills"], keyword_skills)
         metadata = {
             "name": name or "Unknown",
             "current_title": cv_instance.original_filename,
             "seniority": parsed["seniority"],
             "years_of_experience": 0.0,
-            "skills": parsed["skills"],
+            "skills": merged_skills,
             "source_file": cv_instance.original_filename,
         }
     else:
+        keyword_skills = _extract_skills_by_keyword(raw_text_for_keywords)
         metadata = {
             "name": name or "Unknown",
             "current_title": cv_instance.original_filename,
             "seniority": "mid",
             "years_of_experience": 0.0,
-            "skills": "",
+            "skills": _merge_skills(keyword_skills),
             "source_file": cv_instance.original_filename,
         }
 
@@ -121,7 +200,11 @@ def index_cv(cv_instance: CV) -> dict:
         metadata=metadata,
     )
 
-    logger.info(f"Indexed CV {cv_instance.id} as {profile_id} (source={source})")
+    skill_count = len([s for s in metadata["skills"].split(",") if s.strip()])
+    logger.info(
+        "Indexed CV %s as %s (source=%s, seniority=%s, skills=%d)",
+        cv_instance.id, profile_id, source, metadata["seniority"], skill_count,
+    )
     return {"indexed": True, "profile_id": profile_id, "source": source}
 
 
