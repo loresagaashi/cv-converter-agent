@@ -690,6 +690,39 @@ def generate_competence_cv(cv_text: str) -> Dict[str, object]:
 # Structured CV generation
 # ---------------------------------------------------------------------------
 
+def _normalize_timeline_entries(
+    entries: list, *, single_description: bool = False
+) -> List[Dict[str, Any]]:
+    """Normalize work_experience / projects items and cap bullets for CP rendering."""
+    normalized: List[Dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        bullets_raw = entry.get("bullets") or []
+        bullets: List[str] = []
+        if isinstance(bullets_raw, list):
+            for b in bullets_raw:
+                if isinstance(b, str):
+                    b_clean = b.strip()
+                    if b_clean:
+                        bullets.append(b_clean)
+        if single_description:
+            bullets = [" ".join(bullets)] if bullets else []
+        else:
+            bullets = bullets[:3]
+        normalized.append(
+            {
+                "from": str(entry.get("from") or "").strip(),
+                "to": str(entry.get("to") or "").strip(),
+                "title": str(entry.get("title") or "").strip(),
+                "company": str(entry.get("company") or "").strip(),
+                "location": str(entry.get("location") or "").strip(),
+                "bullets": bullets,
+            }
+        )
+    return normalized
+
+
 _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
     "name": "Candidate Full Name",
     "profile": "Short professional summary...",
@@ -701,8 +734,7 @@ _STRUCTURED_CV_SCHEMA_EXAMPLE: Dict[str, Any] = {
             "company": "Company Name",
             "location": "City",
             "bullets": [
-                "Achievement or responsibility",
-                "Another responsibility",
+                "Concise role description covering stack, responsibilities, and impact in 1-3 sentences.",
             ],
         }
     ],
@@ -756,7 +788,7 @@ TASK:
 - Read the raw CV text carefully and extract ALL information.
 - Extract the candidate's full name from the CV and place it in the "name" field.
 - Build a profile that merges the "About me"/header statement with key personal info (name, location/country if present) in **2-3 sentences max**.
-- Extract ALL work experience entries (jobs, internships, contracts). If descriptions/bullets exist in the original CV, you MUST REWRITE and SUMMARIZE them into concise bullets - rephrase the content in your own words, do NOT copy sentences directly from the source. Create **2-3 sentences total** with bullets that are **1 line each**. If no descriptions exist, include only the basic info (title, company, dates, location) with an empty bullets array. NEVER create or generate descriptions when the source has none.
+- Extract ALL work experience entries (jobs, internships, contracts). For EVERY entry include title, company, dates, location, and a **bullets** array with **exactly one** professional description string (1-3 sentences, suitable for a competence profile Project Experience block). If duties exist in the source CV, REWRITE and SUMMARIZE them in your own words—do NOT copy sentences verbatim. If the CV lists only title/company/dates with no duties, infer a realistic description from the role, employer, skills, profile, projects, and education elsewhere in the CV. Never leave bullets empty when title and company are present.
 - Extract ALL certifications as their own list (1 line each entry) and place them after work_experience.
 - Extract ALL education items (degrees, diplomas) with **1-2 sentences**.
 - Extract ALL projects as their own list (do NOT merge into work_experience); include project name, context (e.g., Personal Project, client), dates, and **1-line bullets**, max **2-3 sentences total** per project.
@@ -862,6 +894,8 @@ def generate_structured_cv(cv_text: str) -> Dict[str, Any]:
         soft_skills = []
     if not isinstance(work_experience, list):
         work_experience = []
+    else:
+        work_experience = _normalize_timeline_entries(work_experience, single_description=True)
     if not isinstance(education, list):
         education = []
     if not isinstance(projects, list):

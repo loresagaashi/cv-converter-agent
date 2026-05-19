@@ -34,6 +34,19 @@ function validateStructuredCV(): string | null {
   return null;
 }
 
+const WORK_EXPERIENCE_DESCRIPTION_MAX = 300;
+
+/** Join stored bullets into one editable description paragraph. */
+function workExperienceDescriptionText(bullets: string[] | undefined): string {
+  return (bullets || []).map((b) => b.trim()).filter(Boolean).join(" ").slice(0, WORK_EXPERIENCE_DESCRIPTION_MAX);
+}
+
+/** Persist description as a single bullet for CP export. */
+function workExperienceDescriptionToBullets(text: string): string[] {
+  const trimmed = text.trim().slice(0, WORK_EXPERIENCE_DESCRIPTION_MAX);
+  return trimmed ? [trimmed] : [];
+}
+
 export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename, cachedStructuredCV, onStructuredCVChange }: Props) {
   const [structuredCV, setStructuredCV] = useState<StructuredCVPayload | null>(cachedStructuredCV || null);
   const [loading, setLoading] = useState(false);
@@ -600,45 +613,26 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                             className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
                           />
                           <div className="space-y-2">
-                            <label className="text-xs text-slate-400">Description Bullets:</label>
-                            {(job.bullets || []).map((bullet, bIdx) => (
-                              <div key={bIdx} className="flex items-start gap-2">
-                                <textarea
-                                  value={bullet}
-                                  onChange={(e) => {
-                                    const newExp = [...(structuredCV.work_experience || [])];
-                                    const newBullets = [...(newExp[idx].bullets || [])];
-                                    newBullets[bIdx] = e.target.value;
-                                    newExp[idx].bullets = newBullets;
-                                    updateSection("work_experience", newExp);
-                                  }}
-                                  className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-100"
-                                  rows={2}
-                                />
-                                <button
-                                  onClick={() => {
-                                    const newExp = [...(structuredCV.work_experience || [])];
-                                    newExp[idx].bullets = (newExp[idx].bullets || []).filter((_, i) => i !== bIdx);
-                                    updateSection("work_experience", newExp);
-                                  }}
-                                  className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-500/70 hover:bg-red-500/20 hover:text-red-200 sm:h-auto sm:w-auto sm:border-0 sm:bg-transparent sm:text-red-400 sm:hover:text-red-300"
-                                  aria-label="Remove bullet"
-                                >
-                                  <span className="sm:hidden">X</span>
-                                  <span className="hidden sm:inline">Remove</span>
-                                </button>
-                              </div>
-                            ))}
-                            <button
-                              onClick={() => {
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-xs text-slate-400">Description (shown on CP):</label>
+                              <span className="text-[11px] text-slate-500 tabular-nums">
+                                {workExperienceDescriptionText(job.bullets).length}/{WORK_EXPERIENCE_DESCRIPTION_MAX}
+                              </span>
+                            </div>
+                            <textarea
+                              placeholder="Brief summary of the role, technologies, and impact"
+                              maxLength={WORK_EXPERIENCE_DESCRIPTION_MAX}
+                              value={workExperienceDescriptionText(job.bullets)}
+                              onChange={(e) => {
                                 const newExp = [...(structuredCV.work_experience || [])];
-                                newExp[idx].bullets = [...(newExp[idx].bullets || []), ""];
+                                newExp[idx].bullets = workExperienceDescriptionToBullets(
+                                  e.target.value.slice(0, WORK_EXPERIENCE_DESCRIPTION_MAX)
+                                );
                                 updateSection("work_experience", newExp);
                               }}
-                              className="inline-flex items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition-all duration-200"
-                            >
-                              + Add Bullet
-                            </button>
+                              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-100"
+                              rows={4}
+                            />
                           </div>
                           <button
                             onClick={() => {
@@ -682,12 +676,14 @@ export function CVPreviewModal({ cvId, token, isOpen, onClose, originalFilename,
                                 {job.location && <span> · {job.location}</span>}
                               </div>
                             )}
-                            {job.bullets && job.bullets.length > 0 && (
-                              <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
-                                {job.bullets.map((bullet, bIdx) => (
-                                  <li key={bIdx}>• {bullet}</li>
-                                ))}
-                              </ul>
+                            {workExperienceDescriptionText(job.bullets) ? (
+                              <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                                {workExperienceDescriptionText(job.bullets)}
+                              </p>
+                            ) : (
+                              <p className="mt-1 text-xs text-slate-500 italic">
+                                No description yet. Click Edit to add.
+                              </p>
                             )}
                           </div>
                         ))}
